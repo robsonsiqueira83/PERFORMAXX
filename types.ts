@@ -21,10 +21,10 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // In a real app, this would be hashed or handled by auth provider
+  password?: string;
   role: UserRole;
   avatarUrl?: string;
-  teamIds?: string[]; // Access control
+  teamIds?: string[];
 }
 
 export interface Team {
@@ -69,6 +69,27 @@ export interface PhysicalStats {
   equilibrio: number;
 }
 
+export interface TacticalStats {
+  // Construindo
+  const_passe: number;
+  const_jogo_costas: number;
+  const_dominio: number;
+  const_1v1_ofensivo: number;
+  const_movimentacao: number;
+  
+  // Último Terço
+  ult_finalizacao: number;
+  ult_desmarques: number;
+  ult_passes_ruptura: number;
+
+  // Defendendo
+  def_compactacao: number;
+  def_recomposicao: number;
+  def_salto_pressao: number;
+  def_1v1_defensivo: number;
+  def_duelos_aereos: number;
+}
+
 export interface TrainingSession {
   id: string;
   date: string;
@@ -83,15 +104,21 @@ export interface TrainingEntry {
   athleteId: string;
   technical: TechnicalStats;
   physical: PhysicalStats;
+  tactical: TacticalStats; // New field
   notes?: string;
 }
 
 // Helper to calculate total score
-export const calculateTotalScore = (technical: TechnicalStats, physical: PhysicalStats): number => {
+export const calculateTotalScore = (technical: TechnicalStats, physical: PhysicalStats, tactical?: TacticalStats): number => {
   const techValues = Object.values(technical);
   const physValues = Object.values(physical);
-  const total = [...techValues, ...physValues].reduce((a, b) => a + b, 0);
-  return total / (techValues.length + physValues.length);
+  // Handle case where tactical might be undefined for old records
+  const tactValues = tactical ? Object.values(tactical) : [];
+
+  const total = [...techValues, ...physValues, ...tactValues].reduce((a, b) => a + b, 0);
+  const divisor = techValues.length + physValues.length + tactValues.length;
+  
+  return divisor > 0 ? total / divisor : 0;
 };
 
 // Helper to calculate category based on age (Display only)
@@ -106,7 +133,6 @@ export const getCalculatedCategory = (birthDateString: string): string => {
   if (dateOnly.includes('-')) {
      [birthYear, birthMonth, birthDay] = dateOnly.split('-').map(Number);
   } else {
-     // Fallback for unexpected formats
      const d = new Date(birthDateString);
      birthYear = d.getFullYear();
      birthMonth = d.getMonth() + 1;
