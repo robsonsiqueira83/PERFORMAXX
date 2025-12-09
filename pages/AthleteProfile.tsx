@@ -12,7 +12,7 @@ import {
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
@@ -138,11 +138,16 @@ const AthleteProfile: React.FC = () => {
     
     // Helper to get avg
     const avg = (key: string, type: 'technical' | 'physical' | 'tactical') => {
+      let count = 0;
       const sum = recent.reduce((acc, curr) => {
           const group = curr[type] as any;
-          return acc + (group ? (group[key] || 0) : 0);
+          if (group) {
+              count++;
+              return acc + (group[key] || 0);
+          }
+          return acc;
       }, 0);
-      return Math.round((sum / recent.length) * 10) / 10;
+      return count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
     };
 
     return {
@@ -229,11 +234,14 @@ const AthleteProfile: React.FC = () => {
         }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
 
         const latest = sorted[0];
-        setNewStats({ ...latest.technical, ...latest.physical, ...latest.tactical || {
+        setNewStats({ 
+          ...latest.technical, 
+          ...latest.physical, 
+          ...(latest.tactical || {
             const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
             ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
             def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
-        } });
+        }) });
     } else {
         setNewStats({
             controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
@@ -576,9 +584,9 @@ const AthleteProfile: React.FC = () => {
                                     </span>
                                 </div>
                                 <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                                    <span>Técnica: {calculateTotalScore(item!.technical, {velocidade:0,agilidade:0,forca:0,resistencia:0,coordenacao:0,equilibrio:0} as any).toFixed(1)}</span>
-                                    <span>Físico: {calculateTotalScore({controle:0,passe:0,finalizacao:0,drible:0,cabeceio:0,posicao:0} as any, item!.physical).toFixed(1)}</span>
-                                    {item!.tactical && <span>Tático: {calculateTotalScore({controle:0,passe:0,finalizacao:0,drible:0,cabeceio:0,posicao:0} as any, {velocidade:0,agilidade:0,forca:0,resistencia:0,coordenacao:0,equilibrio:0} as any, item!.tactical).toFixed(1)}</span>}
+                                    <span>Técnica: {calculateCategoryAverage(item!.technical).toFixed(1)}</span>
+                                    <span>Físico: {calculateCategoryAverage(item!.physical).toFixed(1)}</span>
+                                    {item!.tactical && <span>Tático: {calculateCategoryAverage(item!.tactical).toFixed(1)}</span>}
                                 </div>
                                 {item!.entry.notes && (
                                    <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">

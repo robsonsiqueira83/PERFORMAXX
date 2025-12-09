@@ -17,6 +17,22 @@ interface DashboardProps {
   teamId: string;
 }
 
+const tacticalLabels: Record<string, string> = {
+  const_passe: 'Passe',
+  const_jogo_costas: 'Jogo de costas',
+  const_dominio: 'Domínio',
+  const_1v1_ofensivo: '1v1 ofensivo',
+  const_movimentacao: 'Movimentação',
+  ult_finalizacao: 'Finalização',
+  ult_desmarques: 'Desmarques de ruptura',
+  ult_passes_ruptura: 'Passes de ruptura',
+  def_compactacao: 'Compactação',
+  def_recomposicao: 'Tempo/Intensidade de Recomposição',
+  def_salto_pressao: 'Salto de pressão',
+  def_1v1_defensivo: '1v1 defensivo',
+  def_duelos_aereos: 'Duelos aéreos'
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
@@ -88,8 +104,26 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   // --- Filter Entries based on Filtered Sessions ---
   const filteredEntries = useMemo(() => {
       const sessionIds = filteredSessions.map(s => s.id);
-      return entries.filter(e => sessionIds.includes(e.sessionId));
-  }, [entries, filteredSessions]);
+      let es = entries.filter(e => sessionIds.includes(e.sessionId));
+      
+      // Also filter entries by selectedCategory if 'all' sessions are selected but we want specific category data
+      // However, usually we filter sessions by category first? 
+      // Current logic: dashboard has category selector.
+      // If selectedCategory is NOT 'all', we should filter the ATHLETES or SESSIONS?
+      // Best approach: Filter entries where athlete belongs to category.
+      
+      if (selectedCategory !== 'all') {
+          const categoryAthleteIds = athletes.filter(a => a.categoryId === selectedCategory).map(a => a.id);
+          es = es.filter(e => categoryAthleteIds.includes(e.athleteId));
+      }
+
+      if (selectedPosition !== 'all') {
+          const positionAthleteIds = athletes.filter(a => a.position === selectedPosition).map(a => a.id);
+          es = es.filter(e => positionAthleteIds.includes(e.athleteId));
+      }
+
+      return es;
+  }, [entries, filteredSessions, selectedCategory, selectedPosition, athletes]);
 
 
   // --- Calculate Scores for ALL Athletes first (using filtered entries) ---
@@ -100,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
         if (athleteEntries.length === 0) return { ...athlete, averageScore: 0, sessionsCount: 0 };
 
         const sumScore = athleteEntries.reduce((acc, entry) => {
-            return acc + calculateTotalScore(entry.technical, entry.physical);
+            return acc + calculateTotalScore(entry.technical, entry.physical, entry.tactical);
         }, 0);
 
         return {
@@ -114,7 +148,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   // --- Top 3 Ranking (Filtered) ---
   const rankedAthletes = useMemo(() => {
     let filtered = athletesWithScores;
-    // Filter by Category/Position
+    // Note: FilteredEntries already filters by category/position, but athletesWithScores includes all athletes.
+    // So we must filter again or rely on sessionsCount > 0 if we only want active ones.
+    // But to show true top 3 of category, we filter the pool:
+    
     if (selectedCategory !== 'all') filtered = filtered.filter(a => a.categoryId === selectedCategory);
     if (selectedPosition !== 'all') filtered = filtered.filter(a => a.position === selectedPosition);
     
@@ -169,19 +206,20 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   // --- Logic for Evolution Chart (Average of team/category over time) ---
   const evolutionData = useMemo(() => {
-      // Filter sessions by category if selected
-      let finalSessions = filteredSessions;
+      // Sessions are already filtered by period.
+      // Filter sessions by category if needed (already effectively filtered by entries, but for X-Axis we need filtered sessions)
+      let relevantSessions = filteredSessions;
       if (selectedCategory !== 'all') {
-          finalSessions = finalSessions.filter(s => s.categoryId === selectedCategory);
+          relevantSessions = relevantSessions.filter(s => s.categoryId === selectedCategory);
       }
 
-      const sortedSessions = [...finalSessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const sortedSessions = [...relevantSessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
       return sortedSessions.map(session => {
           const sessionEntries = filteredEntries.filter(e => e.sessionId === session.id);
           if (sessionEntries.length === 0) return null;
 
-          const totalScore = sessionEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical), 0);
+          const totalScore = sessionEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical, curr.tactical), 0);
           const avg = totalScore / sessionEntries.length;
 
           return {
@@ -191,62 +229,123 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       }).filter(Boolean);
   }, [filteredSessions, filteredEntries, selectedCategory]);
 
-  // --- Logic for Team Radar Chart (General Average) ---
-  const teamAverageStats = useMemo(() => {
-    let finalAthletes = athletes;
-    if (selectedCategory !== 'all') {
-        finalAthletes = athletes.filter(a => a.categoryId === selectedCategory);
-    }
+  // --- Logic for Aggregate Stats (Averages of filtered entries) ---
+  const teamStats = useMemo(() => {
+    if (filteredEntries.length === 0) return null;
+
+    let tacticalCount = 0;
+    const totalCount = filteredEntries.length;
     
-    const teamAthleteIds = finalAthletes.map(a => a.id);
-    const teamEntries = filteredEntries.filter(e => teamAthleteIds.includes(e.athleteId));
-
-    if (teamEntries.length === 0) return [];
-
     const sums = {
+      // Tech
       controle: 0, passe: 0, finalizacao: 0, drible: 0, cabeceio: 0, posicao: 0,
-      velocidade: 0, agilidade: 0, forca: 0, resistencia: 0, coordenacao: 0, equilibrio: 0
+      // Phys
+      velocidade: 0, agilidade: 0, forca: 0, resistencia: 0, coordenacao: 0, equilibrio: 0,
+      // Tac - Const
+      const_passe: 0, const_jogo_costas: 0, const_dominio: 0, const_1v1_ofensivo: 0, const_movimentacao: 0,
+      // Tac - Ult
+      ult_finalizacao: 0, ult_desmarques: 0, ult_passes_ruptura: 0,
+      // Tac - Def
+      def_compactacao: 0, def_recomposicao: 0, def_salto_pressao: 0, def_1v1_defensivo: 0, def_duelos_aereos: 0
     };
 
-    teamEntries.forEach(e => {
-       sums.controle += e.technical.controle;
-       sums.passe += e.technical.passe;
-       sums.finalizacao += e.technical.finalizacao;
-       sums.drible += e.technical.drible;
-       sums.cabeceio += e.technical.cabeceio;
-       sums.posicao += e.technical.posicao;
-       
-       sums.velocidade += e.physical.velocidade;
-       sums.agilidade += e.physical.agilidade;
-       sums.forca += e.physical.forca;
-       sums.resistencia += e.physical.resistencia;
-       sums.coordenacao += e.physical.coordenacao;
-       sums.equilibrio += e.physical.equilibrio;
+    filteredEntries.forEach(e => {
+        // Tech
+        sums.controle += e.technical.controle;
+        sums.passe += e.technical.passe;
+        sums.finalizacao += e.technical.finalizacao;
+        sums.drible += e.technical.drible;
+        sums.cabeceio += e.technical.cabeceio;
+        sums.posicao += e.technical.posicao;
+        // Phys
+        sums.velocidade += e.physical.velocidade;
+        sums.agilidade += e.physical.agilidade;
+        sums.forca += e.physical.forca;
+        sums.resistencia += e.physical.resistencia;
+        sums.coordenacao += e.physical.coordenacao;
+        sums.equilibrio += e.physical.equilibrio;
+        // Tac - Only add if present
+        if (e.tactical) {
+            tacticalCount++;
+            sums.const_passe += e.tactical.const_passe || 0;
+            sums.const_jogo_costas += e.tactical.const_jogo_costas || 0;
+            sums.const_dominio += e.tactical.const_dominio || 0;
+            sums.const_1v1_ofensivo += e.tactical.const_1v1_ofensivo || 0;
+            sums.const_movimentacao += e.tactical.const_movimentacao || 0;
+
+            sums.ult_finalizacao += e.tactical.ult_finalizacao || 0;
+            sums.ult_desmarques += e.tactical.ult_desmarques || 0;
+            sums.ult_passes_ruptura += e.tactical.ult_passes_ruptura || 0;
+
+            sums.def_compactacao += e.tactical.def_compactacao || 0;
+            sums.def_recomposicao += e.tactical.def_recomposicao || 0;
+            sums.def_salto_pressao += e.tactical.def_salto_pressao || 0;
+            sums.def_1v1_defensivo += e.tactical.def_1v1_defensivo || 0;
+            sums.def_duelos_aereos += e.tactical.def_duelos_aereos || 0;
+        }
     });
 
-    const count = teamEntries.length;
-    const avg = (val: number) => Number((val / count).toFixed(1));
+    const avg = (val: number, divisor: number) => divisor > 0 ? Number((val / divisor).toFixed(1)) : 0;
 
-    return [
-      { subject: 'Controle', A: avg(sums.controle), fullMark: 10 },
-      { subject: 'Passe', A: avg(sums.passe), fullMark: 10 },
-      { subject: 'Final.', A: avg(sums.finalizacao), fullMark: 10 },
-      { subject: 'Drible', A: avg(sums.drible), fullMark: 10 },
-      { subject: 'Cabeceio', A: avg(sums.cabeceio), fullMark: 10 },
-      { subject: 'Posição', A: avg(sums.posicao), fullMark: 10 },
-      { subject: 'Velocid.', A: avg(sums.velocidade), fullMark: 10 },
-      { subject: 'Agilidade', A: avg(sums.agilidade), fullMark: 10 },
-      { subject: 'Força', A: avg(sums.forca), fullMark: 10 },
-      { subject: 'Resist.', A: avg(sums.resistencia), fullMark: 10 },
-      { subject: 'Coord.', A: avg(sums.coordenacao), fullMark: 10 },
-      { subject: 'Equilíb.', A: avg(sums.equilibrio), fullMark: 10 },
-    ];
-  }, [athletes, filteredEntries, selectedCategory]);
+    return {
+      technical: [
+        { subject: 'Controle', A: avg(sums.controle, totalCount), fullMark: 10 },
+        { subject: 'Passe', A: avg(sums.passe, totalCount), fullMark: 10 },
+        { subject: 'Finalização', A: avg(sums.finalizacao, totalCount), fullMark: 10 },
+        { subject: 'Drible', A: avg(sums.drible, totalCount), fullMark: 10 },
+        { subject: 'Cabeceio', A: avg(sums.cabeceio, totalCount), fullMark: 10 },
+        { subject: 'Posição', A: avg(sums.posicao, totalCount), fullMark: 10 },
+      ],
+      physical: [
+        { subject: 'Velocidade', A: avg(sums.velocidade, totalCount), fullMark: 10 },
+        { subject: 'Agilidade', A: avg(sums.agilidade, totalCount), fullMark: 10 },
+        { subject: 'Força', A: avg(sums.forca, totalCount), fullMark: 10 },
+        { subject: 'Resistência', A: avg(sums.resistencia, totalCount), fullMark: 10 },
+        { subject: 'Coordenação', A: avg(sums.coordenacao, totalCount), fullMark: 10 },
+        { subject: 'Equilíbrio', A: avg(sums.equilibrio, totalCount), fullMark: 10 },
+      ],
+      tactical_const: [
+        { subject: tacticalLabels.const_passe, A: avg(sums.const_passe, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.const_jogo_costas, A: avg(sums.const_jogo_costas, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.const_dominio, A: avg(sums.const_dominio, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.const_1v1_ofensivo, A: avg(sums.const_1v1_ofensivo, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.const_movimentacao, A: avg(sums.const_movimentacao, tacticalCount), fullMark: 10 },
+      ],
+      tactical_ult: [
+        { subject: tacticalLabels.ult_finalizacao, A: avg(sums.ult_finalizacao, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.ult_desmarques, A: avg(sums.ult_desmarques, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.ult_passes_ruptura, A: avg(sums.ult_passes_ruptura, tacticalCount), fullMark: 10 },
+      ],
+      tactical_def: [
+        { subject: tacticalLabels.def_compactacao, A: avg(sums.def_compactacao, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.def_recomposicao, A: avg(sums.def_recomposicao, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.def_salto_pressao, A: avg(sums.def_salto_pressao, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.def_1v1_defensivo, A: avg(sums.def_1v1_defensivo, tacticalCount), fullMark: 10 },
+        { subject: tacticalLabels.def_duelos_aereos, A: avg(sums.def_duelos_aereos, tacticalCount), fullMark: 10 },
+      ]
+    };
+  }, [filteredEntries]);
+
+  // Dynamic Color Helper for Tactical Charts (Reused from AthleteProfile concept)
+  const getTacticalColor = (data: any[]) => {
+      if (!data || data.length === 0) return { stroke: '#8884d8', fill: '#8884d8' };
+      const avg = data.reduce((sum, item) => sum + item.A, 0) / data.length;
+      
+      if (avg < 4) return { stroke: '#ef4444', fill: '#ef4444' }; // Red
+      if (avg < 8) return { stroke: '#f97316', fill: '#f97316' }; // Orange
+      return { stroke: '#22c55e', fill: '#22c55e' }; // Green
+  };
+
+  // Colors for Tactical Stats
+  const constColor = teamStats ? getTacticalColor(teamStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
+  const ultColor = teamStats ? getTacticalColor(teamStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
+  const defColor = teamStats ? getTacticalColor(teamStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
+
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10">
       
       {/* Top Controls & Quick Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -348,8 +447,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                      </div>
                      <div>
                          <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
-                         {/* Swapped Category and Position display as requested */}
-                         <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
+                         <p className="text-xs text-gray-500"><span className="text-purple-600 font-semibold">{athlete.position}</span> - {getCalculatedCategory(athlete.birthDate)}</p>
                          <p className="text-xs text-gray-500">{athlete.sessionsCount} atuações</p>
                      </div>
                  </div>
@@ -418,7 +516,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                               {pos.player.name.split(' ')[0]}
                           </div>
                           <div className="text-[9px] text-white/90 bg-black/30 px-1 rounded mt-0.5">
-                              {/* Swapped from Category to Position */}
                               {pos.player.position}
                           </div>
                       </Link>
@@ -441,61 +538,125 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
          </div>
       </div>
 
-      {/* Grid for Charts */}
+      <div className="border-t border-gray-200 my-8"></div>
+      
+      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+         <Activity className="text-blue-600"/> 
+         Média Geral {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
+      </h2>
+
+      {/* 1. TACTICAL CHARTS ROW (Average) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Construindo */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Construindo (Média)</h3>
+              <div className="h-[250px]">
+                 {teamStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_const}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          
+          {/* Último Terço */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Último Terço (Média)</h3>
+              <div className="h-[250px]">
+                 {teamStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_ult}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+
+          {/* Defendendo */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Defendendo (Média)</h3>
+              <div className="h-[250px]">
+                 {teamStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_def}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+      </div>
+
+      {/* 2. TECH/PHYS Charts Row (Average) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Evolution Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <TrendingUp size={20} className="text-blue-600"/>
-                Evolução {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : '(Geral)'}
-            </h3>
-            <div className="h-[300px] w-full">
-              {evolutionData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={evolutionData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                          <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                          <YAxis domain={[0, 10]} stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                          <RechartsTooltip 
-                              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                          />
-                          <Line type="monotone" dataKey="score" stroke="#2563eb" strokeWidth={3} dot={{r: 4, fill: '#2563eb', strokeWidth: 2, stroke: '#fff'}} />
-                      </LineChart>
-                  </ResponsiveContainer>
-              ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400">
-                      Sem dados de atuação para exibir gráfico.
-                  </div>
-              )}
-            </div>
-        </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico (Média)</h3>
+              <div className="h-[300px]">
+                 {teamStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamStats.technical}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <Radar name="Técnico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-orange-700 mb-4">Perfil Físico (Média)</h3>
+               <div className="h-[300px]">
+                 {teamStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamStats.physical}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+      </div>
 
-        {/* Team Radar Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-             <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <Activity size={20} className="text-purple-600"/>
-                Média por Fundamento {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : '(Geral)'}
-            </h3>
-             <div className="h-[300px] w-full">
-               {teamAverageStats.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamAverageStats}>
-                      <PolarGrid />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 10]} />
-                      <Radar name="Média" dataKey="A" stroke="#8b5cf6" fill="#a78bfa" fillOpacity={0.5} />
-                      <RechartsTooltip />
-                    </RadarChart>
-                 </ResponsiveContainer>
-               ) : (
-                 <div className="h-full flex items-center justify-center text-gray-400">
-                    Sem dados suficientes.
-                 </div>
-               )}
-            </div>
-        </div>
-
+      {/* 3. Evolution Line Chart (Average) */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <TrendingUp size={20} className="text-green-600"/>
+            Evolução Score Médio {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
+         </h3>
+         <div className="h-[300px]">
+             {evolutionData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={evolutionData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" />
+                        <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" />
+                        <RechartsTooltip />
+                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+             ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados históricos para o período selecionado</div>}
+         </div>
       </div>
 
     </div>

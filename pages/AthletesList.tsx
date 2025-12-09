@@ -49,7 +49,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         let averageScore = 0;
         
         if (athleteEntries.length > 0) {
-            const total = athleteEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical), 0);
+            // Added curr.tactical to ensure correct average calculation
+            const total = athleteEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical, curr.tactical), 0);
             averageScore = total / athleteEntries.length;
         }
 

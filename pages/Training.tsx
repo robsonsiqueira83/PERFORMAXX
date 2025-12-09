@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions, getTrainingEntries
 } from '../services/storageService';
-import { Athlete, Category, TrainingEntry, TrainingSession } from '../types';
+import { Athlete, Category, TrainingEntry, TrainingSession, Position } from '../types';
 import StatSlider from '../components/StatSlider';
-import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2 } from 'lucide-react';
+import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2, Search, Filter } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface TrainingProps {
@@ -16,6 +16,11 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const navigate = useNavigate();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  
+  // New Filters
+  const [selectedPosition, setSelectedPosition] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [allAthletes, setAllAthletes] = useState<Athlete[]>([]);
@@ -55,10 +60,24 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     init();
   }, [teamId]);
 
-  // Auto-list athletes and manage session creation when date/category changes
+  // Auto-list athletes and manage session creation when filters change
   useEffect(() => {
     if (selectedCategory && date) {
-      setAthletes(allAthletes.filter(a => a.categoryId === selectedCategory));
+      // Base filter by category
+      let filtered = allAthletes.filter(a => a.categoryId === selectedCategory);
+      
+      // Apply Position Filter
+      if (selectedPosition) {
+          filtered = filtered.filter(a => a.position === selectedPosition);
+      }
+
+      // Apply Search Filter
+      if (searchTerm) {
+          const lowerTerm = searchTerm.toLowerCase();
+          filtered = filtered.filter(a => a.name.toLowerCase().includes(lowerTerm));
+      }
+
+      setAthletes(filtered);
       
       const checkSession = async () => {
           const s = await getTrainingSessions();
@@ -76,7 +95,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       setCurrentSessionId(null);
     }
     setSelectedAthlete(null);
-  }, [selectedCategory, date, teamId, allAthletes]);
+  }, [selectedCategory, date, teamId, allAthletes, selectedPosition, searchTerm]);
 
   const handleSelectAthlete = async (athlete: Athlete) => {
     setSelectedAthlete(athlete);
@@ -99,7 +118,16 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
             }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
 
             const latest = entriesWithDate[0];
-            setStats({ ...latest.technical, ...latest.physical, ...latest.tactical });
+            setStats({ 
+                ...latest.technical, 
+                ...latest.physical, 
+                // Handle optional tactical data for legacy records
+                ...(latest.tactical || {
+                    const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
+                    ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
+                    def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
+                }) 
+            });
         } else {
             // Default 5 if no history
             setStats({
@@ -186,7 +214,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       </div>
 
       {/* Header Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">Data da Atuação</label>
             <input 
@@ -204,9 +232,38 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className={inputClass}
             >
-              <option value="">Selecione a Categoria...</option>
+              <option value="">Selecione...</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Posição (Filtro)</label>
+            <div className="relative">
+                <select 
+                  value={selectedPosition}
+                  onChange={(e) => setSelectedPosition(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Todas</option>
+                  {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <Filter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={18} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Buscar Atleta</label>
+            <div className="relative">
+                <input 
+                  type="text" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Nome do atleta..."
+                  className={inputClass}
+                />
+                <Search className="absolute right-3 top-3 text-gray-400" size={18} />
+            </div>
           </div>
       </div>
 
@@ -236,11 +293,12 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                                 </div>
                             )}
                             <span className="text-sm font-medium text-center leading-tight text-black">{athlete.name}</span>
+                            <span className="text-xs text-gray-500">{athlete.position}</span>
                         </button>
                     ))}
                 </div>
             ) : (
-                <p className="text-gray-500 italic">Nenhum atleta nesta categoria.</p>
+                <p className="text-gray-500 italic">Nenhum atleta encontrado com os filtros atuais.</p>
             )}
         </div>
       )}
