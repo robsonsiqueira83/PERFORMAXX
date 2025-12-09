@@ -104,7 +104,7 @@ export interface TrainingEntry {
   athleteId: string;
   technical: TechnicalStats;
   physical: PhysicalStats;
-  tactical: TacticalStats; // New field
+  tactical?: TacticalStats; // Optional for legacy data support
   notes?: string;
 }
 
@@ -119,6 +119,15 @@ export const calculateTotalScore = (technical: TechnicalStats, physical: Physica
   const divisor = techValues.length + physValues.length + tactValues.length;
   
   return divisor > 0 ? total / divisor : 0;
+};
+
+// Helper to calculate score for a single category group
+export const calculateCategoryAverage = (stats: any): number => {
+  if (!stats) return 0;
+  const values = Object.values(stats) as number[];
+  if (values.length === 0) return 0;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return sum / values.length;
 };
 
 // Helper to calculate category based on age (Display only)
