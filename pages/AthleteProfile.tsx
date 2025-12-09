@@ -46,8 +46,14 @@ const AthleteProfile: React.FC = () => {
   // Add Training State
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
   const [newStats, setNewStats] = useState({
+    // Tech
     controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-    velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
+    // Phys
+    velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
+    // Tactical
+    const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
+    ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
+    def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
   });
   const [newNotes, setNewNotes] = useState('');
 
@@ -88,9 +94,10 @@ const AthleteProfile: React.FC = () => {
         id: entry.id,
         date: new Date(session.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
         fullDate: session.date,
-        score: calculateTotalScore(entry.technical, entry.physical),
+        score: calculateTotalScore(entry.technical, entry.physical, entry.tactical),
         technical: entry.technical,
         physical: entry.physical,
+        tactical: entry.tactical,
         entry: entry
       };
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
@@ -106,15 +113,19 @@ const AthleteProfile: React.FC = () => {
   const currentStats = useMemo(() => {
     if (entries.length === 0) return null;
 
-    // Sort entries by session date first
     const sortedEntries = [...entries].map(e => {
         const s = sessions.find(s => s.id === e.sessionId);
         return { ...e, _date: s ? s.date : '1970-01-01' };
     }).sort((a, b) => new Date(a._date).getTime() - new Date(b._date).getTime());
 
     const recent = sortedEntries.slice(-3); // Get last 3
-    const avg = (key: string, type: 'technical' | 'physical') => {
-      const sum = recent.reduce((acc, curr) => acc + (curr[type] as any)[key], 0);
+    
+    // Helper to get avg
+    const avg = (key: string, type: 'technical' | 'physical' | 'tactical') => {
+      const sum = recent.reduce((acc, curr) => {
+          const group = curr[type] as any;
+          return acc + (group ? (group[key] || 0) : 0);
+      }, 0);
       return Math.round((sum / recent.length) * 10) / 10;
     };
 
@@ -134,6 +145,25 @@ const AthleteProfile: React.FC = () => {
         { subject: 'Resistência', A: avg('resistencia', 'physical'), fullMark: 10 },
         { subject: 'Coordenação', A: avg('coordenacao', 'physical'), fullMark: 10 },
         { subject: 'Equilíbrio', A: avg('equilibrio', 'physical'), fullMark: 10 },
+      ],
+      tactical_const: [
+        { subject: 'Passe', A: avg('const_passe', 'tactical'), fullMark: 10 },
+        { subject: 'Jogo Costas', A: avg('const_jogo_costas', 'tactical'), fullMark: 10 },
+        { subject: 'Domínio', A: avg('const_dominio', 'tactical'), fullMark: 10 },
+        { subject: '1v1 Ofen.', A: avg('const_1v1_ofensivo', 'tactical'), fullMark: 10 },
+        { subject: 'Moviment.', A: avg('const_movimentacao', 'tactical'), fullMark: 10 },
+      ],
+      tactical_ult: [
+        { subject: 'Finaliz.', A: avg('ult_finalizacao', 'tactical'), fullMark: 10 },
+        { subject: 'Desm. Rupt.', A: avg('ult_desmarques', 'tactical'), fullMark: 10 },
+        { subject: 'Passe Rupt.', A: avg('ult_passes_ruptura', 'tactical'), fullMark: 10 },
+      ],
+      tactical_def: [
+        { subject: 'Compact.', A: avg('def_compactacao', 'tactical'), fullMark: 10 },
+        { subject: 'Recompos.', A: avg('def_recomposicao', 'tactical'), fullMark: 10 },
+        { subject: 'Salto Pres.', A: avg('def_salto_pressao', 'tactical'), fullMark: 10 },
+        { subject: '1v1 Def.', A: avg('def_1v1_defensivo', 'tactical'), fullMark: 10 },
+        { subject: 'Duelo Aér.', A: avg('def_duelos_aereos', 'tactical'), fullMark: 10 },
       ]
     };
   }, [entries, sessions]);
@@ -154,7 +184,6 @@ const AthleteProfile: React.FC = () => {
 
   const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newDate = e.target.value;
-      // Sync update
       setEditFormData(prev => ({ ...prev, birthDate: newDate }));
   };
 
@@ -167,21 +196,25 @@ const AthleteProfile: React.FC = () => {
   };
 
   const openTrainingModal = () => {
-    // Pre-fill with last known stats if available
     if (entries.length > 0) {
-        // Sort by date to get latest
         const sorted = [...entries].map(e => {
             const s = sessions.find(s => s.id === e.sessionId);
             return { ...e, _date: s ? s.date : '1970-01-01' };
-        }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime()); // Descending
+        }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
 
         const latest = sorted[0];
-        setNewStats({ ...latest.technical, ...latest.physical });
+        setNewStats({ ...latest.technical, ...latest.physical, ...latest.tactical || {
+            const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
+            ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
+            def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
+        } });
     } else {
-        // Reset to default
         setNewStats({
             controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-            velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
+            velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
+            const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
+            ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
+            def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
         });
     }
     setNewNotes('');
@@ -191,14 +224,12 @@ const AthleteProfile: React.FC = () => {
   const handleQuickTraining = async () => {
      if (!athlete || !trainingDate) return;
      
-     // 1. Check if session exists for this date/category/team
      let sessionId = null;
      const existingSession = sessions.find(s => s.date === trainingDate && s.teamId === athlete.teamId && s.categoryId === athlete.categoryId);
      
      if (existingSession) {
          sessionId = existingSession.id;
      } else {
-         // Create new session
          sessionId = uuidv4();
          const newSession: TrainingSession = {
              id: sessionId,
@@ -210,7 +241,6 @@ const AthleteProfile: React.FC = () => {
          await saveTrainingSession(newSession);
      }
 
-     // 2. Create Entry
      const entry: TrainingEntry = {
          id: uuidv4(),
          sessionId: sessionId,
@@ -223,6 +253,13 @@ const AthleteProfile: React.FC = () => {
             velocidade: newStats.velocidade, agilidade: newStats.agilidade, forca: newStats.forca,
             resistencia: newStats.resistencia, coordenacao: newStats.coordenacao, equilibrio: newStats.equilibrio
          },
+         tactical: {
+            const_passe: newStats.const_passe, const_jogo_costas: newStats.const_jogo_costas, const_dominio: newStats.const_dominio,
+            const_1v1_ofensivo: newStats.const_1v1_ofensivo, const_movimentacao: newStats.const_movimentacao,
+            ult_finalizacao: newStats.ult_finalizacao, ult_desmarques: newStats.ult_desmarques, ult_passes_ruptura: newStats.ult_passes_ruptura,
+            def_compactacao: newStats.def_compactacao, def_recomposicao: newStats.def_recomposicao, def_salto_pressao: newStats.def_salto_pressao,
+            def_1v1_defensivo: newStats.def_1v1_defensivo, def_duelos_aereos: newStats.def_duelos_aereos
+         },
          notes: newNotes
      };
      await saveTrainingEntry(entry);
@@ -232,7 +269,12 @@ const AthleteProfile: React.FC = () => {
 
   const startEditingEntry = (entry: TrainingEntry) => {
     setEditingEntryId(entry.id);
-    setTempStats({ ...entry.technical, ...entry.physical });
+    const defaults = {
+        const_passe: 0, const_jogo_costas: 0, const_dominio: 0, const_1v1_ofensivo: 0, const_movimentacao: 0,
+        ult_finalizacao: 0, ult_desmarques: 0, ult_passes_ruptura: 0,
+        def_compactacao: 0, def_recomposicao: 0, def_salto_pressao: 0, def_1v1_defensivo: 0, def_duelos_aereos: 0
+    };
+    setTempStats({ ...entry.technical, ...entry.physical, ...(entry.tactical || defaults) });
     setTempNotes(entry.notes || '');
   };
 
@@ -250,6 +292,13 @@ const AthleteProfile: React.FC = () => {
                 velocidade: tempStats.velocidade, agilidade: tempStats.agilidade, forca: tempStats.forca,
                 resistencia: tempStats.resistencia, coordenacao: tempStats.coordenacao, equilibrio: tempStats.equilibrio
             },
+            tactical: {
+                const_passe: tempStats.const_passe, const_jogo_costas: tempStats.const_jogo_costas, const_dominio: tempStats.const_dominio,
+                const_1v1_ofensivo: tempStats.const_1v1_ofensivo, const_movimentacao: tempStats.const_movimentacao,
+                ult_finalizacao: tempStats.ult_finalizacao, ult_desmarques: tempStats.ult_desmarques, ult_passes_ruptura: tempStats.ult_passes_ruptura,
+                def_compactacao: tempStats.def_compactacao, def_recomposicao: tempStats.def_recomposicao, def_salto_pressao: tempStats.def_salto_pressao,
+                def_1v1_defensivo: tempStats.def_1v1_defensivo, def_duelos_aereos: tempStats.def_duelos_aereos
+            },
             notes: tempNotes
         };
         await saveTrainingEntry(updated);
@@ -260,10 +309,8 @@ const AthleteProfile: React.FC = () => {
      }
   };
 
-  // Helper to format date string from YYYY-MM-DD to DD/MM/YYYY without UTC conversion issues
   const formatBirthDate = (dateString: string) => {
      if (!dateString) return '';
-     // Handle ISO strings (split T)
      const datePart = dateString.split('T')[0];
      const [year, month, day] = datePart.split('-');
      return `${day}/${month}/${year}`;
@@ -335,11 +382,68 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* Charts Row */}
+      {/* TACTICAL CHARTS ROW */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Construindo */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
+              <div className="h-[250px]">
+                 {currentStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_const}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Construindo" dataKey="A" stroke="#7e22ce" fill="#a855f7" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          
+          {/* Último Terço */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
+              <div className="h-[250px]">
+                 {currentStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_ult}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Último Terço" dataKey="A" stroke="#9333ea" fill="#d8b4fe" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+
+          {/* Defendendo */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
+              <div className="h-[250px]">
+                 {currentStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_def}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Defendendo" dataKey="A" stroke="#6b21a8" fill="#a855f7" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+      </div>
+
+      {/* TECH/PHYS Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Radar Charts */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-800 mb-4">Perfil Técnico (Média Recente)</h3>
+              <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico (Média Recente)</h3>
               <div className="h-[300px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -355,7 +459,7 @@ const AthleteProfile: React.FC = () => {
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-800 mb-4">Perfil Físico (Média Recente)</h3>
+              <h3 className="font-bold text-orange-700 mb-4">Perfil Físico (Média Recente)</h3>
                <div className="h-[300px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -443,6 +547,7 @@ const AthleteProfile: React.FC = () => {
                                 <div className="flex gap-4 mt-2 text-xs text-gray-500">
                                     <span>Técnica: {calculateTotalScore(item!.technical, {velocidade:0,agilidade:0,forca:0,resistencia:0,coordenacao:0,equilibrio:0} as any).toFixed(1)}</span>
                                     <span>Físico: {calculateTotalScore({controle:0,passe:0,finalizacao:0,drible:0,cabeceio:0,posicao:0} as any, item!.physical).toFixed(1)}</span>
+                                    {item!.tactical && <span>Tático: {calculateTotalScore({controle:0,passe:0,finalizacao:0,drible:0,cabeceio:0,posicao:0} as any, {velocidade:0,agilidade:0,forca:0,resistencia:0,coordenacao:0,equilibrio:0} as any, item!.tactical).toFixed(1)}</span>}
                                 </div>
                                 {item!.entry.notes && (
                                    <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
@@ -514,10 +619,10 @@ const AthleteProfile: React.FC = () => {
                      </div>
                  )}
 
-                 <div className="grid grid-cols-2 gap-8">
+                 <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <h4 className="text-sm font-bold text-gray-500 uppercase border-b pb-1 mb-3">Técnica</h4>
-                        <ul className="space-y-2 text-sm">
+                        <h4 className="text-sm font-bold text-blue-500 uppercase border-b pb-1 mb-3">Técnica</h4>
+                        <ul className="space-y-1 text-xs">
                            {Object.entries(viewingEntry.technical).map(([key, val]: any) => (
                                <li key={key} className="flex justify-between">
                                    <span className="capitalize text-gray-600">{key}</span>
@@ -527,8 +632,8 @@ const AthleteProfile: React.FC = () => {
                         </ul>
                      </div>
                      <div>
-                        <h4 className="text-sm font-bold text-gray-500 uppercase border-b pb-1 mb-3">Físico</h4>
-                        <ul className="space-y-2 text-sm">
+                        <h4 className="text-sm font-bold text-orange-500 uppercase border-b pb-1 mb-3">Físico</h4>
+                        <ul className="space-y-1 text-xs">
                            {Object.entries(viewingEntry.physical).map(([key, val]: any) => (
                                <li key={key} className="flex justify-between">
                                    <span className="capitalize text-gray-600">{key}</span>
@@ -537,6 +642,29 @@ const AthleteProfile: React.FC = () => {
                            ))}
                         </ul>
                      </div>
+                     {viewingEntry.tactical && Object.keys(viewingEntry.tactical).length > 0 && (
+                        <div className="col-span-2 mt-4">
+                            <h4 className="text-sm font-bold text-purple-500 uppercase border-b pb-1 mb-3">Tático</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <ul className="space-y-1 text-xs">
+                                {Object.entries(viewingEntry.tactical).slice(0, 7).map(([key, val]: any) => (
+                                    <li key={key} className="flex justify-between">
+                                        <span className="capitalize text-gray-600">{key.replace('const_', '').replace('ult_', '').replace('def_', '')}</span>
+                                        <span className={`font-bold ${val < 4 ? 'text-red-500' : val < 8 ? 'text-gray-500' : 'text-green-500'}`}>{val}</span>
+                                    </li>
+                                ))}
+                                </ul>
+                                <ul className="space-y-1 text-xs">
+                                {Object.entries(viewingEntry.tactical).slice(7).map(([key, val]: any) => (
+                                    <li key={key} className="flex justify-between">
+                                        <span className="capitalize text-gray-600">{key.replace('const_', '').replace('ult_', '').replace('def_', '')}</span>
+                                        <span className={`font-bold ${val < 4 ? 'text-red-500' : val < 8 ? 'text-gray-500' : 'text-green-500'}`}>{val}</span>
+                                    </li>
+                                ))}
+                                </ul>
+                            </div>
+                        </div>
+                     )}
                  </div>
              </div>
         </div>
@@ -590,7 +718,7 @@ const AthleteProfile: React.FC = () => {
       {/* Quick Training Modal */}
       {showTrainingModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="bg-white rounded-xl w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto">
                   <div className="flex justify-between items-center mb-4 border-b pb-2">
                       <h3 className="font-bold text-lg">Nova Atuação Rápida</h3>
                       <button onClick={() => setShowTrainingModal(false)}><X className="text-gray-400" /></button>
@@ -599,9 +727,11 @@ const AthleteProfile: React.FC = () => {
                       <label className="block text-sm font-bold text-gray-700 mb-1">Data da Atuação</label>
                       <input type="date" className={inputClass} value={trainingDate} onChange={e => setTrainingDate(e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* Technical */}
                       <div>
-                        <h4 className="text-xs uppercase font-bold text-gray-500 mb-2 border-b">Técnica</h4>
+                        <h4 className="text-xs uppercase font-bold text-blue-500 mb-2 border-b">Técnica</h4>
                         <StatSlider label="Controle" value={newStats.controle} onChange={v => setNewStats({...newStats, controle: v})} />
                         <StatSlider label="Passe" value={newStats.passe} onChange={v => setNewStats({...newStats, passe: v})} />
                         <StatSlider label="Finalização" value={newStats.finalizacao} onChange={v => setNewStats({...newStats, finalizacao: v})} />
@@ -609,14 +739,44 @@ const AthleteProfile: React.FC = () => {
                         <StatSlider label="Cabeceio" value={newStats.cabeceio} onChange={v => setNewStats({...newStats, cabeceio: v})} />
                         <StatSlider label="Posição" value={newStats.posicao} onChange={v => setNewStats({...newStats, posicao: v})} />
                       </div>
+                      
+                      {/* Physical */}
                       <div>
-                        <h4 className="text-xs uppercase font-bold text-gray-500 mb-2 border-b">Físico</h4>
+                        <h4 className="text-xs uppercase font-bold text-orange-500 mb-2 border-b">Físico</h4>
                         <StatSlider label="Velocidade" value={newStats.velocidade} onChange={v => setNewStats({...newStats, velocidade: v})} />
                         <StatSlider label="Agilidade" value={newStats.agilidade} onChange={v => setNewStats({...newStats, agilidade: v})} />
                         <StatSlider label="Força" value={newStats.forca} onChange={v => setNewStats({...newStats, forca: v})} />
                         <StatSlider label="Resistência" value={newStats.resistencia} onChange={v => setNewStats({...newStats, resistencia: v})} />
                         <StatSlider label="Coordenação" value={newStats.coordenacao} onChange={v => setNewStats({...newStats, coordenacao: v})} />
                         <StatSlider label="Equilíbrio" value={newStats.equilibrio} onChange={v => setNewStats({...newStats, equilibrio: v})} />
+                      </div>
+
+                      {/* Tactical 1: Construindo */}
+                      <div>
+                         <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Construindo</h4>
+                         <StatSlider label="Passe" value={newStats.const_passe} onChange={v => setNewStats({...newStats, const_passe: v})} />
+                         <StatSlider label="Jogo Costas" value={newStats.const_jogo_costas} onChange={v => setNewStats({...newStats, const_jogo_costas: v})} />
+                         <StatSlider label="Domínio" value={newStats.const_dominio} onChange={v => setNewStats({...newStats, const_dominio: v})} />
+                         <StatSlider label="1v1 Ofen." value={newStats.const_1v1_ofensivo} onChange={v => setNewStats({...newStats, const_1v1_ofensivo: v})} />
+                         <StatSlider label="Moviment." value={newStats.const_movimentacao} onChange={v => setNewStats({...newStats, const_movimentacao: v})} />
+                      </div>
+
+                      {/* Tactical 2: Último Terço */}
+                      <div>
+                         <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Último Terço</h4>
+                         <StatSlider label="Finaliz." value={newStats.ult_finalizacao} onChange={v => setNewStats({...newStats, ult_finalizacao: v})} />
+                         <StatSlider label="Desm. Rupt." value={newStats.ult_desmarques} onChange={v => setNewStats({...newStats, ult_desmarques: v})} />
+                         <StatSlider label="Passe Rupt." value={newStats.ult_passes_ruptura} onChange={v => setNewStats({...newStats, ult_passes_ruptura: v})} />
+                      </div>
+
+                       {/* Tactical 3: Defendendo */}
+                      <div>
+                         <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Defendendo</h4>
+                         <StatSlider label="Compact." value={newStats.def_compactacao} onChange={v => setNewStats({...newStats, def_compactacao: v})} />
+                         <StatSlider label="Recompos." value={newStats.def_recomposicao} onChange={v => setNewStats({...newStats, def_recomposicao: v})} />
+                         <StatSlider label="Salto Pres." value={newStats.def_salto_pressao} onChange={v => setNewStats({...newStats, def_salto_pressao: v})} />
+                         <StatSlider label="1v1 Def." value={newStats.def_1v1_defensivo} onChange={v => setNewStats({...newStats, def_1v1_defensivo: v})} />
+                         <StatSlider label="Duelo Aér." value={newStats.def_duelos_aereos} onChange={v => setNewStats({...newStats, def_duelos_aereos: v})} />
                       </div>
                   </div>
                   
