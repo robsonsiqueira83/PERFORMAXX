@@ -1,0 +1,128 @@
+export enum UserRole {
+  MASTER = 'MASTER',
+  TECNICO = 'Técnico',
+  AUXILIAR = 'Auxiliar',
+  SCOUT = 'Scout',
+  PREPARADOR = 'Preparador Físico',
+  MASSAGISTA = 'Massagista'
+}
+
+export enum Position {
+  GOLEIRO = 'Goleiro',
+  LATERAL = 'Lateral',
+  ZAGUEIRO = 'Zagueiro',
+  VOLANTE = 'Volante',
+  MEIO_CAMPO = 'Meio-campo',
+  CENTROAVANTE = 'Centroavante',
+  ATACANTE = 'Atacante'
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password?: string; // In a real app, this would be hashed or handled by auth provider
+  role: UserRole;
+  avatarUrl?: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  logoUrl?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  teamId: string;
+}
+
+export interface Staff {
+  id: string;
+  name: string;
+  role: string;
+  teamIds: string[]; // Changed from teamId to teamIds for multi-team access
+  email?: string;
+  phone?: string;
+}
+
+export interface Athlete {
+  id: string;
+  name: string;
+  photoUrl?: string;
+  teamId: string;
+  categoryId: string;
+  position: Position;
+  birthDate: string;
+  responsibleName: string;
+  responsiblePhone: string;
+}
+
+export interface TechnicalStats {
+  controle: number;
+  passe: number;
+  finalizacao: number;
+  drible: number;
+  cabeceio: number;
+  posicao: number;
+}
+
+export interface PhysicalStats {
+  velocidade: number;
+  agilidade: number;
+  forca: number;
+  resistencia: number;
+  coordenacao: number;
+  equilibrio: number;
+}
+
+export interface TrainingSession {
+  id: string;
+  date: string;
+  teamId: string;
+  categoryId: string;
+  description?: string;
+}
+
+export interface TrainingEntry {
+  id: string;
+  sessionId: string;
+  athleteId: string;
+  technical: TechnicalStats;
+  physical: PhysicalStats;
+  notes?: string;
+}
+
+// Helper to calculate total score
+export const calculateTotalScore = (technical: TechnicalStats, physical: PhysicalStats): number => {
+  const techValues = Object.values(technical);
+  const physValues = Object.values(physical);
+  const total = [...techValues, ...physValues].reduce((a, b) => a + b, 0);
+  return total / (techValues.length + physValues.length);
+};
+
+// Helper to calculate category based on age
+export const getCalculatedCategory = (birthDateString: string): string => {
+  if (!birthDateString) return '';
+  
+  const birthDate = new Date(birthDateString);
+  const today = new Date();
+  
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  
+  // Adjust age if birthday hasn't occurred yet this year
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+  }
+
+  if (age <= 7) return 'Sub-07';
+  if (age <= 9) return 'Sub-09';
+  if (age <= 11) return 'Sub-11';
+  if (age <= 13) return 'Sub-13';
+  if (age <= 15) return 'Sub-15';
+  if (age <= 17) return 'Sub-17';
+  if (age <= 20) return 'Sub-20';
+  return 'Adulto';
+};
