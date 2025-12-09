@@ -49,7 +49,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Atletas', href: '/athletes', icon: Users },
-    { name: 'Treinos', href: '/training', icon: ClipboardList },
+    { name: 'Atuações', href: '/training', icon: ClipboardList },
     { name: 'Admin', href: '/admin', icon: Settings },
   ];
   
