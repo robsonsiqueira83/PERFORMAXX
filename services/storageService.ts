@@ -167,11 +167,7 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
       athleteId: e.athlete_id,
       technical: e.technical, // JSONB auto-converts
       physical: e.physical,   // JSONB auto-converts
-      tactical: e.tactical || { // Fallback for old records
-        const_passe: 0, const_jogo_costas: 0, const_dominio: 0, const_1v1_ofensivo: 0, const_movimentacao: 0,
-        ult_finalizacao: 0, ult_desmarques: 0, ult_passes_ruptura: 0,
-        def_compactacao: 0, def_recomposicao: 0, def_salto_pressao: 0, def_1v1_defensivo: 0, def_duelos_aereos: 0
-      },
+      tactical: e.tactical,   // Can be undefined/null
       notes: e.notes
   }));
 };
