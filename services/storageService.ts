@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Athlete, Category, Staff, Team, TrainingEntry, TrainingSession, User, UserRole, Position } from '../types';
+import { Athlete, Category, Team, TrainingEntry, TrainingSession, User, UserRole, Position } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // --- Users ---
@@ -15,7 +15,8 @@ export const getUsers = async (): Promise<User[]> => {
     email: u.email,
     role: u.role as UserRole,
     avatarUrl: u.avatar_url,
-    password: u.password // Note: In production, password checking should happen server-side/auth
+    password: u.password,
+    teamIds: u.team_ids || [] // JSONB column
   }));
 };
 
@@ -26,7 +27,8 @@ export const saveUser = async (user: User) => {
     email: user.email,
     password: user.password,
     role: user.role,
-    avatar_url: user.avatarUrl
+    avatar_url: user.avatarUrl,
+    team_ids: user.teamIds
   };
   const { error } = await supabase.from('users').upsert(dbUser);
   if (error) console.error('Error saving user:', error);
@@ -91,78 +93,9 @@ export const saveCategory = async (cat: Category) => {
   if (error) console.error('Error saving category:', error);
 };
 
-export const ensureCategoryExists = async (teamId: string, categoryName: string): Promise<Category> => {
-  // Check if exists
-  const { data } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('team_id', teamId)
-    .eq('name', categoryName)
-    .single();
-
-  if (data) {
-    return {
-        id: data.id,
-        name: data.name,
-        teamId: data.team_id
-    };
-  }
-
-  // Create new
-  const newId = uuidv4();
-  const newCat = {
-    id: newId,
-    name: categoryName,
-    team_id: teamId
-  };
-
-  const { error } = await supabase.from('categories').insert(newCat);
-  if (error) {
-    console.error('Error creating category:', error);
-    throw error;
-  }
-
-  return { id: newId, name: categoryName, teamId: teamId };
-};
-
 export const deleteCategory = async (id: string) => {
   const { error } = await supabase.from('categories').delete().eq('id', id);
   if (error) console.error('Error deleting category:', error);
-};
-
-// --- Staff ---
-export const getStaff = async (): Promise<Staff[]> => {
-  const { data, error } = await supabase.from('staff').select('*');
-  if (error) {
-    console.error('Error fetching staff:', error);
-    return [];
-  }
-  return data.map((s: any) => ({
-      id: s.id,
-      name: s.name,
-      role: s.role,
-      email: s.email,
-      phone: s.phone,
-      teamIds: s.team_ids || [] // JSONB column
-  }));
-};
-
-export const saveStaff = async (staff: Staff) => {
-  const dbStaff = {
-    id: staff.id,
-    name: staff.name,
-    role: staff.role,
-    email: staff.email,
-    phone: staff.phone,
-    team_ids: staff.teamIds
-  };
-  const { error } = await supabase.from('staff').upsert(dbStaff);
-  if (error) console.error('Error saving staff:', error);
-};
-
-export const deleteStaff = async (id: string) => {
-  const { error } = await supabase.from('staff').delete().eq('id', id);
-  if (error) console.error('Error deleting staff:', error);
 };
 
 // --- Athletes ---
