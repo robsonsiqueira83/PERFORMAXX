@@ -106,14 +106,29 @@ export const calculateTotalScore = (technical: TechnicalStats, physical: Physica
 export const getCalculatedCategory = (birthDateString: string): string => {
   if (!birthDateString) return '';
   
-  const birthDate = new Date(birthDateString);
+  let birthYear, birthMonth, birthDay;
+
+  // Normalize string to YYYY-MM-DD
+  const dateOnly = birthDateString.split('T')[0];
+  
+  if (dateOnly.includes('-')) {
+     [birthYear, birthMonth, birthDay] = dateOnly.split('-').map(Number);
+  } else {
+     // Fallback for unexpected formats
+     const d = new Date(birthDateString);
+     birthYear = d.getFullYear();
+     birthMonth = d.getMonth() + 1;
+     birthDay = d.getDate();
+  }
+  
   const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+  const currentDay = today.getDate();
   
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
+  let age = currentYear - birthYear;
   
-  // Adjust age if birthday hasn't occurred yet this year
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+  if (currentMonth < birthMonth || (currentMonth === birthMonth && currentDay < birthDay)) {
       age--;
   }
 
@@ -124,5 +139,5 @@ export const getCalculatedCategory = (birthDateString: string): string => {
   if (age <= 15) return 'Sub-15';
   if (age <= 17) return 'Sub-17';
   if (age <= 20) return 'Sub-20';
-  return 'Adulto';
+  return 'Profisisonal';
 };
