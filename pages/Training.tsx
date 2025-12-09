@@ -124,7 +124,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
           date,
           categoryId: selectedCategory,
           teamId,
-          description: 'Treino Regular'
+          description: 'Atuação Regular'
         };
         await saveTrainingSession(session);
         setCurrentSessionId(sessionIdToUse);
@@ -169,13 +169,13 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-4">
         <ClipboardList className="text-green-500" size={28} />
-        <h2 className="text-2xl font-bold text-gray-800">Lançamento de Treino</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Lançamento de Atuações</h2>
       </div>
 
       {/* Header Filters */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Data do Treino</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Data da Atuação</label>
             <input 
               type="date" 
               value={date}
@@ -222,7 +222,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                                     {athlete.name.charAt(0)}
                                 </div>
                             )}
-                            <span className="text-sm font-medium text-center leading-tight">{athlete.name}</span>
+                            <span className="text-sm font-medium text-center leading-tight text-black">{athlete.name}</span>
                         </button>
                     ))}
                 </div>

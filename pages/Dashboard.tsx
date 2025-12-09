@@ -321,7 +321,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
            </Link>
            <Link to="/training" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               <ClipboardList size={16} />
-              Novo Treino
+              Nova Atuação
            </Link>
         </div>
       </div>
@@ -350,7 +350,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                          <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
                          {/* Swapped Category and Position display as requested */}
                          <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
-                         <p className="text-xs text-gray-500">{athlete.sessionsCount} treinos</p>
+                         <p className="text-xs text-gray-500">{athlete.sessionsCount} atuações</p>
                      </div>
                  </div>
                  <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-end">
@@ -465,7 +465,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                   </ResponsiveContainer>
               ) : (
                   <div className="h-full flex items-center justify-center text-gray-400">
-                      Sem dados de treino para exibir gráfico.
+                      Sem dados de atuação para exibir gráfico.
                   </div>
               )}
             </div>

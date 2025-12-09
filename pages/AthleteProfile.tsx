@@ -146,7 +146,7 @@ const AthleteProfile: React.FC = () => {
   };
 
   const handleDeleteEntry = async (entryId: string) => {
-    if (confirm('Deseja excluir este treino do histórico do atleta?')) {
+    if (confirm('Deseja excluir esta atuação do histórico do atleta?')) {
         await deleteTrainingEntry(entryId);
         setRefreshKey(prev => prev + 1);
     }
@@ -205,7 +205,7 @@ const AthleteProfile: React.FC = () => {
              date: trainingDate,
              teamId: athlete.teamId,
              categoryId: athlete.categoryId,
-             description: 'Treino Rápido (Via Perfil)'
+             description: 'Atuação Rápida (Via Perfil)'
          };
          await saveTrainingSession(newSession);
      }
@@ -320,7 +320,7 @@ const AthleteProfile: React.FC = () => {
                  {/* Actions Group */}
                  <div className="flex flex-col gap-2 w-full sm:w-auto">
                     <button onClick={openTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full">
-                        <ClipboardList size={18} /> Novo Treino
+                        <ClipboardList size={18} /> Nova Atuação
                     </button>
                     <div className="flex gap-2 w-full">
                         <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1">
@@ -393,7 +393,7 @@ const AthleteProfile: React.FC = () => {
       {/* History List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
-             <h3 className="font-bold text-gray-800">Histórico de Treinos</h3>
+             <h3 className="font-bold text-gray-800">Histórico de Atuações</h3>
           </div>
           <div className="divide-y divide-gray-100">
               {historyData.map((item) => (
@@ -495,7 +495,7 @@ const AthleteProfile: React.FC = () => {
                          <ClipboardList size={24} />
                      </div>
                      <div>
-                         <h3 className="font-bold text-xl text-gray-800">Detalhes do Treino</h3>
+                         <h3 className="font-bold text-xl text-gray-800">Detalhes da Atuação</h3>
                          <p className="text-sm text-gray-500">{viewingEntry.date}</p>
                      </div>
                      <div className="ml-auto">
@@ -592,11 +592,11 @@ const AthleteProfile: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
                   <div className="flex justify-between items-center mb-4 border-b pb-2">
-                      <h3 className="font-bold text-lg">Novo Treino Rápido</h3>
+                      <h3 className="font-bold text-lg">Nova Atuação Rápida</h3>
                       <button onClick={() => setShowTrainingModal(false)}><X className="text-gray-400" /></button>
                   </div>
                   <div className="mb-4">
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Data do Treino</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Data da Atuação</label>
                       <input type="date" className={inputClass} value={trainingDate} onChange={e => setTrainingDate(e.target.value)} />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -631,7 +631,7 @@ const AthleteProfile: React.FC = () => {
                   </div>
 
                   <div className="mt-6 pt-4 border-t">
-                      <button onClick={handleQuickTraining} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg">Salvar Treino</button>
+                      <button onClick={handleQuickTraining} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg">Salvar Atuação</button>
                   </div>
               </div>
           </div>
