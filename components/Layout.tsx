@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   Trophy
 } from 'lucide-react';
-import { Team, User } from '../types';
+import { Team, User, UserRole } from '../types';
 import { getTeams } from '../services/storageService';
 
 interface LayoutProps {
@@ -29,11 +29,22 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
 
   useEffect(() => {
     const loadTeams = async () => {
-        const t = await getTeams();
-        setTeams(t);
+        const allTeams = await getTeams();
+        
+        // Filter teams based on user access
+        let userTeams = allTeams;
+        if (user.role !== UserRole.MASTER && user.teamIds) {
+             userTeams = allTeams.filter(t => user.teamIds?.includes(t.id));
+        }
+        setTeams(userTeams);
+
+        // If current selected team is not in allowed list (and list is not empty), switch to first allowed
+        if (userTeams.length > 0 && !userTeams.find(t => t.id === selectedTeamId)) {
+            if (onTeamChange) onTeamChange(userTeams[0].id);
+        }
     };
     loadTeams();
-  }, []);
+  }, [user]);
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -44,7 +55,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
   
   // Restricted access to Admin page
   const filteredNavigation = navigation.filter(item => {
-    if (item.name === 'Admin' && user.role === 'Massagista') return false; // Simple rule example
+    if (item.name === 'Admin' && user.role === 'Massagista') return false; 
     return true;
   });
 
