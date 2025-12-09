@@ -24,6 +24,7 @@ export interface User {
   password?: string; // In a real app, this would be hashed or handled by auth provider
   role: UserRole;
   avatarUrl?: string;
+  teamIds?: string[]; // Access control
 }
 
 export interface Team {
@@ -36,15 +37,6 @@ export interface Category {
   id: string;
   name: string;
   teamId: string;
-}
-
-export interface Staff {
-  id: string;
-  name: string;
-  role: string;
-  teamIds: string[]; // Changed from teamId to teamIds for multi-team access
-  email?: string;
-  phone?: string;
 }
 
 export interface Athlete {
@@ -102,7 +94,7 @@ export const calculateTotalScore = (technical: TechnicalStats, physical: Physica
   return total / (techValues.length + physValues.length);
 };
 
-// Helper to calculate category based on age
+// Helper to calculate category based on age (Display only)
 export const getCalculatedCategory = (birthDateString: string): string => {
   if (!birthDateString) return '';
   
@@ -139,5 +131,5 @@ export const getCalculatedCategory = (birthDateString: string): string => {
   if (age <= 15) return 'Sub-15';
   if (age <= 17) return 'Sub-17';
   if (age <= 20) return 'Sub-20';
-  return 'Profisisonal';
+  return 'Profissional';
 };
