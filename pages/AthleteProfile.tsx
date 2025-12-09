@@ -21,6 +21,22 @@ import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, L
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
+const tacticalLabels: Record<string, string> = {
+  const_passe: 'Passe',
+  const_jogo_costas: 'Jogo de costas',
+  const_dominio: 'Domínio',
+  const_1v1_ofensivo: '1v1 ofensivo',
+  const_movimentacao: 'Movimentação',
+  ult_finalizacao: 'Finalização',
+  ult_desmarques: 'Desmarques de ruptura',
+  ult_passes_ruptura: 'Passes de ruptura',
+  def_compactacao: 'Compactação',
+  def_recomposicao: 'Tempo/Intensidade de Recomposição',
+  def_salto_pressao: 'Salto de pressão',
+  def_1v1_defensivo: '1v1 defensivo',
+  def_duelos_aereos: 'Duelos aéreos'
+};
+
 const AthleteProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -147,26 +163,36 @@ const AthleteProfile: React.FC = () => {
         { subject: 'Equilíbrio', A: avg('equilibrio', 'physical'), fullMark: 10 },
       ],
       tactical_const: [
-        { subject: 'Passe', A: avg('const_passe', 'tactical'), fullMark: 10 },
-        { subject: 'Jogo Costas', A: avg('const_jogo_costas', 'tactical'), fullMark: 10 },
-        { subject: 'Domínio', A: avg('const_dominio', 'tactical'), fullMark: 10 },
-        { subject: '1v1 Ofen.', A: avg('const_1v1_ofensivo', 'tactical'), fullMark: 10 },
-        { subject: 'Moviment.', A: avg('const_movimentacao', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.const_passe, A: avg('const_passe', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.const_jogo_costas, A: avg('const_jogo_costas', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.const_dominio, A: avg('const_dominio', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.const_1v1_ofensivo, A: avg('const_1v1_ofensivo', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.const_movimentacao, A: avg('const_movimentacao', 'tactical'), fullMark: 10 },
       ],
       tactical_ult: [
-        { subject: 'Finaliz.', A: avg('ult_finalizacao', 'tactical'), fullMark: 10 },
-        { subject: 'Desm. Rupt.', A: avg('ult_desmarques', 'tactical'), fullMark: 10 },
-        { subject: 'Passe Rupt.', A: avg('ult_passes_ruptura', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.ult_finalizacao, A: avg('ult_finalizacao', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.ult_desmarques, A: avg('ult_desmarques', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.ult_passes_ruptura, A: avg('ult_passes_ruptura', 'tactical'), fullMark: 10 },
       ],
       tactical_def: [
-        { subject: 'Compact.', A: avg('def_compactacao', 'tactical'), fullMark: 10 },
-        { subject: 'Recompos.', A: avg('def_recomposicao', 'tactical'), fullMark: 10 },
-        { subject: 'Salto Pres.', A: avg('def_salto_pressao', 'tactical'), fullMark: 10 },
-        { subject: '1v1 Def.', A: avg('def_1v1_defensivo', 'tactical'), fullMark: 10 },
-        { subject: 'Duelo Aér.', A: avg('def_duelos_aereos', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.def_compactacao, A: avg('def_compactacao', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.def_recomposicao, A: avg('def_recomposicao', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.def_salto_pressao, A: avg('def_salto_pressao', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.def_1v1_defensivo, A: avg('def_1v1_defensivo', 'tactical'), fullMark: 10 },
+        { subject: tacticalLabels.def_duelos_aereos, A: avg('def_duelos_aereos', 'tactical'), fullMark: 10 },
       ]
     };
   }, [entries, sessions]);
+
+  // Dynamic Color Helper for Tactical Charts
+  const getTacticalColor = (data: any[]) => {
+      if (!data || data.length === 0) return { stroke: '#8884d8', fill: '#8884d8' };
+      const avg = data.reduce((sum, item) => sum + item.A, 0) / data.length;
+      
+      if (avg < 4) return { stroke: '#ef4444', fill: '#ef4444' }; // Red
+      if (avg < 8) return { stroke: '#f97316', fill: '#f97316' }; // Orange
+      return { stroke: '#22c55e', fill: '#22c55e' }; // Green
+  };
 
   const handleDelete = async () => {
     if (confirm('Tem certeza que deseja excluir este atleta? Todos os dados serão perdidos.')) {
@@ -319,6 +345,11 @@ const AthleteProfile: React.FC = () => {
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded p-2 focus:outline-none focus:border-blue-500 focus:border-blue-500";
+  
+  // Tactical Colors
+  const constColor = currentStats ? getTacticalColor(currentStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
+  const ultColor = currentStats ? getTacticalColor(currentStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
+  const defColor = currentStats ? getTacticalColor(currentStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
 
   return (
     <div className="space-y-6 pb-20">
@@ -390,11 +421,11 @@ const AthleteProfile: React.FC = () => {
               <div className="h-[250px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_const}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_const}>
                         <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Construindo" dataKey="A" stroke="#7e22ce" fill="#a855f7" fillOpacity={0.4} />
+                        <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
@@ -408,11 +439,11 @@ const AthleteProfile: React.FC = () => {
               <div className="h-[250px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_ult}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_ult}>
                         <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Último Terço" dataKey="A" stroke="#9333ea" fill="#d8b4fe" fillOpacity={0.4} />
+                        <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
@@ -426,11 +457,11 @@ const AthleteProfile: React.FC = () => {
               <div className="h-[250px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={currentStats.tactical_def}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_def}>
                         <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Defendendo" dataKey="A" stroke="#6b21a8" fill="#a855f7" fillOpacity={0.4} />
+                        <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
@@ -649,7 +680,7 @@ const AthleteProfile: React.FC = () => {
                                 <ul className="space-y-1 text-xs">
                                 {Object.entries(viewingEntry.tactical).slice(0, 7).map(([key, val]: any) => (
                                     <li key={key} className="flex justify-between">
-                                        <span className="capitalize text-gray-600">{key.replace('const_', '').replace('ult_', '').replace('def_', '')}</span>
+                                        <span className="capitalize text-gray-600">{tacticalLabels[key] || key}</span>
                                         <span className={`font-bold ${val < 4 ? 'text-red-500' : val < 8 ? 'text-gray-500' : 'text-green-500'}`}>{val}</span>
                                     </li>
                                 ))}
@@ -657,7 +688,7 @@ const AthleteProfile: React.FC = () => {
                                 <ul className="space-y-1 text-xs">
                                 {Object.entries(viewingEntry.tactical).slice(7).map(([key, val]: any) => (
                                     <li key={key} className="flex justify-between">
-                                        <span className="capitalize text-gray-600">{key.replace('const_', '').replace('ult_', '').replace('def_', '')}</span>
+                                        <span className="capitalize text-gray-600">{tacticalLabels[key] || key}</span>
                                         <span className={`font-bold ${val < 4 ? 'text-red-500' : val < 8 ? 'text-gray-500' : 'text-green-500'}`}>{val}</span>
                                     </li>
                                 ))}
@@ -755,28 +786,28 @@ const AthleteProfile: React.FC = () => {
                       <div>
                          <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Construindo</h4>
                          <StatSlider label="Passe" value={newStats.const_passe} onChange={v => setNewStats({...newStats, const_passe: v})} />
-                         <StatSlider label="Jogo Costas" value={newStats.const_jogo_costas} onChange={v => setNewStats({...newStats, const_jogo_costas: v})} />
+                         <StatSlider label="Jogo de costas" value={newStats.const_jogo_costas} onChange={v => setNewStats({...newStats, const_jogo_costas: v})} />
                          <StatSlider label="Domínio" value={newStats.const_dominio} onChange={v => setNewStats({...newStats, const_dominio: v})} />
-                         <StatSlider label="1v1 Ofen." value={newStats.const_1v1_ofensivo} onChange={v => setNewStats({...newStats, const_1v1_ofensivo: v})} />
-                         <StatSlider label="Moviment." value={newStats.const_movimentacao} onChange={v => setNewStats({...newStats, const_movimentacao: v})} />
+                         <StatSlider label="1v1 ofensivo" value={newStats.const_1v1_ofensivo} onChange={v => setNewStats({...newStats, const_1v1_ofensivo: v})} />
+                         <StatSlider label="Movimentação" value={newStats.const_movimentacao} onChange={v => setNewStats({...newStats, const_movimentacao: v})} />
                       </div>
 
                       {/* Tactical 2: Último Terço */}
                       <div>
                          <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Último Terço</h4>
-                         <StatSlider label="Finaliz." value={newStats.ult_finalizacao} onChange={v => setNewStats({...newStats, ult_finalizacao: v})} />
-                         <StatSlider label="Desm. Rupt." value={newStats.ult_desmarques} onChange={v => setNewStats({...newStats, ult_desmarques: v})} />
-                         <StatSlider label="Passe Rupt." value={newStats.ult_passes_ruptura} onChange={v => setNewStats({...newStats, ult_passes_ruptura: v})} />
+                         <StatSlider label="Finalização" value={newStats.ult_finalizacao} onChange={v => setNewStats({...newStats, ult_finalizacao: v})} />
+                         <StatSlider label="Desm. ruptura" value={newStats.ult_desmarques} onChange={v => setNewStats({...newStats, ult_desmarques: v})} />
+                         <StatSlider label="Passe ruptura" value={newStats.ult_passes_ruptura} onChange={v => setNewStats({...newStats, ult_passes_ruptura: v})} />
                       </div>
 
                        {/* Tactical 3: Defendendo */}
                       <div>
                          <h4 className="text-xs uppercase font-bold text-purple-500 mb-2 border-b">Tático: Defendendo</h4>
-                         <StatSlider label="Compact." value={newStats.def_compactacao} onChange={v => setNewStats({...newStats, def_compactacao: v})} />
-                         <StatSlider label="Recompos." value={newStats.def_recomposicao} onChange={v => setNewStats({...newStats, def_recomposicao: v})} />
-                         <StatSlider label="Salto Pres." value={newStats.def_salto_pressao} onChange={v => setNewStats({...newStats, def_salto_pressao: v})} />
-                         <StatSlider label="1v1 Def." value={newStats.def_1v1_defensivo} onChange={v => setNewStats({...newStats, def_1v1_defensivo: v})} />
-                         <StatSlider label="Duelo Aér." value={newStats.def_duelos_aereos} onChange={v => setNewStats({...newStats, def_duelos_aereos: v})} />
+                         <StatSlider label="Compactação" value={newStats.def_compactacao} onChange={v => setNewStats({...newStats, def_compactacao: v})} />
+                         <StatSlider label="T. Recomposição" value={newStats.def_recomposicao} onChange={v => setNewStats({...newStats, def_recomposicao: v})} />
+                         <StatSlider label="Salto pressão" value={newStats.def_salto_pressao} onChange={v => setNewStats({...newStats, def_salto_pressao: v})} />
+                         <StatSlider label="1v1 defensivo" value={newStats.def_1v1_defensivo} onChange={v => setNewStats({...newStats, def_1v1_defensivo: v})} />
+                         <StatSlider label="Duelos aéreos" value={newStats.def_duelos_aereos} onChange={v => setNewStats({...newStats, def_duelos_aereos: v})} />
                       </div>
                   </div>
                   
