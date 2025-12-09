@@ -348,7 +348,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                      </div>
                      <div>
                          <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
-                         <p className="text-xs text-gray-500">{athlete.position} - <span className="text-purple-600 font-semibold">{getCalculatedCategory(athlete.birthDate)}</span></p>
+                         {/* Swapped Category and Position display as requested */}
+                         <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
                          <p className="text-xs text-gray-500">{athlete.sessionsCount} treinos</p>
                      </div>
                  </div>
@@ -417,7 +418,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                               {pos.player.name.split(' ')[0]}
                           </div>
                           <div className="text-[9px] text-white/90 bg-black/30 px-1 rounded mt-0.5">
-                              {getCalculatedCategory(pos.player.birthDate)}
+                              {/* Swapped from Category to Position */}
+                              {pos.player.position}
                           </div>
                       </Link>
                    ) : (

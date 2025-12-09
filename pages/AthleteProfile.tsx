@@ -9,7 +9,6 @@ import {
   saveAthlete,
   saveTrainingSession,
   getCategories,
-  ensureCategoryExists,
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
@@ -153,19 +152,9 @@ const AthleteProfile: React.FC = () => {
     }
   };
 
-  const handleEditDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newDate = e.target.value;
-      if (newDate && athlete) {
-         const calcName = getCalculatedCategory(newDate);
-         if (calcName) {
-             const cat = await ensureCategoryExists(athlete.teamId, calcName);
-             const updatedCats = await getCategories();
-             setCategories(updatedCats.filter(c => c.teamId === athlete.teamId));
-             
-             setEditFormData(prev => ({ ...prev, birthDate: newDate, categoryId: cat.id }));
-             return;
-         }
-      }
+      // Sync update
       setEditFormData(prev => ({ ...prev, birthDate: newDate }));
   };
 
@@ -175,6 +164,28 @@ const AthleteProfile: React.FC = () => {
       await saveAthlete({ ...athlete, ...editFormData } as Athlete);
       setShowEditModal(false);
       setRefreshKey(prev => prev + 1);
+  };
+
+  const openTrainingModal = () => {
+    // Pre-fill with last known stats if available
+    if (entries.length > 0) {
+        // Sort by date to get latest
+        const sorted = [...entries].map(e => {
+            const s = sessions.find(s => s.id === e.sessionId);
+            return { ...e, _date: s ? s.date : '1970-01-01' };
+        }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime()); // Descending
+
+        const latest = sorted[0];
+        setNewStats({ ...latest.technical, ...latest.physical });
+    } else {
+        // Reset to default
+        setNewStats({
+            controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
+            velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
+        });
+    }
+    setNewNotes('');
+    setShowTrainingModal(true);
   };
 
   const handleQuickTraining = async () => {
@@ -216,11 +227,6 @@ const AthleteProfile: React.FC = () => {
      };
      await saveTrainingEntry(entry);
      setShowTrainingModal(false);
-     setNewStats({ // Reset stats
-        controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-        velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
-     });
-     setNewNotes('');
      setRefreshKey(prev => prev + 1);
   };
 
@@ -257,7 +263,9 @@ const AthleteProfile: React.FC = () => {
   // Helper to format date string from YYYY-MM-DD to DD/MM/YYYY without UTC conversion issues
   const formatBirthDate = (dateString: string) => {
      if (!dateString) return '';
-     const [year, month, day] = dateString.split('-');
+     // Handle ISO strings (split T)
+     const datePart = dateString.split('T')[0];
+     const [year, month, day] = datePart.split('-');
      return `${day}/${month}/${year}`;
   };
 
@@ -311,7 +319,7 @@ const AthleteProfile: React.FC = () => {
 
                  {/* Actions Group */}
                  <div className="flex flex-col gap-2 w-full sm:w-auto">
-                    <button onClick={() => setShowTrainingModal(true)} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full">
+                    <button onClick={openTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full">
                         <ClipboardList size={18} /> Novo Treino
                     </button>
                     <div className="flex gap-2 w-full">
@@ -556,7 +564,15 @@ const AthleteProfile: React.FC = () => {
                          </label>
                     </div>
                     <input type="text" placeholder="Nome" className={inputClass} value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
-                    <input type="date" className={inputClass} value={editFormData.birthDate ? new Date(editFormData.birthDate).toISOString().split('T')[0] : ''} onChange={handleEditDateChange} />
+                    
+                    {/* Date Input with fixed value handling */}
+                    <input 
+                      type="date" 
+                      className={inputClass} 
+                      value={editFormData.birthDate ? editFormData.birthDate.split('T')[0] : ''} 
+                      onChange={handleEditDateChange} 
+                    />
+
                     <select className={inputClass} value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>

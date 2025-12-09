@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getAthletes, getCategories, saveAthlete, ensureCategoryExists, getTrainingEntries } from '../services/storageService';
+import { getAthletes, getCategories, saveAthlete, getTrainingEntries } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore } from '../types';
 import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2 } from 'lucide-react';
@@ -93,33 +93,18 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     }
   };
 
-  const handleDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
-    
-    if (newDate) {
-        // Automatically suggest/create category based on age
-        const calculatedCategoryName = getCalculatedCategory(newDate);
-        if (calculatedCategoryName) {
-            const cat = await ensureCategoryExists(teamId, calculatedCategoryName);
-            // Refresh categories
-            const cats = await getCategories();
-            setCategories(cats.filter(c => c.teamId === teamId));
-            
-            setFormData(prev => ({
-                ...prev,
-                birthDate: newDate,
-                categoryId: cat.id
-            }));
-            return;
-        }
-    }
-    
+    // Update state synchronously to allow typing
     setFormData(prev => ({ ...prev, birthDate: newDate }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.categoryId) return;
+
+    // Use current date (YYYY-MM-DD) if none selected
+    const dateToSave = formData.birthDate || new Date().toISOString().split('T')[0];
 
     const newAthlete: Athlete = {
       id: uuidv4(),
@@ -128,7 +113,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       categoryId: formData.categoryId,
       position: formData.position as Position,
       photoUrl: previewUrl,
-      birthDate: formData.birthDate || new Date().toISOString(),
+      birthDate: dateToSave,
       responsibleName: formData.responsibleName || '',
       responsiblePhone: formData.responsiblePhone || ''
     };
@@ -268,7 +253,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       <input type="date" className={inputClass} value={formData.birthDate} onChange={handleDateChange} />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria (Sugerida)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
                       <select required className={inputClass} value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
                          <option value="">Selecione...</option>
                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

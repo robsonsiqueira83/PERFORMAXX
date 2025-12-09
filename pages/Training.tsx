@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions
+  getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions, getTrainingEntries
 } from '../services/storageService';
 import { Athlete, Category, TrainingEntry, TrainingSession } from '../types';
 import StatSlider from '../components/StatSlider';
@@ -70,13 +70,45 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     setSelectedAthlete(null);
   }, [selectedCategory, date, teamId, allAthletes]);
 
-  const handleSelectAthlete = (athlete: Athlete) => {
+  const handleSelectAthlete = async (athlete: Athlete) => {
     setSelectedAthlete(athlete);
-    setStats({
-        controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-        velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
-    });
+    setLoading(true); // Temp loading
+    
+    // Fetch previous data to pre-fill
+    try {
+        const [allEntries, allSessions] = await Promise.all([
+            getTrainingEntries(),
+            getTrainingSessions()
+        ]);
+
+        const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
+        
+        if (athleteEntries.length > 0) {
+            // Sort by date descending
+            const entriesWithDate = athleteEntries.map(e => {
+                const s = allSessions.find(s => s.id === e.sessionId);
+                return { ...e, _date: s ? s.date : '1970-01-01' };
+            }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
+
+            const latest = entriesWithDate[0];
+            setStats({ ...latest.technical, ...latest.physical });
+        } else {
+            // Default 5 if no history
+            setStats({
+                controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
+                velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
+            });
+        }
+    } catch (e) {
+        // Fallback default
+        setStats({
+            controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
+            velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5
+        });
+    }
+
     setNotes(''); // Reset notes
+    setLoading(false);
   };
 
   const handleSaveEntry = async () => {
@@ -132,8 +164,6 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   };
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:ring-blue-500 focus:border-blue-500";
-
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">
@@ -203,7 +233,9 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       )}
 
       {/* Evaluation Form */}
-      {selectedAthlete && (
+      {loading && selectedAthlete && <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}
+
+      {!loading && selectedAthlete && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-fade-in">
               <div className="flex items-center justify-between mb-6 border-b pb-4">
                   <div className="flex items-center gap-4">
