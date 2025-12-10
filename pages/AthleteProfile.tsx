@@ -279,24 +279,30 @@ const AthleteProfile: React.FC = () => {
        });
     };
 
+    // Check if we have actual tactical data in the filtered set
+    const hasTactical = filteredEntries.some(e => e.tactical !== undefined && e.tactical !== null);
+
     addStats(currentStats.technical, 'Técnico');
     addStats(currentStats.physical, 'Físico');
-    addStats(currentStats.tactical_const, 'Tático');
-    addStats(currentStats.tactical_ult, 'Tático');
-    addStats(currentStats.tactical_def, 'Tático');
+    
+    // Only include tactical stats if data exists for the selected period
+    if (hasTactical) {
+        addStats(currentStats.tactical_const, 'Tático');
+        addStats(currentStats.tactical_ult, 'Tático');
+        addStats(currentStats.tactical_def, 'Tático');
+    }
 
     // Sort Descending for Best
     allStats.sort((a, b) => b.score - a.score);
 
     const best = allStats.slice(0, 3);
     
-    // For worst, sort ascending (to get lowest scores), but we might want to filter out 0s if they mean "no data"
-    // Assuming 0 means very poor performance for now.
+    // For worst, sort ascending (to get lowest scores)
     const worst = [...allStats].sort((a, b) => a.score - b.score).slice(0, 3);
 
     return { best, worst };
 
-  }, [currentStats]);
+  }, [currentStats, filteredEntries]);
 
 
   // Dynamic Color Helper for Tactical Charts
@@ -711,7 +717,7 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
               <div className="h-[250px]">
-                 {currentStats ? (
+                 {currentStats && currentStats.tactical_const ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_const}>
                         <PolarGrid />
@@ -729,7 +735,7 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
               <div className="h-[250px]">
-                 {currentStats ? (
+                 {currentStats && currentStats.tactical_ult ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_ult}>
                         <PolarGrid />
@@ -747,7 +753,7 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
               <div className="h-[250px]">
-                 {currentStats ? (
+                 {currentStats && currentStats.tactical_def ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_def}>
                         <PolarGrid />
