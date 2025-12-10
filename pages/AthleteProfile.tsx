@@ -17,7 +17,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -266,6 +266,38 @@ const AthleteProfile: React.FC = () => {
       ]
     };
   }, [filteredEntries]);
+
+  // --- PERFORMANCE RANKING (BEST 3 / WORST 3) ---
+  const performanceAnalysis = useMemo(() => {
+    if (!currentStats) return { best: [], worst: [] };
+    
+    let allStats: { label: string; score: number; type: string }[] = [];
+    
+    const addStats = (list: any[], type: string) => {
+       list.forEach(item => {
+           allStats.push({ label: item.subject, score: item.A, type });
+       });
+    };
+
+    addStats(currentStats.technical, 'Técnico');
+    addStats(currentStats.physical, 'Físico');
+    addStats(currentStats.tactical_const, 'Tático');
+    addStats(currentStats.tactical_ult, 'Tático');
+    addStats(currentStats.tactical_def, 'Tático');
+
+    // Sort Descending for Best
+    allStats.sort((a, b) => b.score - a.score);
+
+    const best = allStats.slice(0, 3);
+    
+    // For worst, sort ascending (to get lowest scores), but we might want to filter out 0s if they mean "no data"
+    // Assuming 0 means very poor performance for now.
+    const worst = [...allStats].sort((a, b) => a.score - b.score).slice(0, 3);
+
+    return { best, worst };
+
+  }, [currentStats]);
+
 
   // Dynamic Color Helper for Tactical Charts
   const getTacticalColor = (data: any[]) => {
@@ -604,17 +636,73 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* --- AGGREGATE HEATMAP --- */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-hidden">
-           {/* Constrained container width as requested */}
-           <div className="max-w-2xl mx-auto">
-               <HeatmapField 
-                  points={aggregateHeatmapPoints} 
-                  readOnly={true} 
-                  label="Mapa de Calor (Posicionamento)"
-                  perspective={true} // Enable 3D view
-               />
-           </div>
+      {/* --- AGGREGATE HEATMAP & ANALYSIS GRID --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: Heatmap */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-hidden flex flex-col items-center justify-center">
+              <div className="w-full max-w-xl">
+                  <HeatmapField 
+                      points={aggregateHeatmapPoints} 
+                      readOnly={true} 
+                      label="Mapa de Calor (Posicionamento)"
+                      perspective={true} 
+                  />
+              </div>
+          </div>
+
+          {/* Right: Performance Analysis List */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-full">
+               <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                   <TrendingUp className="text-blue-600" /> Análise de Desempenho
+               </h3>
+               
+               {filteredEntries.length > 0 ? (
+                   <div className="flex-1 flex flex-col justify-center gap-6">
+                        {/* Best Aspects */}
+                        <div>
+                            <h4 className="text-sm font-bold text-green-600 uppercase mb-3 border-b border-green-100 pb-1 flex items-center gap-2">
+                                <TrendingUp size={16} /> Destaques (Melhores)
+                            </h4>
+                            <div className="space-y-3">
+                                {performanceAnalysis.best.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-green-50 px-3 py-2 rounded-lg">
+                                        <div>
+                                            <span className="font-bold text-gray-800 text-sm">{item.label}</span>
+                                            <span className="text-xs text-gray-500 ml-2">({item.type})</span>
+                                        </div>
+                                        <span className="text-green-700 font-bold">{item.score.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-full border-t border-dashed border-gray-200"></div>
+
+                        {/* Worst Aspects */}
+                        <div>
+                            <h4 className="text-sm font-bold text-red-500 uppercase mb-3 border-b border-red-100 pb-1 flex items-center gap-2">
+                                <TrendingDown size={16} /> Pontos de Atenção
+                            </h4>
+                            <div className="space-y-3">
+                                {performanceAnalysis.worst.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-red-50 px-3 py-2 rounded-lg">
+                                        <div>
+                                            <span className="font-bold text-gray-800 text-sm">{item.label}</span>
+                                            <span className="text-xs text-gray-500 ml-2">({item.type})</span>
+                                        </div>
+                                        <span className="text-red-600 font-bold">{item.score.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                   </div>
+               ) : (
+                   <div className="flex-1 flex items-center justify-center text-gray-400 italic">
+                       Sem dados suficientes para análise neste período.
+                   </div>
+               )}
+          </div>
       </div>
 
       {/* TACTICAL CHARTS ROW */}
@@ -985,7 +1073,7 @@ const AthleteProfile: React.FC = () => {
                       {/* Technical */}
                       <div>
                         <h4 className="text-xs uppercase font-bold text-blue-500 mb-2 border-b">Técnica</h4>
-                        <StatSlider label="Controle" value={newStats.controle} onChange={v => setNewStats({...newStats, controle: v})} />
+                        <StatSlider label="Controle" value={newStats.controle} onChange={v => setNewStats({...newStats,controle: v})} />
                         <StatSlider label="Passe" value={newStats.passe} onChange={v => setNewStats({...newStats, passe: v})} />
                         <StatSlider label="Finalização" value={newStats.finalizacao} onChange={v => setNewStats({...newStats, finalizacao: v})} />
                         <StatSlider label="Drible" value={newStats.drible} onChange={v => setNewStats({...newStats, drible: v})} />
