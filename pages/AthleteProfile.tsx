@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   getAthletes, 
@@ -12,13 +12,14 @@ import {
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2 } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
+import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
 
 const tacticalLabels: Record<string, string> = {
@@ -51,6 +52,13 @@ const AthleteProfile: React.FC = () => {
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
+  // Filtering State
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all'); // 'all', 'today', 'week', 'month', 'year', 'custom'
+  const [customDate, setCustomDate] = useState<string>(''); // For the specific date picker
+  
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+
   // Local state for modals
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
@@ -71,11 +79,15 @@ const AthleteProfile: React.FC = () => {
     ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
     def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
   });
+  const [newHeatmapPoints, setNewHeatmapPoints] = useState<HeatmapPoint[]>([]);
   const [newNotes, setNewNotes] = useState('');
 
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [tempStats, setTempStats] = useState<any>(null);
+  const [tempHeatmap, setTempHeatmap] = useState<HeatmapPoint[]>([]);
   const [tempNotes, setTempNotes] = useState('');
+  
+  const calendarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
      const load = async () => {
@@ -101,7 +113,32 @@ const AthleteProfile: React.FC = () => {
      load();
   }, [id, refreshKey]);
 
+  // Close calendar on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+        setIsCalendarOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [calendarRef]);
 
+  // Handle Select Change
+  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      setSelectedPeriod(val);
+      if (val === 'custom') {
+          setIsCalendarOpen(true);
+      } else {
+          setIsCalendarOpen(false);
+          setCustomDate('');
+      }
+  };
+
+  // Full History Data (Always needed for the Line Chart and List)
   const historyData = useMemo(() => {
     return entries.map(entry => {
       const session = sessions.find(s => s.id === entry.sessionId);
@@ -114,33 +151,73 @@ const AthleteProfile: React.FC = () => {
         technical: entry.technical,
         physical: entry.physical,
         tactical: entry.tactical,
+        heatmapPoints: entry.heatmapPoints || [],
         entry: entry
       };
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
   }, [entries, sessions]);
 
-  // Calculate Overall Average Score (Media Geral) of all entries
-  const overallScore = useMemo(() => {
-    if (historyData.length === 0) return 0;
-    const total = historyData.reduce((acc, curr) => acc + (curr?.score || 0), 0);
-    return total / historyData.length;
-  }, [historyData]);
-
-  // Current Stats (Average of last 3 sessions sorted by date)
-  const currentStats = useMemo(() => {
-    if (entries.length === 0) return null;
-
-    const sortedEntries = [...entries].map(e => {
-        const s = sessions.find(s => s.id === e.sessionId);
-        return { ...e, _date: s ? s.date : '1970-01-01' };
-    }).sort((a, b) => new Date(a._date).getTime() - new Date(b._date).getTime());
-
-    const recent = sortedEntries.slice(-3); // Get last 3
+  // --- FILTERED DATA (Based on Dashboard-like Ranges) ---
+  const filteredEntries = useMemo(() => {
+    const now = new Date();
     
-    // Helper to get avg
+    return entries.filter(e => {
+        const session = sessions.find(s => s.id === e.sessionId);
+        if (!session) return false;
+        
+        const sIso = session.date;
+        const todayIso = now.toISOString().split('T')[0];
+
+        switch (selectedPeriod) {
+            case 'today':
+                return sIso === todayIso;
+            case 'week':
+                const sevenDaysAgo = new Date(now);
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                return sIso >= sevenDaysAgo.toISOString().split('T')[0];
+            case 'month':
+                const thirtyDaysAgo = new Date(now);
+                thirtyDaysAgo.setDate(now.getDate() - 30);
+                return sIso >= thirtyDaysAgo.toISOString().split('T')[0];
+            case 'year':
+                const startYear = `${now.getFullYear()}-01-01`;
+                return sIso >= startYear;
+            case 'custom':
+                return customDate ? sIso === customDate : true;
+            case 'all':
+            default:
+                return true;
+        }
+    });
+  }, [entries, sessions, selectedPeriod, customDate]);
+
+  // Calculate Overall Average Score (Based on Filtered Entries)
+  const overallScore = useMemo(() => {
+    if (filteredEntries.length === 0) return 0;
+    const getScore = (e: TrainingEntry) => calculateTotalScore(e.technical, e.physical, e.tactical);
+    const total = filteredEntries.reduce((acc, curr) => acc + getScore(curr), 0);
+    return total / filteredEntries.length;
+  }, [filteredEntries]);
+
+  // Aggregate Heatmap Points (Based on Filtered Entries)
+  const aggregateHeatmapPoints = useMemo(() => {
+      let allPoints: HeatmapPoint[] = [];
+      filteredEntries.forEach(e => {
+          if (e.heatmapPoints && e.heatmapPoints.length > 0) {
+              allPoints = [...allPoints, ...e.heatmapPoints];
+          }
+      });
+      return allPoints;
+  }, [filteredEntries]);
+
+  // Current Stats / Radar Data (Average of Filtered Entries)
+  const currentStats = useMemo(() => {
+    if (filteredEntries.length === 0) return null;
+
+    const dataToAverage = filteredEntries;
     const avg = (key: string, type: 'technical' | 'physical' | 'tactical') => {
       let count = 0;
-      const sum = recent.reduce((acc, curr) => {
+      const sum = dataToAverage.reduce((acc, curr) => {
           const group = curr[type] as any;
           if (group) {
               count++;
@@ -188,7 +265,7 @@ const AthleteProfile: React.FC = () => {
         { subject: tacticalLabels.def_duelos_aereos, A: avg('def_duelos_aereos', 'tactical'), fullMark: 10 },
       ]
     };
-  }, [entries, sessions]);
+  }, [filteredEntries]);
 
   // Dynamic Color Helper for Tactical Charts
   const getTacticalColor = (data: any[]) => {
@@ -214,11 +291,6 @@ const AthleteProfile: React.FC = () => {
     }
   };
 
-  const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newDate = e.target.value;
-      setEditFormData(prev => ({ ...prev, birthDate: newDate }));
-  };
-
   const handleUpdateProfile = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editFormData.name || !athlete) return;
@@ -227,24 +299,63 @@ const AthleteProfile: React.FC = () => {
       setRefreshKey(prev => prev + 1);
   };
 
+  const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditFormData(prev => ({ ...prev, birthDate: e.target.value }));
+  };
+
+  // --- CALENDAR HELPERS ---
+  const getDaysInMonth = (date: Date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const days = new Date(year, month + 1, 0).getDate();
+      const firstDay = new Date(year, month, 1).getDay();
+      return { days, firstDay };
+  };
+
+  const { days: daysInMonth, firstDay } = getDaysInMonth(calendarMonth);
+
+  const getSessionDatesSet = () => {
+      const dates = new Set<string>();
+      historyData.forEach(h => {
+          if (h && h.fullDate) dates.add(h.fullDate);
+      });
+      return dates;
+  };
+
+  const sessionDates = getSessionDatesSet();
+
+  const handleDateSelect = (day: number) => {
+      const year = calendarMonth.getFullYear();
+      const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
+      const dayStr = String(day).padStart(2, '0');
+      const dateStr = `${year}-${month}-${dayStr}`;
+      setCustomDate(dateStr);
+      setIsCalendarOpen(false);
+  };
+
+  const changeMonth = (offset: number) => {
+      const newDate = new Date(calendarMonth);
+      newDate.setMonth(newDate.getMonth() + offset);
+      setCalendarMonth(newDate);
+  };
+
+  // --- MODAL & FORM HANDLERS (Unchanged logic, just UI references) ---
   const openTrainingModal = () => {
     if (entries.length > 0) {
+        // ... (Logic to prefill from last entry)
         const sorted = [...entries].map(e => {
             const s = sessions.find(s => s.id === e.sessionId);
             return { ...e, _date: s ? s.date : '1970-01-01' };
         }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
-
         const latest = sorted[0];
-        setNewStats({ 
-          ...latest.technical, 
-          ...latest.physical, 
-          ...(latest.tactical || {
+        setNewStats({ ...latest.technical, ...latest.physical, ...(latest.tactical || {
             const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
             ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
             def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
-        }) });
+        })});
     } else {
-        setNewStats({
+        // Reset defaults
+         setNewStats({
             controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
             velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
             const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
@@ -252,6 +363,7 @@ const AthleteProfile: React.FC = () => {
             def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
         });
     }
+    setNewHeatmapPoints([]);
     setNewNotes('');
     setShowTrainingModal(true);
   };
@@ -295,6 +407,7 @@ const AthleteProfile: React.FC = () => {
             def_compactacao: newStats.def_compactacao, def_recomposicao: newStats.def_recomposicao, def_salto_pressao: newStats.def_salto_pressao,
             def_1v1_defensivo: newStats.def_1v1_defensivo, def_duelos_aereos: newStats.def_duelos_aereos
          },
+         heatmapPoints: newHeatmapPoints,
          notes: newNotes
      };
      await saveTrainingEntry(entry);
@@ -302,6 +415,7 @@ const AthleteProfile: React.FC = () => {
      setRefreshKey(prev => prev + 1);
   };
 
+  // ... (rest of edit handlers - saveEditingEntry, startEditingEntry same as before)
   const startEditingEntry = (entry: TrainingEntry) => {
     setEditingEntryId(entry.id);
     const defaults = {
@@ -310,6 +424,7 @@ const AthleteProfile: React.FC = () => {
         def_compactacao: 0, def_recomposicao: 0, def_salto_pressao: 0, def_1v1_defensivo: 0, def_duelos_aereos: 0
     };
     setTempStats({ ...entry.technical, ...entry.physical, ...(entry.tactical || defaults) });
+    setTempHeatmap(entry.heatmapPoints || []);
     setTempNotes(entry.notes || '');
   };
 
@@ -334,11 +449,13 @@ const AthleteProfile: React.FC = () => {
                 def_compactacao: tempStats.def_compactacao, def_recomposicao: tempStats.def_recomposicao, def_salto_pressao: tempStats.def_salto_pressao,
                 def_1v1_defensivo: tempStats.def_1v1_defensivo, def_duelos_aereos: tempStats.def_duelos_aereos
             },
+            heatmapPoints: tempHeatmap,
             notes: tempNotes
         };
         await saveTrainingEntry(updated);
         setEditingEntryId(null);
         setTempStats(null);
+        setTempHeatmap([]);
         setTempNotes('');
         setRefreshKey(prev => prev + 1);
      }
@@ -362,11 +479,76 @@ const AthleteProfile: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex items-center gap-4 mb-4">
-         <Link to="/athletes" className="text-gray-500 hover:text-blue-600">
-             <ArrowLeft size={24} />
-         </Link>
-         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><User className="text-blue-600"/> Perfil do Atleta</h2>
+      <div className="flex items-center justify-between mb-4">
+         <div className="flex items-center gap-4">
+            <Link to="/athletes" className="text-gray-500 hover:text-blue-600">
+                <ArrowLeft size={24} />
+            </Link>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><User className="text-blue-600"/> Perfil do Atleta</h2>
+         </div>
+
+         {/* --- DATE FILTER SELECT --- */}
+         <div className="relative" ref={calendarRef}>
+             <select 
+               value={selectedPeriod}
+               onChange={handlePeriodChange}
+               className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 shadow-sm focus:outline-none cursor-pointer appearance-none pr-8"
+             >
+               <option value="all">Todo o Período</option>
+               <option value="today">Hoje</option>
+               <option value="week">Últimos 7 dias</option>
+               <option value="month">Últimos 30 dias</option>
+               <option value="year">Este Ano</option>
+               <option value="custom">Data Específica...</option>
+             </select>
+             <ChevronDown size={14} className="text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+
+             {/* CALENDAR POPUP FOR CUSTOM DATE */}
+             {isCalendarOpen && (
+                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-100 z-50 p-4 animate-fade-in">
+                     <div className="flex items-center justify-between mb-2 px-1">
+                        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft size={16} /></button>
+                        <span className="text-sm font-bold text-gray-800 capitalize">
+                            {calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight size={16} /></button>
+                     </div>
+
+                     <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                        {['D','S','T','Q','Q','S','S'].map(d => (
+                            <span key={d} className="text-[10px] text-gray-400 font-bold">{d}</span>
+                        ))}
+                     </div>
+                     <div className="grid grid-cols-7 gap-1">
+                        {Array(firstDay).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+                        {Array(daysInMonth).fill(null).map((_, i) => {
+                            const day = i + 1;
+                            const year = calendarMonth.getFullYear();
+                            const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
+                            const dayStr = String(day).padStart(2, '0');
+                            const fullDate = `${year}-${month}-${dayStr}`;
+                            
+                            const hasSession = sessionDates.has(fullDate);
+                            const isSelected = customDate === fullDate;
+
+                            return (
+                                <button
+                                    key={day}
+                                    onClick={() => handleDateSelect(day)}
+                                    className={`
+                                        h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all
+                                        ${isSelected ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-100 text-gray-700'}
+                                        ${hasSession && !isSelected ? 'bg-green-100 text-green-700 border border-green-200 font-bold' : ''}
+                                    `}
+                                >
+                                    {day}
+                                </button>
+                            );
+                        })}
+                     </div>
+                 </div>
+             )}
+         </div>
       </div>
 
       {/* Header Card */}
@@ -374,9 +556,9 @@ const AthleteProfile: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-6">
               {athlete.photoUrl ? (
-                 <img src={athlete.photoUrl} className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md" alt="" />
+                 <img src={athlete.photoUrl} className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-white shadow-md" alt="" />
               ) : (
-                 <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center text-3xl font-bold text-blue-600">
+                 <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-blue-100 flex items-center justify-center text-4xl font-bold text-blue-600">
                    {athlete.name.charAt(0)}
                  </div>
               )}
@@ -396,9 +578,9 @@ const AthleteProfile: React.FC = () => {
 
             {/* Right Side: Score & Actions */}
             <div className="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0">
-                 {/* Score Highlight - Changed from Latest to Overall Average */}
+                 {/* Score Highlight - Overall Average of Filtered Period */}
                  <div className="text-center px-6 py-2 bg-gray-50 rounded-xl border border-gray-100 min-w-[140px]">
-                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Média Geral</span>
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Média {selectedPeriod === 'all' ? 'Geral' : (selectedPeriod === 'custom' ? 'do Dia' : 'do Período')}</span>
                     <span className={`block text-5xl font-black ${overallScore >= 8 ? 'text-[#4ade80]' : overallScore >= 4 ? 'text-gray-500' : 'text-red-500'}`}>
                         {overallScore > 0 ? overallScore.toFixed(1) : '--'}
                     </span>
@@ -422,6 +604,19 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
+      {/* --- AGGREGATE HEATMAP --- */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-hidden">
+           {/* Constrained container width as requested */}
+           <div className="max-w-2xl mx-auto">
+               <HeatmapField 
+                  points={aggregateHeatmapPoints} 
+                  readOnly={true} 
+                  label="Mapa de Calor (Posicionamento)"
+                  perspective={true} // Enable 3D view
+               />
+           </div>
+      </div>
+
       {/* TACTICAL CHARTS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Construindo */}
@@ -438,7 +633,7 @@ const AthleteProfile: React.FC = () => {
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados para o período</div>}
               </div>
           </div>
           
@@ -456,7 +651,7 @@ const AthleteProfile: React.FC = () => {
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados para o período</div>}
               </div>
           </div>
 
@@ -474,7 +669,7 @@ const AthleteProfile: React.FC = () => {
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados para o período</div>}
               </div>
           </div>
       </div>
@@ -483,7 +678,7 @@ const AthleteProfile: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Radar Charts */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico (Média Recente)</h3>
+              <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico (Média)</h3>
               <div className="h-[300px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -495,11 +690,11 @@ const AthleteProfile: React.FC = () => {
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados para o período</div>}
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-orange-700 mb-4">Perfil Físico (Média Recente)</h3>
+              <h3 className="font-bold text-orange-700 mb-4">Perfil Físico (Média)</h3>
                <div className="h-[300px]">
                  {currentStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -511,12 +706,12 @@ const AthleteProfile: React.FC = () => {
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados para o período</div>}
               </div>
           </div>
       </div>
 
-      {/* Evolution Line Chart */}
+      {/* Evolution Line Chart (Only relevant if showing all time, or multiple entries in a period) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
          <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
          <div className="h-[300px]">
@@ -548,6 +743,12 @@ const AthleteProfile: React.FC = () => {
                       {editingEntryId === item!.id ? (
                           <div className="p-2 rounded-lg">
                               <h4 className="font-bold text-blue-600 mb-4">Editando: {item!.date}</h4>
+                              
+                              {/* Heatmap Edit */}
+                              <div className="mb-4 bg-white p-2 border rounded">
+                                 <HeatmapField points={tempHeatmap} onChange={setTempHeatmap} label="Editar Posicionamento" />
+                              </div>
+
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   {Object.keys(tempStats).map(key => (
                                       <div key={key}>
@@ -649,6 +850,13 @@ const AthleteProfile: React.FC = () => {
                         </span>
                      </div>
                  </div>
+
+                 {/* Heatmap View */}
+                 {viewingEntry.heatmapPoints && viewingEntry.heatmapPoints.length > 0 && (
+                     <div className="mb-6">
+                        <HeatmapField points={viewingEntry.heatmapPoints} readOnly={true} label="Posicionamento nesta partida" />
+                     </div>
+                 )}
 
                  {viewingEntry.entry.notes && (
                      <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4 mb-6">
@@ -768,6 +976,11 @@ const AthleteProfile: React.FC = () => {
                       <input type="date" className={inputClass} value={trainingDate} onChange={e => setTrainingDate(e.target.value)} />
                   </div>
                   
+                  {/* Heatmap Input */}
+                  <div className="mb-6 p-2 bg-gray-50 border rounded">
+                      <HeatmapField points={newHeatmapPoints} onChange={setNewHeatmapPoints} label="Posicionamento (Toque para marcar)" />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {/* Technical */}
                       <div>

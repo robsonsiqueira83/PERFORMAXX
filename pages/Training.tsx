@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions, getTrainingEntries
 } from '../services/storageService';
-import { Athlete, Category, TrainingEntry, TrainingSession, Position } from '../types';
+import { Athlete, Category, TrainingEntry, TrainingSession, Position, HeatmapPoint } from '../types';
 import StatSlider from '../components/StatSlider';
+import HeatmapField from '../components/HeatmapField';
 import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2, Search, Filter } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -44,6 +45,9 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
   });
   
+  // Heatmap State
+  const [heatmapPoints, setHeatmapPoints] = useState<HeatmapPoint[]>([]);
+
   // New Notes State
   const [notes, setNotes] = useState('');
 
@@ -128,6 +132,8 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                     def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
                 }) 
             });
+            // Don't prefill heatmap points, start fresh for new session
+            setHeatmapPoints([]); 
         } else {
             // Default 5 if no history
             setStats({
@@ -137,6 +143,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                 ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
                 def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
             });
+            setHeatmapPoints([]);
         }
     } catch (e) {
         // Fallback default
@@ -147,6 +154,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
             ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
             def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
         });
+        setHeatmapPoints([]);
     }
 
     setNotes(''); // Reset notes
@@ -191,6 +199,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
         def_compactacao: stats.def_compactacao, def_recomposicao: stats.def_recomposicao, def_salto_pressao: stats.def_salto_pressao,
         def_1v1_defensivo: stats.def_1v1_defensivo, def_duelos_aereos: stats.def_duelos_aereos
       },
+      heatmapPoints: heatmapPoints,
       notes: notes
     };
 
@@ -321,6 +330,16 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                           <CheckCircle size={18} /> {notification}
                       </div>
                   )}
+              </div>
+
+              {/* Heatmap Input */}
+              <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                   <HeatmapField 
+                      points={heatmapPoints} 
+                      onChange={setHeatmapPoints} 
+                      label="Mapa de Calor (Toque para marcar)" 
+                   />
+                   <p className="text-xs text-gray-500 mt-2 text-center">Clique no campo para marcar as principais zonas de atuação do atleta nesta partida.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
