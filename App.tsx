@@ -8,6 +8,8 @@ import AthleteProfile from './pages/AthleteProfile';
 import Training from './pages/Training';
 import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
+import PublicTeamDashboard from './pages/PublicTeamDashboard';
+import PublicAthleteProfile from './pages/PublicAthleteProfile';
 import { User } from './types';
 import { getTeams } from './services/storageService';
 
@@ -55,25 +57,34 @@ const App: React.FC = () => {
 
   if (loading) return <div className="flex items-center justify-center h-screen">Carregando...</div>;
 
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
-  }
-
   return (
     <Router>
-      <Layout user={user} onLogout={handleLogout} selectedTeamId={selectedTeamId} onTeamChange={setSelectedTeamId}>
-        <Routes>
-          <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
-          <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
-          <Route path="/athletes/:id" element={<AthleteProfile />} />
-          <Route path="/training" element={<Training teamId={selectedTeamId} />} />
-          <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
-          {user.role === 'MASTER' && (
-             <Route path="/users" element={<UserManagement />} />
-          )}
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        {/* PUBLIC ROUTES (No Auth Required) */}
+        <Route path="/p/team/:teamId" element={<PublicTeamDashboard />} />
+        <Route path="/p/athlete/:athleteId" element={<PublicAthleteProfile />} />
+
+        {/* AUTHENTICATED ROUTES */}
+        <Route path="*" element={
+           !user ? (
+             <Login onLogin={handleLogin} />
+           ) : (
+             <Layout user={user} onLogout={handleLogout} selectedTeamId={selectedTeamId} onTeamChange={setSelectedTeamId}>
+               <Routes>
+                  <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
+                  <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
+                  <Route path="/athletes/:id" element={<AthleteProfile />} />
+                  <Route path="/training" element={<Training teamId={selectedTeamId} />} />
+                  <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
+                  {user.role === 'MASTER' && (
+                    <Route path="/users" element={<UserManagement />} />
+                  )}
+                  <Route path="*" element={<Navigate to="/" />} />
+               </Routes>
+             </Layout>
+           )
+        } />
+      </Routes>
     </Router>
   );
 };
