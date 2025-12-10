@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { getUsers, saveUser } from '../services/storageService';
 import { v4 as uuidv4 } from 'uuid';
-import { Eye, EyeOff, Trophy, UserPlus, LogIn, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, UserPlus, LogIn, Loader2 } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -64,8 +64,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         {/* Header Section */}
         <div className="bg-white p-8 pb-0 flex flex-col items-center">
-           <Trophy className="text-[#4ade80] w-16 h-16 mb-4" />
-           <h1 className="text-3xl font-extrabold text-[#1e3a8a] tracking-wider">PERFORMAXX</h1>
+           <img 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO2.png" 
+             alt="PERFORMAXX" 
+             className="w-64 max-w-full object-contain mb-2"
+           />
            <p className="text-gray-500 mt-2 text-sm text-center">Gestão de Alta Performance</p>
         </div>
 
