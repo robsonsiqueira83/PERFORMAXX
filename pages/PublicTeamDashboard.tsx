@@ -44,7 +44,7 @@ const PublicTeamDashboard: React.FC = () => {
     loadData();
   }, [teamId]);
 
-  // --- Filter Logic (Copied from Dashboard) ---
+  // --- Filter Logic ---
   const filteredSessions = useMemo(() => {
     const now = new Date();
     return sessions.filter(s => {
@@ -79,11 +79,7 @@ const PublicTeamDashboard: React.FC = () => {
   // --- Calculate Scores ---
   const athletesWithScores = useMemo(() => {
     return athletes.map(athlete => {
-        // Filter entries for this athlete
         let athleteEntries = filteredEntries.filter(e => e.athleteId === athlete.id);
-        
-        // Filter logic for category/position is handled in the List/Field rendering, 
-        // but for score calculation we only care about entries that match the time period
         
         if (athleteEntries.length === 0) return { ...athlete, averageScore: 0, sessionsCount: 0 };
 
@@ -108,7 +104,7 @@ const PublicTeamDashboard: React.FC = () => {
   }, [athletesWithScores, selectedCategory, selectedPosition]);
 
 
-  // --- Best XI Logic (Field Distribution) ---
+  // --- Best XI Logic ---
   const bestXI = useMemo(() => {
     const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
        const pool = athletesWithScores.filter(a => 
@@ -205,6 +201,7 @@ const PublicTeamDashboard: React.FC = () => {
                 </div>
                 <div className="divide-y divide-gray-100 max-h-[800px] overflow-y-auto">
                     {displayAthletes.map((athlete, index) => (
+                        /* LINK TO PUBLIC PROFILE */
                         <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center p-4 hover:bg-blue-50 transition-colors group">
                             <div className="flex-shrink-0 relative mr-4">
                                 {athlete.photoUrl ? (
@@ -228,7 +225,7 @@ const PublicTeamDashboard: React.FC = () => {
                             <div className="text-right pl-4">
                                 <span className="block text-xs font-bold text-gray-400 uppercase">SCORE</span>
                                 <span className={`text-xl font-bold ${athlete.averageScore >= 8 ? 'text-green-500' : athlete.averageScore >= 4 ? 'text-gray-600' : 'text-red-500'}`}>
-                                    {athlete.averageScore > 0 ? athlete.averageScore.toFixed(1) : '-'}
+                                    {athlete.averageScore > 0 ? athlete.averageScore.toFixed(1) : '--'}
                                 </span>
                             </div>
                         </Link>
@@ -263,6 +260,7 @@ const PublicTeamDashboard: React.FC = () => {
                         style={pos.style as React.CSSProperties}
                         >
                         {pos.player && pos.player.averageScore > 0 ? (
+                            /* LINK TO PUBLIC PROFILE */
                             <Link to={`/p/athlete/${pos.player.id}`} className="flex flex-col items-center">
                                 <div className="relative">
                                     {pos.player.photoUrl ? (

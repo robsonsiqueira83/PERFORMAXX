@@ -108,7 +108,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
             <div className="space-y-2">
                {teams.map(team => {
-                 // Always use production domain for public links
                  const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
                  
                  return (

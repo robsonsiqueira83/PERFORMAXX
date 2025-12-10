@@ -240,6 +240,7 @@ const PublicAthleteProfile: React.FC = () => {
       <PublicHeader team={team} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        {/* LINK TO PUBLIC TEAM DASHBOARD */}
         <Link to={`/p/team/${athlete.teamId}`} className="inline-flex items-center gap-2 text-gray-500 hover:text-blue-600 mb-4 transition-colors">
             <ArrowLeft size={20} /> Voltar para o time
         </Link>
@@ -392,6 +393,7 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
             <div className="divide-y divide-gray-100">
                 {historyData.map((item) => (
+                    /* Read Only View - No edit buttons */
                     <div key={item!.id} onClick={() => setViewingEntry(item)} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-3">
@@ -422,9 +424,7 @@ const PublicAthleteProfile: React.FC = () => {
                     </div>
                     {viewingEntry.heatmapPoints?.length > 0 && <div className="mb-6"><HeatmapField points={viewingEntry.heatmapPoints} readOnly={true} label="Posicionamento" /></div>}
                     {viewingEntry.entry.notes && <div className="bg-yellow-50 p-4 mb-6 rounded"><p className="text-sm italic text-gray-700">{viewingEntry.entry.notes}</p></div>}
-                    {/* ... (Existing detailed stats list logic simplified for brevity but functionally same as Profile) ... */}
                     <div className="grid grid-cols-2 gap-4">
-                         {/* Reusing simple lists for detail view */}
                          <div>
                              <h4 className="font-bold text-xs uppercase text-blue-500 mb-2 border-b">Técnica</h4>
                              {Object.entries(viewingEntry.technical).map(([k,v]:any)=><div key={k} className="flex justify-between text-xs capitalize"><span>{k}</span><span className="font-bold">{v}</span></div>)}
