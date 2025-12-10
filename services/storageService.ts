@@ -168,6 +168,7 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
       technical: e.technical, // JSONB auto-converts
       physical: e.physical,   // JSONB auto-converts
       tactical: e.tactical,   // Can be undefined/null
+      heatmapPoints: e.heatmap_points || [], // New column
       notes: e.notes
   }));
 };
@@ -192,6 +193,7 @@ export const saveTrainingEntry = async (entry: TrainingEntry) => {
     technical: entry.technical, // stored as jsonb
     physical: entry.physical,   // stored as jsonb
     tactical: entry.tactical,   // stored as jsonb
+    heatmap_points: entry.heatmapPoints, // stored as jsonb
     notes: entry.notes
   };
   const { error } = await supabase.from('training_entries').upsert(dbEntry);
