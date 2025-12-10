@@ -271,7 +271,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       <input type="date" className={inputClass} value={formData.birthDate} onChange={handleDateChange} />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1 flex justify-between items-center">
+                          Categoria 
+                          {formData.birthDate && (
+                              <span className="text-xs text-blue-600 font-bold bg-blue-50 px-1 rounded">
+                                  Sug: {getCalculatedCategory(formData.birthDate)}
+                              </span>
+                          )}
+                      </label>
                       <select required className={inputClass} value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
                          <option value="">Selecione...</option>
                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

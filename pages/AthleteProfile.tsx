@@ -1043,9 +1043,19 @@ const AthleteProfile: React.FC = () => {
                       onChange={handleEditDateChange} 
                     />
 
-                    <select className={inputClass} value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <div>
+                        <div className="flex justify-between items-center mb-1">
+                            {editFormData.birthDate && (
+                                <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded ml-auto">
+                                    Sugestão: {getCalculatedCategory(editFormData.birthDate)}
+                                </span>
+                            )}
+                        </div>
+                        <select className={inputClass} value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+
                     <select className={inputClass} value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
                         {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
