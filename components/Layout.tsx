@@ -8,8 +8,7 @@ import {
   Menu, 
   X,
   ClipboardList,
-  ShieldCheck,
-  Trophy
+  ShieldCheck
 } from 'lucide-react';
 import { Team, User, UserRole } from '../types';
 import { getTeams } from '../services/storageService';
@@ -66,8 +65,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
       {/* Mobile Header */}
       <div className="md:hidden bg-[#1e3a8a] text-white p-4 flex justify-between items-center shadow-md z-50">
         <div className="flex items-center gap-2">
-             <Trophy className="h-6 w-6 text-green-400" />
-             <span className="font-bold text-lg tracking-wider">PERFORMAXX</span>
+             <img 
+               src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO3.png" 
+               alt="PERFORMAXX" 
+               className="h-8 object-contain"
+             />
         </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -81,8 +83,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="p-6 flex items-center justify-center border-b border-blue-800">
-           <Trophy className="h-8 w-8 text-green-400 mr-2" />
-           <h1 className="text-2xl font-bold tracking-wider">PERFORMAXX</h1>
+           <img 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO3.png" 
+             alt="PERFORMAXX" 
+             className="w-40 object-contain"
+           />
         </div>
 
         <nav className="mt-6 px-4 space-y-2">

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Trophy } from 'lucide-react';
 import { Team } from '../types';
 
 interface PublicHeaderProps {
@@ -12,8 +11,11 @@ const PublicHeader: React.FC<PublicHeaderProps> = ({ team }) => {
       {/* Main App Bar */}
       <div className="bg-[#1e3a8a] text-white py-4 px-6 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-center md:justify-start gap-3">
-          <Trophy className="text-[#4ade80] w-8 h-8" />
-          <h1 className="text-2xl font-extrabold tracking-wider">PERFORMAXX</h1>
+          <img 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO.png" 
+             alt="PERFORMAXX" 
+             className="h-10 object-contain"
+           />
         </div>
       </div>
       
