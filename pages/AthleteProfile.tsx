@@ -119,10 +119,11 @@ const AthleteProfile: React.FC = () => {
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
   }, [entries, sessions]);
 
-  // Calculate Latest Score for Highlight
-  const latestScore = useMemo(() => {
+  // Calculate Overall Average Score (Media Geral) of all entries
+  const overallScore = useMemo(() => {
     if (historyData.length === 0) return 0;
-    return historyData[historyData.length - 1]?.score || 0;
+    const total = historyData.reduce((acc, curr) => acc + (curr?.score || 0), 0);
+    return total / historyData.length;
   }, [historyData]);
 
   // Current Stats (Average of last 3 sessions sorted by date)
@@ -395,11 +396,11 @@ const AthleteProfile: React.FC = () => {
 
             {/* Right Side: Score & Actions */}
             <div className="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0">
-                 {/* Score Highlight */}
+                 {/* Score Highlight - Changed from Latest to Overall Average */}
                  <div className="text-center px-6 py-2 bg-gray-50 rounded-xl border border-gray-100 min-w-[140px]">
-                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Score Atual</span>
-                    <span className={`block text-5xl font-black ${latestScore >= 8 ? 'text-[#4ade80]' : latestScore >= 4 ? 'text-gray-500' : 'text-red-500'}`}>
-                        {latestScore > 0 ? latestScore.toFixed(1) : '--'}
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Média Geral</span>
+                    <span className={`block text-5xl font-black ${overallScore >= 8 ? 'text-[#4ade80]' : overallScore >= 4 ? 'text-gray-500' : 'text-red-500'}`}>
+                        {overallScore > 0 ? overallScore.toFixed(1) : '--'}
                     </span>
                  </div>
 

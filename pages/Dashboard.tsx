@@ -36,7 +36,8 @@ const tacticalLabels: Record<string, string> = {
 const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('today');
+  // Default set to 'all' as requested
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   
   // Custom Date Range State
@@ -106,12 +107,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       const sessionIds = filteredSessions.map(s => s.id);
       let es = entries.filter(e => sessionIds.includes(e.sessionId));
       
-      // Also filter entries by selectedCategory if 'all' sessions are selected but we want specific category data
-      // However, usually we filter sessions by category first? 
-      // Current logic: dashboard has category selector.
-      // If selectedCategory is NOT 'all', we should filter the ATHLETES or SESSIONS?
-      // Best approach: Filter entries where athlete belongs to category.
-      
       if (selectedCategory !== 'all') {
           const categoryAthleteIds = athletes.filter(a => a.categoryId === selectedCategory).map(a => a.id);
           es = es.filter(e => categoryAthleteIds.includes(e.athleteId));
@@ -148,9 +143,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   // --- Top 3 Ranking (Filtered) ---
   const rankedAthletes = useMemo(() => {
     let filtered = athletesWithScores;
-    // Note: FilteredEntries already filters by category/position, but athletesWithScores includes all athletes.
-    // So we must filter again or rely on sessionsCount > 0 if we only want active ones.
-    // But to show true top 3 of category, we filter the pool:
     
     if (selectedCategory !== 'all') filtered = filtered.filter(a => a.categoryId === selectedCategory);
     if (selectedPosition !== 'all') filtered = filtered.filter(a => a.position === selectedPosition);
@@ -379,11 +371,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                value={selectedPeriod}
                onChange={(e) => setSelectedPeriod(e.target.value)}
              >
+               <option value="all">Todo o Período</option>
                <option value="today">Hoje</option>
                <option value="week">Últimos 7 dias</option>
                <option value="month">Últimos 30 dias</option>
                <option value="year">Este Ano</option>
-               <option value="all">Todo o Período</option>
                <option value="custom">Personalizado</option>
              </select>
           </div>
@@ -447,7 +439,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                      </div>
                      <div>
                          <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
-                         <p className="text-xs text-gray-500"><span className="text-purple-600 font-semibold">{athlete.position}</span> - {getCalculatedCategory(athlete.birthDate)}</p>
+                         {/* Swapped Category and Position */}
+                         <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
                          <p className="text-xs text-gray-500">{athlete.sessionsCount} atuações</p>
                      </div>
                  </div>
