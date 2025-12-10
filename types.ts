@@ -90,6 +90,11 @@ export interface TacticalStats {
   def_duelos_aereos: number;
 }
 
+export interface HeatmapPoint {
+  x: number; // Percentage 0-100
+  y: number; // Percentage 0-100
+}
+
 export interface TrainingSession {
   id: string;
   date: string;
@@ -104,7 +109,8 @@ export interface TrainingEntry {
   athleteId: string;
   technical: TechnicalStats;
   physical: PhysicalStats;
-  tactical?: TacticalStats; // Optional for legacy data support
+  tactical?: TacticalStats;
+  heatmapPoints?: HeatmapPoint[]; // Array of coordinates
   notes?: string;
 }
 
