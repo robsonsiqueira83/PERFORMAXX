@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAthletes, getCategories, saveAthlete, getTrainingEntries } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2 } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -125,6 +125,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     setPreviewUrl('');
   };
 
+  const copyPublicLink = (e: React.MouseEvent, athleteId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const link = `https://performaxx.vercel.app/#/p/athlete/${athleteId}`;
+      navigator.clipboard.writeText(link);
+      alert('Link público do atleta copiado!');
+  };
+
   const inputClass = "w-full bg-gray-100 border border-gray-300 rounded p-2 text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -190,6 +198,15 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
          {sorted.map(athlete => (
            <Link to={`/athletes/${athlete.id}`} key={athlete.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center hover:shadow-md transition-shadow group relative">
                
+               {/* Share Button (New) */}
+               <button 
+                 onClick={(e) => copyPublicLink(e, athlete.id)}
+                 className="absolute top-3 left-3 text-gray-400 hover:text-blue-600 p-1 bg-white/80 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                 title="Copiar Link Público"
+               >
+                   <Share2 size={16} />
+               </button>
+
                {/* Score Badge */}
                <div className={`absolute top-3 right-3 text-xs font-bold px-2 py-1 rounded-full border ${
                    athlete.averageScore >= 8 ? 'bg-green-100 text-green-800 border-green-200' :

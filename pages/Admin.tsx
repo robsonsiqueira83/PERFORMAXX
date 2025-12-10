@@ -5,7 +5,7 @@ import {
 } from '../services/storageService';
 import { Team, Category, UserRole } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Save, Settings, Loader2 } from 'lucide-react';
+import { Trash2, Edit, Plus, Save, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -107,15 +107,56 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             )}
 
             <div className="space-y-2">
-               {teams.map(team => (
-                 <div key={team.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                    <span className="font-medium text-gray-800">{team.name}</span>
-                    <div className="flex gap-2">
-                       {canEdit && <button onClick={() => setEditingTeam(team)} className="text-blue-600 p-2 hover:bg-blue-50 rounded"><Edit size={16}/></button>}
-                       {canDelete && teams.length > 1 && <button onClick={() => handleDeleteTeam(team.id)} className="text-red-600 p-2 hover:bg-red-50 rounded"><Trash2 size={16}/></button>}
+               {teams.map(team => {
+                 // Always use production domain for public links
+                 const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
+                 
+                 return (
+                    <div key={team.id} className="flex flex-col md:flex-row justify-between items-center p-3 border rounded-lg hover:bg-gray-50 transition-colors gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 flex-1 w-full">
+                            <span className="font-medium text-gray-800 whitespace-nowrap min-w-[120px]">{team.name}</span>
+                            
+                            {/* Public Link Box */}
+                            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-md px-2 py-1.5 w-full sm:max-w-md shadow-sm">
+                                <LinkIcon size={12} className="text-gray-400 flex-shrink-0" />
+                                <input 
+                                    type="text" 
+                                    readOnly 
+                                    value={publicLink} 
+                                    className="text-xs text-gray-600 bg-transparent border-none focus:outline-none flex-1 min-w-0"
+                                    onClick={(e) => e.currentTarget.select()}
+                                />
+                                <div className="flex items-center border-l border-gray-200 pl-1 ml-1 gap-1 flex-shrink-0">
+                                    <button 
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(publicLink);
+                                          alert('Link copiado!');
+                                        }}
+                                        className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                                        title="Copiar Link"
+                                    >
+                                        <Copy size={14} />
+                                    </button>
+                                    <a 
+                                        href={publicLink} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                                        title="Abrir em nova aba"
+                                    >
+                                        <ExternalLink size={14} />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 w-full md:w-auto justify-end">
+                        {canEdit && <button onClick={() => setEditingTeam(team)} className="text-blue-600 p-2 hover:bg-blue-50 rounded"><Edit size={16}/></button>}
+                        {canDelete && teams.length > 1 && <button onClick={() => handleDeleteTeam(team.id)} className="text-red-600 p-2 hover:bg-red-50 rounded"><Trash2 size={16}/></button>}
+                        </div>
                     </div>
-                 </div>
-               ))}
+                 );
+               })}
             </div>
           </div>
         )}
