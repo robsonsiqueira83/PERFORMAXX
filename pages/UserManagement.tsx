@@ -26,46 +26,51 @@ const UserManagement: React.FC = () => {
   };
 
   const handleSave = async () => {
-    setError(null);
-    if (!editingUser?.name || !editingUser?.email || !editingUser.role) {
-        setError("Preencha todos os campos obrigatórios.");
-        return;
-    }
-
-    // Security Check: Non-MASTER users MUST have at least one team
-    if (editingUser.role !== UserRole.MASTER && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
-        setError("Para usuários que não são MASTER, é obrigatório selecionar pelo menos um time.");
-        return;
-    }
-
-    setSaving(true);
-
-    const user: User = {
-        id: editingUser.id || uuidv4(),
-        name: editingUser.name,
-        email: editingUser.email,
-        role: editingUser.role,
-        password: editingUser.password || '123456', // Simple default
-        avatarUrl: editingUser.avatarUrl,
-        teamIds: editingUser.role === UserRole.MASTER ? [] : (editingUser.teamIds || []) // Master doesn't need explicit ids usually, or logic elsewhere handles it
-    };
-    
-    const { error: saveError } = await saveUser(user);
-    
-    setSaving(false);
-
-    if (saveError) {
-        console.error(saveError);
-        if (saveError.code === '23505') {
-            setError("Este email já está em uso.");
-        } else {
-            setError("Erro ao salvar usuário. Verifique os dados e tente novamente.");
+    try {
+        setError(null);
+        if (!editingUser?.name || !editingUser?.email || !editingUser.role) {
+            setError("Preencha todos os campos obrigatórios.");
+            return;
         }
-        return;
-    }
 
-    await loadData();
-    setEditingUser(null);
+        // Security Check: Non-MASTER users MUST have at least one team
+        if (editingUser.role !== UserRole.MASTER && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
+            setError("Para usuários que não são MASTER, é obrigatório selecionar pelo menos um time.");
+            return;
+        }
+
+        setSaving(true);
+
+        const user: User = {
+            id: editingUser.id || uuidv4(),
+            name: editingUser.name,
+            email: editingUser.email,
+            role: editingUser.role,
+            password: editingUser.password || '123456', // Simple default
+            avatarUrl: editingUser.avatarUrl,
+            teamIds: editingUser.role === UserRole.MASTER ? [] : (editingUser.teamIds || [])
+        };
+        
+        const { error: saveError } = await saveUser(user);
+
+        if (saveError) {
+            throw saveError;
+        }
+
+        await loadData();
+        setEditingUser(null);
+        alert("Usuário salvo com sucesso!");
+
+    } catch (err: any) {
+        console.error("Erro ao salvar usuário:", err);
+        if (err.code === '23505') {
+            setError("Este email já está em uso por outro usuário.");
+        } else {
+            setError(err.message || "Erro desconhecido ao salvar. Tente novamente.");
+        }
+    } finally {
+        setSaving(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
