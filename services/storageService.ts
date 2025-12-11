@@ -120,7 +120,8 @@ export const getAthletes = async (): Promise<Athlete[]> => {
       position: a.position as Position,
       birthDate: a.birth_date,
       responsibleName: a.responsible_name,
-      responsiblePhone: a.responsible_phone
+      responsiblePhone: a.responsible_phone,
+      pendingTransferTeamId: a.pending_transfer_team_id // New field
   }));
 };
 
@@ -134,7 +135,8 @@ export const saveAthlete = async (athlete: Athlete) => {
       position: athlete.position,
       birth_date: athlete.birthDate,
       responsible_name: athlete.responsibleName,
-      responsible_phone: athlete.responsiblePhone
+      responsible_phone: athlete.responsiblePhone,
+      pending_transfer_team_id: athlete.pendingTransferTeamId || null // Ensure null if undefined
   };
   const { error } = await supabase.from('athletes').upsert(dbAthlete);
   if (error) console.error('Error saving athlete:', error);
