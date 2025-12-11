@@ -10,7 +10,8 @@ import {
   ClipboardList,
   ShieldCheck,
   Globe,
-  Briefcase
+  Briefcase,
+  ChevronDown
 } from 'lucide-react';
 import { Team, User, UserRole, canEditData } from '../types';
 import { getTeams, getUsers } from '../services/storageService';
@@ -73,12 +74,27 @@ const Layout: React.FC<LayoutProps> = ({
         if (user.role === UserRole.MASTER && !ownerIds.includes(user.id)) {
             ownerIds.push(user.id);
         }
+        
+        // Global user sees the current viewing ID in the list to allow "selection" (though they switch via Dashboard usually)
+        if (user.role === UserRole.GLOBAL && viewingAsMasterId && !ownerIds.includes(viewingAsMasterId)) {
+            ownerIds.push(viewingAsMasterId);
+        }
 
         const contexts = ownerIds.map(oId => {
             const ownerUser = allUsers.find(u => u.id === oId);
+            
+            let label = '';
+            if (oId === user.id) {
+                label = 'Meu Painel Master';
+            } else {
+                // Show Name and ID as requested
+                const ownerName = ownerUser?.name || 'Desconhecido';
+                label = `${ownerName} (ID: ${oId})`;
+            }
+
             return {
                 id: oId,
-                name: oId === user.id ? 'Meu Painel Master' : `Painel de ${ownerUser?.name || 'Desconhecido'}`
+                name: label
             };
         });
 
@@ -115,6 +131,10 @@ const Layout: React.FC<LayoutProps> = ({
   // Is this a Global User acting as a Master?
   const isGlobalImpersonating = user.role === UserRole.GLOBAL && viewingAsMasterId !== user.id;
 
+  // Determine if we should show the Panel Switcher
+  // Show if Global OR if Master has access to other contexts (invited)
+  const showPanelSelector = user.role === UserRole.GLOBAL || (availableContexts.length > 1);
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -130,7 +150,7 @@ const Layout: React.FC<LayoutProps> = ({
              className="w-40 object-contain"
            />
            {isGlobalImpersonating && (
-               <div className="mt-2 bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded border border-blue-700 w-full text-center">
+               <div className="mt-2 bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded border border-blue-700 w-full text-center animate-pulse">
                    Modo Visualização Global
                </div>
            )}
@@ -170,20 +190,6 @@ const Layout: React.FC<LayoutProps> = ({
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-blue-800 bg-[#1e3a8a]">
-          <div className="flex items-center gap-3 mb-4">
-             {user.avatarUrl ? (
-                 <img src={user.avatarUrl} alt="User" className="w-10 h-10 rounded-full border-2 border-green-400 object-cover" />
-             ) : (
-                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold border-2 border-green-400">
-                     {user.name.charAt(0)}
-                 </div>
-             )}
-             <div className="flex-1 min-w-0">
-                 <p className="text-sm font-medium truncate">{user.name}</p>
-                 <p className="text-xs text-blue-300 truncate">{user.role}</p>
-             </div>
-          </div>
-          
           <div className="flex gap-2">
             {isGlobalImpersonating ? (
                 <button
@@ -209,49 +215,63 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header with Context Selector */}
-        <header className="bg-white shadow-sm z-30 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <h2 className="text-xl font-bold text-gray-800 hidden md:block">
-               {navigation.find(n => n.href === location.pathname)?.name || (location.pathname === '/users' ? 'Gestão de Usuários' : 'Painel')}
-            </h2>
-            
-            <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto justify-end flex-1">
-                <div className="flex flex-col md:items-end w-full md:w-auto text-right gap-2">
+        {/* Top Header */}
+        <header className="bg-white shadow-sm z-30 px-6 py-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                
+                {/* Welcome & Team Selection Group */}
+                <div className="flex flex-col gap-2 w-full md:w-auto flex-1">
+                    <h2 className="text-lg text-gray-800 font-medium">
+                        Olá, <span className="font-bold text-blue-900">{user.name}</span>. <span className="text-gray-500">Em qual time deseja trabalhar?</span>
+                    </h2>
                     
-                    {/* 1. PANEL/CONTEXT SELECTOR (Only if user has access to multiple) */}
-                    {(availableContexts.length > 1 || user.role === UserRole.GLOBAL) && (
-                         <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 w-full md:w-auto justify-between md:justify-end">
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1"><Briefcase size={12}/> Painel:</span>
-                            <select 
-                                value={viewingAsMasterId}
-                                onChange={(e) => onContextChange(e.target.value)}
-                                className="bg-transparent text-sm font-bold text-gray-800 focus:outline-none cursor-pointer min-w-[150px] text-right"
-                                disabled={isGlobalImpersonating} // Global users switch via Dashboard
-                            >
-                                {availableContexts.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                         </div>
-                    )}
-
-                    {/* 2. TEAM SELECTOR (Dependent on Context) */}
-                    <div className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 w-full md:w-auto justify-between md:justify-end">
-                        <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Equipe:</span>
-                        {availableTeams.length > 0 ? (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                         {/* TEAM SELECTOR */}
+                         <div className="relative">
                             <select 
                                 value={selectedTeamId}
                                 onChange={(e) => onTeamChange(e.target.value)}
-                                className="bg-transparent text-base font-bold text-blue-900 focus:outline-none cursor-pointer"
+                                className="appearance-none bg-blue-50 text-blue-900 pl-4 pr-10 py-2 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 cursor-pointer"
                             >
-                                {availableTeams.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                ))}
+                                {availableTeams.length > 0 ? (
+                                    availableTeams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))
+                                ) : (
+                                    <option value="">Nenhum time disponível</option>
+                                )}
                             </select>
-                        ) : (
-                            <span className="text-sm text-gray-400 italic px-2">Nenhum time disponível</span>
-                        )}
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
+                         </div>
+
+                         {/* CONTEXT/PANEL SELECTOR (Conditional) */}
+                         {showPanelSelector && (
+                             <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Briefcase size={14} className="text-gray-500" />
+                                </div>
+                                <select 
+                                    value={viewingAsMasterId}
+                                    onChange={(e) => onContextChange(e.target.value)}
+                                    className="appearance-none bg-gray-100 text-gray-700 pl-9 pr-10 py-2 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 w-full sm:w-auto cursor-pointer"
+                                    disabled={isGlobalImpersonating} // Global users usually switch via Dashboard, but listing here for reference
+                                >
+                                    {availableContexts.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                             </div>
+                         )}
                     </div>
+                </div>
+
+                {/* Page Title / Info (Hidden on small mobile to save space) */}
+                <div className="hidden md:block text-right">
+                    <h1 className="text-xl font-bold text-gray-800">
+                       {navigation.find(n => n.href === location.pathname)?.name || (location.pathname === '/users' ? 'Gestão de Usuários' : 'Painel')}
+                    </h1>
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 uppercase">{user.role}</span>
                 </div>
             </div>
         </header>
