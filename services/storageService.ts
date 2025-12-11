@@ -28,7 +28,7 @@ export const saveUser = async (user: User) => {
     password: user.password,
     role: user.role,
     avatar_url: user.avatarUrl,
-    team_ids: user.teamIds
+    team_ids: user.teamIds || [] // Ensure this is never undefined
   };
   const { error } = await supabase.from('users').upsert(dbUser);
   if (error) console.error('Error saving user:', error);
