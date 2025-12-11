@@ -127,6 +127,23 @@ export interface TrainingEntry {
   notes?: string;
 }
 
+// --- PERMISSION HELPERS ---
+
+// Can Create or Update data (Athletes, Training, etc.)
+export const canEditData = (role: UserRole): boolean => {
+  return [UserRole.MASTER, UserRole.TECNICO, UserRole.AUXILIAR, UserRole.SCOUT].includes(role);
+};
+
+// Can Delete data (Strictly Master based on new requirements)
+export const canDeleteData = (role: UserRole): boolean => {
+  return role === UserRole.MASTER;
+};
+
+// Can Manage System (Users, Teams, Categories creation/deletion)
+export const canManageSystem = (role: UserRole): boolean => {
+  return role === UserRole.MASTER;
+};
+
 // Helper to calculate total score
 export const calculateTotalScore = (fund: FundamentalsStats, phys: PhysicalStats, tact: TacticalStats): number => {
   if (!fund || !phys || !tact) return 0;
