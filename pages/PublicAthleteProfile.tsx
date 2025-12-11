@@ -16,22 +16,6 @@ import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar 
 import HeatmapField from '../components/HeatmapField';
 import PublicHeader from '../components/PublicHeader';
 
-const tacticalLabels: Record<string, string> = {
-  const_passe: 'Passe',
-  const_jogo_costas: 'Jogo de costas',
-  const_dominio: 'Domínio',
-  const_1v1_ofensivo: '1v1 ofensivo',
-  const_movimentacao: 'Movimentação',
-  ult_finalizacao: 'Finalização',
-  ult_desmarques: 'Desmarques de ruptura',
-  ult_passes_ruptura: 'Passes de ruptura',
-  def_compactacao: 'Compactação',
-  def_recomposicao: 'Tempo/Intensidade de Recomposição',
-  def_salto_pressao: 'Salto de pressão',
-  def_1v1_defensivo: '1v1 defensivo',
-  def_duelos_aereos: 'Duelos aéreos'
-};
-
 const PublicAthleteProfile: React.FC = () => {
   const { athleteId } = useParams<{ athleteId: string }>();
   const [loading, setLoading] = useState(true);
@@ -152,39 +136,51 @@ const PublicAthleteProfile: React.FC = () => {
 
     return {
       technical: [
-        { subject: 'Controle', A: avg('controle', 'technical'), fullMark: 10 },
+        { subject: 'Controle', A: avg('controle_bola', 'technical'), fullMark: 10 },
+        { subject: 'Condução', A: avg('conducao', 'technical'), fullMark: 10 },
         { subject: 'Passe', A: avg('passe', 'technical'), fullMark: 10 },
-        { subject: 'Finalização', A: avg('finalizacao', 'technical'), fullMark: 10 },
+        { subject: 'Recepção', A: avg('recepcao', 'technical'), fullMark: 10 },
         { subject: 'Drible', A: avg('drible', 'technical'), fullMark: 10 },
-        { subject: 'Cabeceio', A: avg('cabeceio', 'technical'), fullMark: 10 },
-        { subject: 'Posição', A: avg('posicao', 'technical'), fullMark: 10 },
+        { subject: 'Finalização', A: avg('finalizacao', 'technical'), fullMark: 10 },
+        { subject: 'Cruzamento', A: avg('cruzamento', 'technical'), fullMark: 10 },
+        { subject: 'Desarme', A: avg('desarme', 'technical'), fullMark: 10 },
+        { subject: 'Intercept.', A: avg('interceptacao', 'technical'), fullMark: 10 },
       ],
       physical: [
         { subject: 'Velocidade', A: avg('velocidade', 'physical'), fullMark: 10 },
         { subject: 'Agilidade', A: avg('agilidade', 'physical'), fullMark: 10 },
-        { subject: 'Força', A: avg('forca', 'physical'), fullMark: 10 },
         { subject: 'Resistência', A: avg('resistencia', 'physical'), fullMark: 10 },
+        { subject: 'Força', A: avg('forca', 'physical'), fullMark: 10 },
         { subject: 'Coordenação', A: avg('coordenacao', 'physical'), fullMark: 10 },
-        { subject: 'Equilíbrio', A: avg('equilibrio', 'physical'), fullMark: 10 },
-      ],
-      tactical_const: [
-        { subject: tacticalLabels.const_passe, A: avg('const_passe', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.const_jogo_costas, A: avg('const_jogo_costas', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.const_dominio, A: avg('const_dominio', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.const_1v1_ofensivo, A: avg('const_1v1_ofensivo', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.const_movimentacao, A: avg('const_movimentacao', 'tactical'), fullMark: 10 },
-      ],
-      tactical_ult: [
-        { subject: tacticalLabels.ult_finalizacao, A: avg('ult_finalizacao', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.ult_desmarques, A: avg('ult_desmarques', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.ult_passes_ruptura, A: avg('ult_passes_ruptura', 'tactical'), fullMark: 10 },
+        { subject: 'Mobilidade', A: avg('mobilidade', 'physical'), fullMark: 10 },
+        { subject: 'Estabilidade', A: avg('estabilidade', 'physical'), fullMark: 10 },
       ],
       tactical_def: [
-        { subject: tacticalLabels.def_compactacao, A: avg('def_compactacao', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.def_recomposicao, A: avg('def_recomposicao', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.def_salto_pressao, A: avg('def_salto_pressao', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.def_1v1_defensivo, A: avg('def_1v1_defensivo', 'tactical'), fullMark: 10 },
-        { subject: tacticalLabels.def_duelos_aereos, A: avg('def_duelos_aereos', 'tactical'), fullMark: 10 },
+        { subject: 'Posicionamento', A: avg('def_posicionamento', 'tactical'), fullMark: 10 },
+        { subject: 'Pressão', A: avg('def_pressao', 'tactical'), fullMark: 10 },
+        { subject: 'Cobertura', A: avg('def_cobertura', 'tactical'), fullMark: 10 },
+        { subject: 'Fechamento', A: avg('def_fechamento', 'tactical'), fullMark: 10 },
+        { subject: 'Temporização', A: avg('def_temporizacao', 'tactical'), fullMark: 10 },
+        { subject: 'Desarme Tát.', A: avg('def_desarme_tatico', 'tactical'), fullMark: 10 },
+        { subject: 'Reação', A: avg('def_reacao', 'tactical'), fullMark: 10 },
+      ],
+      tactical_const: [
+        { subject: 'Qual. Passe', A: avg('const_qualidade_passe', 'tactical'), fullMark: 10 },
+        { subject: 'Visão', A: avg('const_visao', 'tactical'), fullMark: 10 },
+        { subject: 'Apoios', A: avg('const_apoios', 'tactical'), fullMark: 10 },
+        { subject: 'Mobilidade', A: avg('const_mobilidade', 'tactical'), fullMark: 10 },
+        { subject: 'Circulação', A: avg('const_circulacao', 'tactical'), fullMark: 10 },
+        { subject: 'Q. Linhas', A: avg('const_quebra_linhas', 'tactical'), fullMark: 10 },
+        { subject: 'Decisão', A: avg('const_tomada_decisao', 'tactical'), fullMark: 10 },
+      ],
+      tactical_ult: [
+        { subject: 'Movimentação', A: avg('ult_movimentacao', 'tactical'), fullMark: 10 },
+        { subject: 'Atq Espaço', A: avg('ult_ataque_espaco', 'tactical'), fullMark: 10 },
+        { subject: '1v1', A: avg('ult_1v1', 'tactical'), fullMark: 10 },
+        { subject: 'Último Passe', A: avg('ult_ultimo_passe', 'tactical'), fullMark: 10 },
+        { subject: 'Finalização', A: avg('ult_finalizacao_eficiente', 'tactical'), fullMark: 10 },
+        { subject: 'Ritmo', A: avg('ult_ritmo', 'tactical'), fullMark: 10 },
+        { subject: 'Bolas Paradas', A: avg('ult_bolas_paradas', 'tactical'), fullMark: 10 },
       ]
     };
   }, [filteredEntries]);
@@ -197,12 +193,12 @@ const PublicAthleteProfile: React.FC = () => {
     const addStats = (list: any[], type: string) => list.forEach(item => allStats.push({ label: item.subject, score: item.A, type }));
     const hasTactical = filteredEntries.some(e => e.tactical !== undefined && e.tactical !== null);
 
-    addStats(currentStats.technical, 'Técnico');
+    addStats(currentStats.technical, 'Fundamentos');
     addStats(currentStats.physical, 'Físico');
     if (hasTactical) {
-        addStats(currentStats.tactical_const, 'Tático');
-        addStats(currentStats.tactical_ult, 'Tático');
-        addStats(currentStats.tactical_def, 'Tático');
+        addStats(currentStats.tactical_def, 'Tático Def');
+        addStats(currentStats.tactical_const, 'Tático Cons');
+        addStats(currentStats.tactical_ult, 'Tático Ult');
     }
 
     allStats.sort((a, b) => b.score - a.score);
@@ -224,9 +220,9 @@ const PublicAthleteProfile: React.FC = () => {
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-10 text-center text-gray-500">Atleta não encontrado.</div>;
 
+  const defColor = currentStats ? getTacticalColor(currentStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
   const constColor = currentStats ? getTacticalColor(currentStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
   const ultColor = currentStats ? getTacticalColor(currentStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
-  const defColor = currentStats ? getTacticalColor(currentStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
 
   const formatBirthDate = (dateString: string) => {
      if (!dateString) return '';
@@ -312,7 +308,7 @@ const PublicAthleteProfile: React.FC = () => {
                 {filteredEntries.length > 0 ? (
                     <div className="flex-1 flex flex-col justify-center gap-6">
                         <div>
-                            <h4 className="text-sm font-bold text-green-600 uppercase mb-3 border-b border-green-100 pb-1">Destaques (Melhores)</h4>
+                            <h4 className="text-sm font-bold text-green-600 uppercase mb-3 border-b border-green-100 pb-1 flex items-center gap-2"><TrendingUp size={16} /> Destaques (Melhores)</h4>
                             <div className="space-y-3">
                                 {performanceAnalysis.best.map((item, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-green-50 px-3 py-2 rounded-lg">
@@ -324,7 +320,7 @@ const PublicAthleteProfile: React.FC = () => {
                         </div>
                         <div className="w-full border-t border-dashed border-gray-200"></div>
                         <div>
-                            <h4 className="text-sm font-bold text-red-500 uppercase mb-3 border-b border-red-100 pb-1">Pontos de Atenção</h4>
+                            <h4 className="text-sm font-bold text-red-500 uppercase mb-3 border-b border-red-100 pb-1 flex items-center gap-2"><TrendingDown size={16} /> Pontos de Atenção</h4>
                             <div className="space-y-3">
                                 {performanceAnalysis.worst.map((item, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-red-50 px-3 py-2 rounded-lg">
@@ -336,35 +332,101 @@ const PublicAthleteProfile: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400 italic">Sem dados suficientes.</div>
+                    <div className="flex-1 flex items-center justify-center text-gray-400 italic">Sem dados suficientes para análise neste período.</div>
                 )}
             </div>
         </div>
 
-        {/* --- RADAR CHARTS --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
-                <div className="h-[250px]"><ResponsiveContainer width="100%" height="100%">{currentStats?.tactical_const ? <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_const}><PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip /></RadarChart> : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}</ResponsiveContainer></div>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
-                <div className="h-[250px]"><ResponsiveContainer width="100%" height="100%">{currentStats?.tactical_ult ? <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_ult}><PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip /></RadarChart> : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}</ResponsiveContainer></div>
-            </div>
+        {/* --- ATRIBUTOS TÉCNICOS E TÁTICOS (2ª Linha) --- */}
+        <h3 className="text-xl font-bold text-gray-800 mt-2 mb-4">Atributos Técnicos e Táticos</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Defendendo */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
-                <div className="h-[250px]"><ResponsiveContainer width="100%" height="100%">{currentStats?.tactical_def ? <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_def}><PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip /></RadarChart> : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}</ResponsiveContainer></div>
+                <div className="h-[250px]">
+                    {currentStats && currentStats.tactical_def ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_def}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                            <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
+                            <RechartsTooltip />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                </div>
+            </div>
+            {/* Construindo */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
+                <div className="h-[250px]">
+                    {currentStats && currentStats.tactical_const ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_const}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                            <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
+                            <RechartsTooltip />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                </div>
+            </div>
+            {/* Último Terço */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
+                <div className="h-[250px]">
+                    {currentStats && currentStats.tactical_ult ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_ult}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                            <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
+                            <RechartsTooltip />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                </div>
             </div>
         </div>
 
+        {/* --- FUNDAMENTOS E CONDIÇÃO FÍSICA (3ª Linha) --- */}
+        <h3 className="text-xl font-bold text-gray-800 mt-6 mb-4">Fundamentos e Físico</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico</h3>
-                <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%">{currentStats ? <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.technical}><PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} /><Radar name="Técnico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} /><RechartsTooltip /></RadarChart> : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}</ResponsiveContainer></div>
+                <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
+                <div className="h-[300px]">
+                    {currentStats ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.technical}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                            <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                            <RechartsTooltip />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                </div>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-orange-700 mb-4">Perfil Físico</h3>
-                <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%">{currentStats ? <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.physical}><PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} /><Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} /><RechartsTooltip /></RadarChart> : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}</ResponsiveContainer></div>
+                <h3 className="font-bold text-orange-700 mb-4">Condição Física (Média)</h3>
+                <div className="h-[300px]">
+                    {currentStats ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.physical}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                            <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
+                            <RechartsTooltip />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                </div>
             </div>
         </div>
 
@@ -393,17 +455,11 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
             <div className="divide-y divide-gray-100">
                 {historyData.map((item) => (
-                    /* Read Only View - No edit buttons */
                     <div key={item!.id} onClick={() => setViewingEntry(item)} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-3">
                                 <span className="font-bold text-gray-800">{item!.date}</span>
                                 <span className={`text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
-                            </div>
-                            <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                                <span>Técnica: {calculateCategoryAverage(item!.technical).toFixed(1)}</span>
-                                <span>Físico: {calculateCategoryAverage(item!.physical).toFixed(1)}</span>
-                                {item!.tactical && <span>Tático: {calculateCategoryAverage(item!.tactical).toFixed(1)}</span>}
                             </div>
                         </div>
                     </div>
@@ -411,7 +467,7 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
         </div>
 
-        {/* View Detail Modal (Simplified) */}
+        {/* View Detail Modal */}
         {viewingEntry && (
             <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto relative animate-fade-in">
@@ -424,14 +480,15 @@ const PublicAthleteProfile: React.FC = () => {
                     </div>
                     {viewingEntry.heatmapPoints?.length > 0 && <div className="mb-6"><HeatmapField points={viewingEntry.heatmapPoints} readOnly={true} label="Posicionamento" /></div>}
                     {viewingEntry.entry.notes && <div className="bg-yellow-50 p-4 mb-6 rounded"><p className="text-sm italic text-gray-700">{viewingEntry.entry.notes}</p></div>}
+                    
                     <div className="grid grid-cols-2 gap-4">
                          <div>
-                             <h4 className="font-bold text-xs uppercase text-blue-500 mb-2 border-b">Técnica</h4>
-                             {Object.entries(viewingEntry.technical).map(([k,v]:any)=><div key={k} className="flex justify-between text-xs capitalize"><span>{k}</span><span className="font-bold">{v}</span></div>)}
+                             <h4 className="font-bold text-xs uppercase text-blue-500 mb-2 border-b">Fundamentos</h4>
+                             {Object.entries(viewingEntry.technical).map(([k,v]:any)=><div key={k} className="flex justify-between text-xs capitalize"><span>{k.replace('_',' ')}</span><span className="font-bold">{v}</span></div>)}
                          </div>
                          <div>
                              <h4 className="font-bold text-xs uppercase text-orange-500 mb-2 border-b">Físico</h4>
-                             {Object.entries(viewingEntry.physical).map(([k,v]:any)=><div key={k} className="flex justify-between text-xs capitalize"><span>{k}</span><span className="font-bold">{v}</span></div>)}
+                             {Object.entries(viewingEntry.physical).map(([k,v]:any)=><div key={k} className="flex justify-between text-xs capitalize"><span>{k.replace('_',' ')}</span><span className="font-bold">{v}</span></div>)}
                          </div>
                     </div>
                 </div>

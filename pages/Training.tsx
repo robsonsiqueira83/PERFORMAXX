@@ -31,18 +31,22 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   // Session State
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Stats State
+  // Stats State - Updated Structure
   const [stats, setStats] = useState({
-    // Technical
-    controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-    // Physical
-    velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
-    // Tactical - Construindo
-    const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
-    // Tactical - Último Terço
-    ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
-    // Tactical - Defendendo
-    def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
+    // Condição Física
+    velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
+    
+    // Fundamentos
+    controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
+
+    // Tático - Defendendo
+    def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
+
+    // Tático - Construindo
+    const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
+
+    // Tático - Último Terço
+    ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
   });
   
   // Heatmap State
@@ -122,44 +126,40 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
             }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
 
             const latest = entriesWithDate[0];
-            setStats({ 
-                ...latest.technical, 
-                ...latest.physical, 
-                // Handle optional tactical data for legacy records
-                ...(latest.tactical || {
-                    const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
-                    ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
-                    def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
-                }) 
-            });
+            
+            // Check if latest entry has new keys, otherwise default
+            if (latest.tactical && latest.tactical.def_posicionamento !== undefined) {
+                 setStats({ 
+                    ...latest.technical, 
+                    ...latest.physical, 
+                    ...latest.tactical
+                 });
+            } else {
+                // Legacy data fallback or default
+                setStats(getDefaultStats());
+            }
             // Don't prefill heatmap points, start fresh for new session
             setHeatmapPoints([]); 
         } else {
-            // Default 5 if no history
-            setStats({
-                controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-                velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
-                const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
-                ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
-                def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
-            });
+            setStats(getDefaultStats());
             setHeatmapPoints([]);
         }
     } catch (e) {
-        // Fallback default
-        setStats({
-            controle: 5, passe: 5, finalizacao: 5, drible: 5, cabeceio: 5, posicao: 5,
-            velocidade: 5, agilidade: 5, forca: 5, resistencia: 5, coordenacao: 5, equilibrio: 5,
-            const_passe: 5, const_jogo_costas: 5, const_dominio: 5, const_1v1_ofensivo: 5, const_movimentacao: 5,
-            ult_finalizacao: 5, ult_desmarques: 5, ult_passes_ruptura: 5,
-            def_compactacao: 5, def_recomposicao: 5, def_salto_pressao: 5, def_1v1_defensivo: 5, def_duelos_aereos: 5
-        });
+        setStats(getDefaultStats());
         setHeatmapPoints([]);
     }
 
     setNotes(''); // Reset notes
     setLoading(false);
   };
+
+  const getDefaultStats = () => ({
+    velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
+    controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
+    def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
+    const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
+    ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
+  });
 
   const handleSaveEntry = async () => {
     if (!selectedAthlete || !selectedCategory || !date) return;
@@ -184,20 +184,28 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       id: uuidv4(),
       sessionId: sessionIdToUse,
       athleteId: selectedAthlete.id,
-      technical: {
-        controle: stats.controle, passe: stats.passe, finalizacao: stats.finalizacao,
-        drible: stats.drible, cabeceio: stats.cabeceio, posicao: stats.posicao
+      technical: { // Fundamentals
+        controle_bola: stats.controle_bola, conducao: stats.conducao, passe: stats.passe,
+        recepcao: stats.recepcao, drible: stats.drible, finalizacao: stats.finalizacao,
+        cruzamento: stats.cruzamento, desarme: stats.desarme, interceptacao: stats.interceptacao
       },
-      physical: {
-        velocidade: stats.velocidade, agilidade: stats.agilidade, forca: stats.forca,
-        resistencia: stats.resistencia, coordenacao: stats.coordenacao, equilibrio: stats.equilibrio
+      physical: { // Condition
+        velocidade: stats.velocidade, agilidade: stats.agilidade, resistencia: stats.resistencia,
+        forca: stats.forca, coordenacao: stats.coordenacao, mobilidade: stats.mobilidade, estabilidade: stats.estabilidade
       },
       tactical: {
-        const_passe: stats.const_passe, const_jogo_costas: stats.const_jogo_costas, const_dominio: stats.const_dominio,
-        const_1v1_ofensivo: stats.const_1v1_ofensivo, const_movimentacao: stats.const_movimentacao,
-        ult_finalizacao: stats.ult_finalizacao, ult_desmarques: stats.ult_desmarques, ult_passes_ruptura: stats.ult_passes_ruptura,
-        def_compactacao: stats.def_compactacao, def_recomposicao: stats.def_recomposicao, def_salto_pressao: stats.def_salto_pressao,
-        def_1v1_defensivo: stats.def_1v1_defensivo, def_duelos_aereos: stats.def_duelos_aereos
+        // Defendendo
+        def_posicionamento: stats.def_posicionamento, def_pressao: stats.def_pressao, def_cobertura: stats.def_cobertura,
+        def_fechamento: stats.def_fechamento, def_temporizacao: stats.def_temporizacao, def_desarme_tatico: stats.def_desarme_tatico,
+        def_reacao: stats.def_reacao,
+        // Construindo
+        const_qualidade_passe: stats.const_qualidade_passe, const_visao: stats.const_visao, const_apoios: stats.const_apoios,
+        const_mobilidade: stats.const_mobilidade, const_circulacao: stats.const_circulacao, const_quebra_linhas: stats.const_quebra_linhas,
+        const_tomada_decisao: stats.const_tomada_decisao,
+        // Ultimo Terço
+        ult_movimentacao: stats.ult_movimentacao, ult_ataque_espaco: stats.ult_ataque_espaco, ult_1v1: stats.ult_1v1,
+        ult_ultimo_passe: stats.ult_ultimo_passe, ult_finalizacao_eficiente: stats.ult_finalizacao_eficiente,
+        ult_ritmo: stats.ult_ritmo, ult_bolas_paradas: stats.ult_bolas_paradas
       },
       heatmapPoints: heatmapPoints,
       notes: notes
@@ -322,7 +330,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-12 h-12 rounded-full object-cover" />}
                       <div>
                           <h3 className="text-xl font-bold text-gray-800">Avaliação: {selectedAthlete.name}</h3>
-                          <p className="text-sm text-gray-500">Preencha as notas abaixo</p>
+                          <p className="text-sm text-gray-500">Preencha os indicadores abaixo</p>
                       </div>
                   </div>
                   {notification && (
@@ -339,72 +347,87 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       onChange={setHeatmapPoints} 
                       label="Mapa de Calor (Toque para marcar)" 
                    />
-                   <p className="text-xs text-gray-500 mt-2 text-center">Clique no campo para marcar as principais zonas de atuação do atleta nesta partida.</p>
+                   <p className="text-xs text-gray-500 mt-2 text-center">Clique no campo para marcar as principais zonas de atuação do atleta.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
-                  {/* Technical */}
-                  <div>
-                      <h4 className="text-sm uppercase font-bold text-blue-600 mb-4 flex items-center gap-2 border-b pb-1">
-                          Aspectos Técnicos
+              {/* TACTICAL BLOCKS */}
+              <div className="space-y-8 mb-8">
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {/* Defendendo */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">
+                               Tático: Defendendo
+                           </h4>
+                           <StatSlider label="Posicionamento" value={stats.def_posicionamento} onChange={v => setStats({...stats, def_posicionamento: v})} />
+                           <StatSlider label="Pressão na bola" value={stats.def_pressao} onChange={v => setStats({...stats, def_pressao: v})} />
+                           <StatSlider label="Cobertura" value={stats.def_cobertura} onChange={v => setStats({...stats, def_cobertura: v})} />
+                           <StatSlider label="Fechamento linhas" value={stats.def_fechamento} onChange={v => setStats({...stats, def_fechamento: v})} />
+                           <StatSlider label="Temporização" value={stats.def_temporizacao} onChange={v => setStats({...stats, def_temporizacao: v})} />
+                           <StatSlider label="Desarme tempo certo" value={stats.def_desarme_tatico} onChange={v => setStats({...stats, def_desarme_tatico: v})} />
+                           <StatSlider label="Reação pós-perda" value={stats.def_reacao} onChange={v => setStats({...stats, def_reacao: v})} />
+                       </div>
+
+                       {/* Construindo */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">
+                               Tático: Construindo
+                           </h4>
+                           <StatSlider label="Qualidade Passe" value={stats.const_qualidade_passe} onChange={v => setStats({...stats, const_qualidade_passe: v})} />
+                           <StatSlider label="Visão de Jogo" value={stats.const_visao} onChange={v => setStats({...stats, const_visao: v})} />
+                           <StatSlider label="Apoios/Linhas" value={stats.const_apoios} onChange={v => setStats({...stats, const_apoios: v})} />
+                           <StatSlider label="Mobilidade receber" value={stats.const_mobilidade} onChange={v => setStats({...stats, const_mobilidade: v})} />
+                           <StatSlider label="Circulação bola" value={stats.const_circulacao} onChange={v => setStats({...stats, const_circulacao: v})} />
+                           <StatSlider label="Quebra de linhas" value={stats.const_quebra_linhas} onChange={v => setStats({...stats, const_quebra_linhas: v})} />
+                           <StatSlider label="Decisão sob pressão" value={stats.const_tomada_decisao} onChange={v => setStats({...stats, const_tomada_decisao: v})} />
+                       </div>
+
+                       {/* Último Terço */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">
+                               Tático: Último Terço
+                           </h4>
+                           <StatSlider label="Mov. sem bola" value={stats.ult_movimentacao} onChange={v => setStats({...stats, ult_movimentacao: v})} />
+                           <StatSlider label="Ataque ao espaço" value={stats.ult_ataque_espaco} onChange={v => setStats({...stats, ult_ataque_espaco: v})} />
+                           <StatSlider label="Capacidade 1x1" value={stats.ult_1v1} onChange={v => setStats({...stats, ult_1v1: v})} />
+                           <StatSlider label="Último passe" value={stats.ult_ultimo_passe} onChange={v => setStats({...stats, ult_ultimo_passe: v})} />
+                           <StatSlider label="Finalização efic." value={stats.ult_finalizacao_eficiente} onChange={v => setStats({...stats, ult_finalizacao_eficiente: v})} />
+                           <StatSlider label="Ritmo decisão" value={stats.ult_ritmo} onChange={v => setStats({...stats, ult_ritmo: v})} />
+                           <StatSlider label="Bolas paradas" value={stats.ult_bolas_paradas} onChange={v => setStats({...stats, ult_bolas_paradas: v})} />
+                       </div>
+                   </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  {/* Fundamentos */}
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">
+                          Fundamentos
                       </h4>
-                      <StatSlider label="Controle" value={stats.controle} onChange={v => setStats({...stats, controle: v})} />
+                      <StatSlider label="Controle de bola" value={stats.controle_bola} onChange={v => setStats({...stats, controle_bola: v})} />
+                      <StatSlider label="Condução" value={stats.conducao} onChange={v => setStats({...stats, conducao: v})} />
                       <StatSlider label="Passe" value={stats.passe} onChange={v => setStats({...stats, passe: v})} />
-                      <StatSlider label="Finalização" value={stats.finalizacao} onChange={v => setStats({...stats, finalizacao: v})} />
+                      <StatSlider label="Recepção orient." value={stats.recepcao} onChange={v => setStats({...stats, recepcao: v})} />
                       <StatSlider label="Drible" value={stats.drible} onChange={v => setStats({...stats, drible: v})} />
-                      <StatSlider label="Cabeceio" value={stats.cabeceio} onChange={v => setStats({...stats, cabeceio: v})} />
-                      <StatSlider label="Posição" value={stats.posicao} onChange={v => setStats({...stats, posicao: v})} />
+                      <StatSlider label="Finalização" value={stats.finalizacao} onChange={v => setStats({...stats, finalizacao: v})} />
+                      <StatSlider label="Cruzamento" value={stats.cruzamento} onChange={v => setStats({...stats, cruzamento: v})} />
+                      <StatSlider label="Desarme" value={stats.desarme} onChange={v => setStats({...stats, desarme: v})} />
+                      <StatSlider label="Interceptação" value={stats.interceptacao} onChange={v => setStats({...stats, interceptacao: v})} />
                   </div>
 
                   {/* Physical */}
-                  <div>
-                      <h4 className="text-sm uppercase font-bold text-orange-600 mb-4 flex items-center gap-2 border-b pb-1">
-                          Aspectos Físicos
+                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                      <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">
+                          Condição Física
                       </h4>
                       <StatSlider label="Velocidade" value={stats.velocidade} onChange={v => setStats({...stats, velocidade: v})} />
                       <StatSlider label="Agilidade" value={stats.agilidade} onChange={v => setStats({...stats, agilidade: v})} />
-                      <StatSlider label="Força" value={stats.forca} onChange={v => setStats({...stats, forca: v})} />
                       <StatSlider label="Resistência" value={stats.resistencia} onChange={v => setStats({...stats, resistencia: v})} />
+                      <StatSlider label="Força/Potência" value={stats.forca} onChange={v => setStats({...stats, forca: v})} />
                       <StatSlider label="Coordenação" value={stats.coordenacao} onChange={v => setStats({...stats, coordenacao: v})} />
-                      <StatSlider label="Equilíbrio" value={stats.equilibrio} onChange={v => setStats({...stats, equilibrio: v})} />
-                  </div>
-
-                  {/* Tactical: Construindo */}
-                  <div>
-                      <h4 className="text-sm uppercase font-bold text-purple-600 mb-4 flex items-center gap-2 border-b pb-1">
-                          Tático: Construindo
-                      </h4>
-                      <StatSlider label="Passe" value={stats.const_passe} onChange={v => setStats({...stats, const_passe: v})} />
-                      <StatSlider label="Jogo de costas" value={stats.const_jogo_costas} onChange={v => setStats({...stats, const_jogo_costas: v})} />
-                      <StatSlider label="Domínio" value={stats.const_dominio} onChange={v => setStats({...stats, const_dominio: v})} />
-                      <StatSlider label="1v1 ofensivo" value={stats.const_1v1_ofensivo} onChange={v => setStats({...stats, const_1v1_ofensivo: v})} />
-                      <StatSlider label="Movimentação" value={stats.const_movimentacao} onChange={v => setStats({...stats, const_movimentacao: v})} />
+                      <StatSlider label="Mobilidade" value={stats.mobilidade} onChange={v => setStats({...stats, mobilidade: v})} />
+                      <StatSlider label="Estabilidade Core" value={stats.estabilidade} onChange={v => setStats({...stats, estabilidade: v})} />
                   </div>
               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {/* Tactical: Último Terço */}
-                  <div>
-                      <h4 className="text-sm uppercase font-bold text-purple-600 mb-4 flex items-center gap-2 border-b pb-1">
-                          Tático: Último Terço
-                      </h4>
-                      <StatSlider label="Finalização" value={stats.ult_finalizacao} onChange={v => setStats({...stats, ult_finalizacao: v})} />
-                      <StatSlider label="Desmarques ruptura" value={stats.ult_desmarques} onChange={v => setStats({...stats, ult_desmarques: v})} />
-                      <StatSlider label="Passes ruptura" value={stats.ult_passes_ruptura} onChange={v => setStats({...stats, ult_passes_ruptura: v})} />
-                  </div>
-
-                  {/* Tactical: Defendendo */}
-                  <div>
-                      <h4 className="text-sm uppercase font-bold text-purple-600 mb-4 flex items-center gap-2 border-b pb-1">
-                          Tático: Defendendo
-                      </h4>
-                      <StatSlider label="Compactação" value={stats.def_compactacao} onChange={v => setStats({...stats, def_compactacao: v})} />
-                      <StatSlider label="Tempo/Recompos." value={stats.def_recomposicao} onChange={v => setStats({...stats, def_recomposicao: v})} />
-                      <StatSlider label="Salto pressão" value={stats.def_salto_pressao} onChange={v => setStats({...stats, def_salto_pressao: v})} />
-                      <StatSlider label="1v1 defensivo" value={stats.def_1v1_defensivo} onChange={v => setStats({...stats, def_1v1_defensivo: v})} />
-                      <StatSlider label="Duelos aéreos" value={stats.def_duelos_aereos} onChange={v => setStats({...stats, def_duelos_aereos: v})} />
-                  </div>
-               </div>
 
               <div className="mt-8">
                   <h4 className="text-sm uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">

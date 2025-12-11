@@ -17,22 +17,6 @@ interface DashboardProps {
   teamId: string;
 }
 
-const tacticalLabels: Record<string, string> = {
-  const_passe: 'Passe',
-  const_jogo_costas: 'Jogo de costas',
-  const_dominio: 'Domínio',
-  const_1v1_ofensivo: '1v1 ofensivo',
-  const_movimentacao: 'Movimentação',
-  ult_finalizacao: 'Finalização',
-  ult_desmarques: 'Desmarques de ruptura',
-  ult_passes_ruptura: 'Passes de ruptura',
-  def_compactacao: 'Compactação',
-  def_recomposicao: 'Tempo/Intensidade de Recomposição',
-  def_salto_pressao: 'Salto de pressão',
-  def_1v1_defensivo: '1v1 defensivo',
-  def_duelos_aereos: 'Duelos aéreos'
-};
-
 const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
@@ -143,10 +127,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   // --- Top 3 Ranking (Filtered) ---
   const rankedAthletes = useMemo(() => {
     let filtered = athletesWithScores;
-    
     if (selectedCategory !== 'all') filtered = filtered.filter(a => a.categoryId === selectedCategory);
     if (selectedPosition !== 'all') filtered = filtered.filter(a => a.position === selectedPosition);
-    
     return filtered.slice(0, 3);
   }, [athletesWithScores, selectedCategory, selectedPosition]);
 
@@ -198,8 +180,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   // --- Logic for Evolution Chart (Average of team/category over time) ---
   const evolutionData = useMemo(() => {
-      // Sessions are already filtered by period.
-      // Filter sessions by category if needed (already effectively filtered by entries, but for X-Axis we need filtered sessions)
       let relevantSessions = filteredSessions;
       if (selectedCategory !== 'all') {
           relevantSessions = relevantSessions.filter(s => s.categoryId === selectedCategory);
@@ -225,114 +205,83 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const teamStats = useMemo(() => {
     if (filteredEntries.length === 0) return null;
 
-    let tacticalCount = 0;
-    const totalCount = filteredEntries.length;
-    
-    const sums = {
-      // Tech
-      controle: 0, passe: 0, finalizacao: 0, drible: 0, cabeceio: 0, posicao: 0,
-      // Phys
-      velocidade: 0, agilidade: 0, forca: 0, resistencia: 0, coordenacao: 0, equilibrio: 0,
-      // Tac - Const
-      const_passe: 0, const_jogo_costas: 0, const_dominio: 0, const_1v1_ofensivo: 0, const_movimentacao: 0,
-      // Tac - Ult
-      ult_finalizacao: 0, ult_desmarques: 0, ult_passes_ruptura: 0,
-      // Tac - Def
-      def_compactacao: 0, def_recomposicao: 0, def_salto_pressao: 0, def_1v1_defensivo: 0, def_duelos_aereos: 0
+    const dataToAverage = filteredEntries;
+    const avg = (key: string, type: 'technical' | 'physical' | 'tactical') => {
+      let count = 0;
+      const sum = dataToAverage.reduce((acc, curr) => {
+          const group = curr[type] as any;
+          if (group && group[key] !== undefined) {
+              count++;
+              return acc + Number(group[key]);
+          }
+          return acc;
+      }, 0);
+      return count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
     };
-
-    filteredEntries.forEach(e => {
-        // Tech
-        sums.controle += e.technical.controle;
-        sums.passe += e.technical.passe;
-        sums.finalizacao += e.technical.finalizacao;
-        sums.drible += e.technical.drible;
-        sums.cabeceio += e.technical.cabeceio;
-        sums.posicao += e.technical.posicao;
-        // Phys
-        sums.velocidade += e.physical.velocidade;
-        sums.agilidade += e.physical.agilidade;
-        sums.forca += e.physical.forca;
-        sums.resistencia += e.physical.resistencia;
-        sums.coordenacao += e.physical.coordenacao;
-        sums.equilibrio += e.physical.equilibrio;
-        // Tac - Only add if present
-        if (e.tactical) {
-            tacticalCount++;
-            sums.const_passe += e.tactical.const_passe || 0;
-            sums.const_jogo_costas += e.tactical.const_jogo_costas || 0;
-            sums.const_dominio += e.tactical.const_dominio || 0;
-            sums.const_1v1_ofensivo += e.tactical.const_1v1_ofensivo || 0;
-            sums.const_movimentacao += e.tactical.const_movimentacao || 0;
-
-            sums.ult_finalizacao += e.tactical.ult_finalizacao || 0;
-            sums.ult_desmarques += e.tactical.ult_desmarques || 0;
-            sums.ult_passes_ruptura += e.tactical.ult_passes_ruptura || 0;
-
-            sums.def_compactacao += e.tactical.def_compactacao || 0;
-            sums.def_recomposicao += e.tactical.def_recomposicao || 0;
-            sums.def_salto_pressao += e.tactical.def_salto_pressao || 0;
-            sums.def_1v1_defensivo += e.tactical.def_1v1_defensivo || 0;
-            sums.def_duelos_aereos += e.tactical.def_duelos_aereos || 0;
-        }
-    });
-
-    const avg = (val: number, divisor: number) => divisor > 0 ? Number((val / divisor).toFixed(1)) : 0;
 
     return {
       technical: [
-        { subject: 'Controle', A: avg(sums.controle, totalCount), fullMark: 10 },
-        { subject: 'Passe', A: avg(sums.passe, totalCount), fullMark: 10 },
-        { subject: 'Finalização', A: avg(sums.finalizacao, totalCount), fullMark: 10 },
-        { subject: 'Drible', A: avg(sums.drible, totalCount), fullMark: 10 },
-        { subject: 'Cabeceio', A: avg(sums.cabeceio, totalCount), fullMark: 10 },
-        { subject: 'Posição', A: avg(sums.posicao, totalCount), fullMark: 10 },
+        { subject: 'Controle', A: avg('controle_bola', 'technical'), fullMark: 10 },
+        { subject: 'Condução', A: avg('conducao', 'technical'), fullMark: 10 },
+        { subject: 'Passe', A: avg('passe', 'technical'), fullMark: 10 },
+        { subject: 'Recepção', A: avg('recepcao', 'technical'), fullMark: 10 },
+        { subject: 'Drible', A: avg('drible', 'technical'), fullMark: 10 },
+        { subject: 'Finalização', A: avg('finalizacao', 'technical'), fullMark: 10 },
+        { subject: 'Cruzamento', A: avg('cruzamento', 'technical'), fullMark: 10 },
+        { subject: 'Desarme', A: avg('desarme', 'technical'), fullMark: 10 },
+        { subject: 'Intercept.', A: avg('interceptacao', 'technical'), fullMark: 10 },
       ],
       physical: [
-        { subject: 'Velocidade', A: avg(sums.velocidade, totalCount), fullMark: 10 },
-        { subject: 'Agilidade', A: avg(sums.agilidade, totalCount), fullMark: 10 },
-        { subject: 'Força', A: avg(sums.forca, totalCount), fullMark: 10 },
-        { subject: 'Resistência', A: avg(sums.resistencia, totalCount), fullMark: 10 },
-        { subject: 'Coordenação', A: avg(sums.coordenacao, totalCount), fullMark: 10 },
-        { subject: 'Equilíbrio', A: avg(sums.equilibrio, totalCount), fullMark: 10 },
-      ],
-      tactical_const: [
-        { subject: tacticalLabels.const_passe, A: avg(sums.const_passe, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.const_jogo_costas, A: avg(sums.const_jogo_costas, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.const_dominio, A: avg(sums.const_dominio, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.const_1v1_ofensivo, A: avg(sums.const_1v1_ofensivo, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.const_movimentacao, A: avg(sums.const_movimentacao, tacticalCount), fullMark: 10 },
-      ],
-      tactical_ult: [
-        { subject: tacticalLabels.ult_finalizacao, A: avg(sums.ult_finalizacao, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.ult_desmarques, A: avg(sums.ult_desmarques, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.ult_passes_ruptura, A: avg(sums.ult_passes_ruptura, tacticalCount), fullMark: 10 },
+        { subject: 'Velocidade', A: avg('velocidade', 'physical'), fullMark: 10 },
+        { subject: 'Agilidade', A: avg('agilidade', 'physical'), fullMark: 10 },
+        { subject: 'Resistência', A: avg('resistencia', 'physical'), fullMark: 10 },
+        { subject: 'Força', A: avg('forca', 'physical'), fullMark: 10 },
+        { subject: 'Coordenação', A: avg('coordenacao', 'physical'), fullMark: 10 },
+        { subject: 'Mobilidade', A: avg('mobilidade', 'physical'), fullMark: 10 },
+        { subject: 'Estabilidade', A: avg('estabilidade', 'physical'), fullMark: 10 },
       ],
       tactical_def: [
-        { subject: tacticalLabels.def_compactacao, A: avg(sums.def_compactacao, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.def_recomposicao, A: avg(sums.def_recomposicao, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.def_salto_pressao, A: avg(sums.def_salto_pressao, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.def_1v1_defensivo, A: avg(sums.def_1v1_defensivo, tacticalCount), fullMark: 10 },
-        { subject: tacticalLabels.def_duelos_aereos, A: avg(sums.def_duelos_aereos, tacticalCount), fullMark: 10 },
+        { subject: 'Posicionamento', A: avg('def_posicionamento', 'tactical'), fullMark: 10 },
+        { subject: 'Pressão', A: avg('def_pressao', 'tactical'), fullMark: 10 },
+        { subject: 'Cobertura', A: avg('def_cobertura', 'tactical'), fullMark: 10 },
+        { subject: 'Fechamento', A: avg('def_fechamento', 'tactical'), fullMark: 10 },
+        { subject: 'Temporização', A: avg('def_temporizacao', 'tactical'), fullMark: 10 },
+        { subject: 'Desarme Tát.', A: avg('def_desarme_tatico', 'tactical'), fullMark: 10 },
+        { subject: 'Reação', A: avg('def_reacao', 'tactical'), fullMark: 10 },
+      ],
+      tactical_const: [
+        { subject: 'Qual. Passe', A: avg('const_qualidade_passe', 'tactical'), fullMark: 10 },
+        { subject: 'Visão', A: avg('const_visao', 'tactical'), fullMark: 10 },
+        { subject: 'Apoios', A: avg('const_apoios', 'tactical'), fullMark: 10 },
+        { subject: 'Mobilidade', A: avg('const_mobilidade', 'tactical'), fullMark: 10 },
+        { subject: 'Circulação', A: avg('const_circulacao', 'tactical'), fullMark: 10 },
+        { subject: 'Q. Linhas', A: avg('const_quebra_linhas', 'tactical'), fullMark: 10 },
+        { subject: 'Decisão', A: avg('const_tomada_decisao', 'tactical'), fullMark: 10 },
+      ],
+      tactical_ult: [
+        { subject: 'Movimentação', A: avg('ult_movimentacao', 'tactical'), fullMark: 10 },
+        { subject: 'Atq Espaço', A: avg('ult_ataque_espaco', 'tactical'), fullMark: 10 },
+        { subject: '1v1', A: avg('ult_1v1', 'tactical'), fullMark: 10 },
+        { subject: 'Último Passe', A: avg('ult_ultimo_passe', 'tactical'), fullMark: 10 },
+        { subject: 'Finalização', A: avg('ult_finalizacao_eficiente', 'tactical'), fullMark: 10 },
+        { subject: 'Ritmo', A: avg('ult_ritmo', 'tactical'), fullMark: 10 },
+        { subject: 'Bolas Paradas', A: avg('ult_bolas_paradas', 'tactical'), fullMark: 10 },
       ]
     };
   }, [filteredEntries]);
 
-  // Dynamic Color Helper for Tactical Charts (Reused from AthleteProfile concept)
+  // Dynamic Color Helper
   const getTacticalColor = (data: any[]) => {
       if (!data || data.length === 0) return { stroke: '#8884d8', fill: '#8884d8' };
       const avg = data.reduce((sum, item) => sum + item.A, 0) / data.length;
-      
       if (avg < 4) return { stroke: '#ef4444', fill: '#ef4444' }; // Red
       if (avg < 8) return { stroke: '#f97316', fill: '#f97316' }; // Orange
       return { stroke: '#22c55e', fill: '#22c55e' }; // Green
   };
 
-  // Colors for Tactical Stats
+  const defColor = teamStats ? getTacticalColor(teamStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
   const constColor = teamStats ? getTacticalColor(teamStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
   const ultColor = teamStats ? getTacticalColor(teamStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
-  const defColor = teamStats ? getTacticalColor(teamStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
-
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
@@ -439,7 +388,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                      </div>
                      <div>
                          <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
-                         {/* Swapped Category and Position */}
                          <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
                          <p className="text-xs text-gray-500">{athlete.sessionsCount} atuações</p>
                      </div>
@@ -473,14 +421,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
          
          {/* Field Container */}
          <div className="relative w-full aspect-[3/4] md:aspect-[16/9] lg:aspect-[2/1] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
-             
              {/* Field Markings */}
              <div className="absolute inset-4 border-2 border-white/40 rounded-sm"></div>
-             {/* Center Line */}
              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2"></div>
-             {/* Center Circle */}
              <div className="absolute top-1/2 left-1/2 w-24 h-24 md:w-32 md:h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
-             {/* Penalty Areas (Simplified) */}
              <div className="absolute bottom-4 left-1/2 w-48 h-24 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
              <div className="absolute top-4 left-1/2 w-48 h-24 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
 
@@ -521,13 +465,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                    )}
                 </div>
              ))}
-
-             <div className="absolute bottom-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">
-                Campo de Defesa
-             </div>
-             <div className="absolute top-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">
-                Campo de Ataque
-             </div>
          </div>
       </div>
 
@@ -538,56 +475,39 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
          Média Geral {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
       </h2>
 
-      {/* 1. TACTICAL CHARTS ROW (Average) */}
+      {/* TACTICAL CHARTS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Construindo */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Construindo (Média)</h3>
-              <div className="h-[250px]">
-                 {teamStats ? (
-                   <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_const}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
-                        <RechartsTooltip />
-                      </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
-              </div>
-          </div>
-          
-          {/* Último Terço */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Último Terço (Média)</h3>
-              <div className="h-[250px]">
-                 {teamStats ? (
-                   <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_ult}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
-                        <RechartsTooltip />
-                      </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
-              </div>
-          </div>
-
-          {/* Defendendo */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Defendendo (Média)</h3>
               <div className="h-[250px]">
-                 {teamStats ? (
+                 {teamStats && teamStats.tactical_def ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_def}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, width: 80 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                        <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
-                        <RechartsTooltip />
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Construindo (Média)</h3>
+              <div className="h-[250px]">
+                 {teamStats && teamStats.tactical_const ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_const}>
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Último Terço (Média)</h3>
+              <div className="h-[250px]">
+                 {teamStats && teamStats.tactical_ult ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_ult}>
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
                  ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
@@ -595,10 +515,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           </div>
       </div>
 
-      {/* 2. TECH/PHYS Charts Row (Average) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* TECH/PHYS Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-blue-700 mb-4">Perfil Técnico (Média)</h3>
+              <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
               <div className="h-[300px]">
                  {teamStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -606,7 +526,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} />
-                        <Radar name="Técnico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                        <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
                         <RechartsTooltip />
                       </RadarChart>
                    </ResponsiveContainer>
@@ -614,7 +534,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-orange-700 mb-4">Perfil Físico (Média)</h3>
+              <h3 className="font-bold text-orange-700 mb-4">Condição Físico (Média)</h3>
                <div className="h-[300px]">
                  {teamStats ? (
                    <ResponsiveContainer width="100%" height="100%">
@@ -631,8 +551,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           </div>
       </div>
 
-      {/* 3. Evolution Line Chart (Average) */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      {/* Evolution Line Chart */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6">
          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
             <TrendingUp size={20} className="text-green-600"/>
             Evolução Score Médio {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
