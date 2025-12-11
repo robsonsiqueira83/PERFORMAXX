@@ -594,7 +594,102 @@ const AthleteProfile: React.FC = () => {
           </div>
       </div>
 
-      {/* ... (Charts components remain the same) ... */}
+      {/* TACTICAL CHARTS ROW */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
+              <div className="h-[250px]">
+                 {currentRadarStats && currentRadarStats.tactical_def ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_def}>
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
+              <div className="h-[250px]">
+                 {currentRadarStats && currentRadarStats.tactical_const ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_const}>
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
+              <div className="h-[250px]">
+                 {currentRadarStats && currentRadarStats.tactical_ult ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_ult}>
+                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+      </div>
+
+      {/* TECH/PHYS Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-blue-700 mb-4">Fundamentos</h3>
+              <div className="h-[300px]">
+                 {currentRadarStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.technical}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-orange-700 mb-4">Condição Física</h3>
+               <div className="h-[300px]">
+                 {currentRadarStats ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.physical}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
+                        <RechartsTooltip />
+                      </RadarChart>
+                   </ResponsiveContainer>
+                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+              </div>
+          </div>
+      </div>
+
+      {/* Evolution Line Chart */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6">
+         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <TrendingUp size={20} className="text-green-600"/>
+            Evolução Score Total
+         </h3>
+         <div className="h-[300px]">
+             {historyData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={historyData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" />
+                        <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" />
+                        <RechartsTooltip />
+                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+             ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados históricos para o período selecionado</div>}
+         </div>
+      </div>
 
       {/* History List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
