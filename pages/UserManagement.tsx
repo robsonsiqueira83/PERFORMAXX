@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -18,7 +18,7 @@ const UserManagement: React.FC = () => {
 
   // Modal States
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string, isGuestMaster: boolean } | null>(null);
   
   // Invite Modal State
   const [inviteModal, setInviteModal] = useState<{ isOpen: boolean, user: User | null, newTeams: string[] }>({ isOpen: false, user: null, newTeams: [] });
@@ -51,7 +51,7 @@ const UserManagement: React.FC = () => {
 
       // 2. Filter Users: Strict Multi-tenancy Rules
       const filteredUsers = allUsers.filter(u => {
-          // Rule A: Never show Global Users in a Master Panel list
+          // Rule A: Never show Global Users in a Master Panel list (unless viewing self)
           if (u.role === UserRole.GLOBAL) {
               if (loggedUser.role === UserRole.GLOBAL && contextId === loggedUser.id) return true;
               return false;
@@ -60,13 +60,18 @@ const UserManagement: React.FC = () => {
           // Rule B: Show the Master of this panel
           if (u.role === UserRole.MASTER && u.id === contextId) return true;
 
-          // Rule C: Hide other Masters
-          if (u.role === UserRole.MASTER && u.id !== contextId) return false;
+          // Rule C: GUEST MASTERS - Show Masters who are NOT the owner but have access to teams in this panel
+          if (u.role === UserRole.MASTER && u.id !== contextId) {
+              const activeTeamIds = (u.teamIds || []).filter(id => !id.startsWith('pending:'));
+              const hasAccessToPanelTeam = activeTeamIds.some(tid => panelTeamIds.includes(tid));
+              if (hasAccessToPanelTeam) return true;
+              return false;
+          }
 
           // Rule D: For Staff, show only if they are assigned to at least one team in this panel (exclude pending)
           if (u.teamIds && u.teamIds.length > 0) {
               // We filter out pending IDs to determine visibility in the "Active Users" list
-              const activeTeamIds = u.teamIds.filter(id => !id.startsWith('pending:'));
+              const activeTeamIds = (u.teamIds || []).filter(id => !id.startsWith('pending:'));
               const hasAccessToPanelTeam = activeTeamIds.some(tid => panelTeamIds.includes(tid));
               return hasAccessToPanelTeam;
           }
@@ -202,12 +207,35 @@ const UserManagement: React.FC = () => {
       setTimeout(() => window.location.reload(), 1000);
   };
 
+  const requestDelete = (user: User) => {
+      // If the user is a MASTER but NOT the owner of this panel, it's a Guest Master
+      const isGuestMaster = user.role === UserRole.MASTER && user.id !== currentContextId;
+      setDeleteConfirmation({ id: user.id, isGuestMaster });
+  };
+
   const confirmDelete = async () => {
-    if (deleteConfirmation && currentUser) {
-        await deleteUser(deleteConfirmation);
-        await loadData(currentContextId, currentUser);
-        setDeleteConfirmation(null);
+    if (!deleteConfirmation || !currentUser) return;
+
+    if (deleteConfirmation.isGuestMaster) {
+        // REVOKE ACCESS ONLY
+        // Find the user to revoke
+        const targetUser = users.find(u => u.id === deleteConfirmation.id);
+        if (targetUser) {
+            // Get IDs of teams owned by CURRENT CONTEXT
+            const panelTeamIds = teams.map(t => t.id);
+            // Remove these teams from the target user
+            const newTeamIds = (targetUser.teamIds || []).filter(tid => !panelTeamIds.includes(tid) && !panelTeamIds.includes(tid.replace('pending:', '')));
+            
+            await saveUser({ ...targetUser, teamIds: newTeamIds });
+            setSuccessMessage("Acesso revogado com sucesso!");
+        }
+    } else {
+        // DELETE USER (Regular Staff created in this panel)
+        await deleteUser(deleteConfirmation.id);
     }
+
+    await loadData(currentContextId, currentUser);
+    setDeleteConfirmation(null);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -419,15 +447,20 @@ const UserManagement: React.FC = () => {
        <div className="grid grid-cols-1 gap-3">
            {users.map(u => {
                const perm = getPermissionDescription(u.role);
+               // Check if user is a Guest Master (Master role but not owner of this panel)
+               const isGuestMaster = u.role === UserRole.MASTER && u.id !== currentContextId;
+               
                return (
-               <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm gap-4">
+               <div key={u.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 ${isGuestMaster ? 'bg-purple-50 border-purple-200' : 'bg-white'}`}>
                    <div className="flex items-center gap-4 w-full">
                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
                        <div className="flex-1 min-w-0">
                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
-                               {(u.role === UserRole.MASTER || u.role === UserRole.GLOBAL) && (
-                                   <span className="text-[10px] bg-gray-100 text-gray-500 font-mono px-2 py-0.5 rounded border border-gray-200 truncate" title="ID do Painel">ID: {u.id}</span>
+                               {isGuestMaster && (
+                                   <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300 truncate flex items-center gap-1">
+                                       <Briefcase size={10} /> Mestre Convidado
+                                   </span>
                                )}
                            </div>
                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -435,14 +468,27 @@ const UserManagement: React.FC = () => {
                                <span className="hidden sm:inline text-gray-300">•</span>
                                <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
                            </div>
-                           <div className="flex items-center gap-1 mt-1">
-                               <div className="text-xs text-gray-400">{perm.title}</div>
+                           <div className="flex flex-col mt-1">
+                               <div className="text-xs text-gray-400">{isGuestMaster ? "Colaborador Externo (Acesso Master)" : perm.title}</div>
+                               {(u.role === UserRole.MASTER || u.role === UserRole.GLOBAL) && (
+                                   <span className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {u.id}</span>
+                               )}
                            </div>
                        </div>
                    </div>
                    <div className="flex gap-2 self-end md:self-center">
-                       <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
-                       {u.id !== currentUser?.id && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
+                       {/* Don't allow editing Guest Masters, only Revoke */}
+                       {!isGuestMaster && <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>}
+                       
+                       {u.id !== currentUser?.id && (
+                           <button 
+                               onClick={() => requestDelete(u)} 
+                               className={`${isGuestMaster ? 'text-orange-600 bg-orange-50 hover:bg-orange-100' : 'text-red-600 bg-red-50 hover:bg-red-100'} p-2 rounded-lg transition-colors`}
+                               title={isGuestMaster ? "Revogar Acesso" : "Excluir Usuário"}
+                           >
+                               {isGuestMaster ? <UserMinus size={18} /> : <Trash2 size={18} />}
+                           </button>
+                       )}
                    </div>
                </div>
            )})}
@@ -493,14 +539,20 @@ const UserManagement: React.FC = () => {
        {deleteConfirmation && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
-                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <Trash2 className="text-red-600" size={32} />
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${deleteConfirmation.isGuestMaster ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>
+                     {deleteConfirmation.isGuestMaster ? <UserMinus size={32} /> : <Trash2 size={32} />}
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir Usuário?</h3>
-                 <p className="text-gray-500 mb-6">Esta ação não pode ser desfeita. Tem certeza?</p>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">{deleteConfirmation.isGuestMaster ? 'Revogar Acesso?' : 'Excluir Usuário?'}</h3>
+                 <p className="text-gray-500 mb-6">
+                     {deleteConfirmation.isGuestMaster 
+                        ? "O usuário perderá acesso aos times deste painel, mas a conta dele continuará existindo."
+                        : "Esta ação não pode ser desfeita. Tem certeza?"}
+                 </p>
                  <div className="flex gap-3">
                      <button onClick={() => setDeleteConfirmation(null)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                     <button onClick={confirmDelete} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
+                     <button onClick={confirmDelete} className={`flex-1 text-white font-bold py-2 rounded-lg ${deleteConfirmation.isGuestMaster ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                         {deleteConfirmation.isGuestMaster ? 'Revogar' : 'Excluir'}
+                     </button>
                  </div>
              </div>
          </div>
