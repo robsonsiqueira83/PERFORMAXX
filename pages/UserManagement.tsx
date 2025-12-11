@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Info, Eye, Database, X, Globe } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -13,22 +13,62 @@ const UserManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentContextId, setCurrentContextId] = useState<string>('');
 
   // Modal States
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('performax_current_user');
-    if (stored) setCurrentUser(JSON.parse(stored));
-    loadData();
+    const storedUser = localStorage.getItem('performax_current_user');
+    const storedContext = localStorage.getItem('performax_context_id');
+    
+    if (storedUser) {
+        const u = JSON.parse(storedUser);
+        setCurrentUser(u);
+        // Determine context: Use stored context ID, fallback to user ID (if master), fallback to empty
+        const ctx = storedContext || u.id;
+        setCurrentContextId(ctx);
+        loadData(ctx, u);
+    }
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (contextId: string, loggedUser: User) => {
       setLoading(true);
-      const [u, t] = await Promise.all([getUsers(), getTeams()]);
-      setUsers(u);
-      setTeams(t);
+      const [allUsers, allTeams] = await Promise.all([getUsers(), getTeams()]);
+      
+      // 1. Filter Teams: Only show teams owned by the current Context (Master)
+      const panelTeams = allTeams.filter(t => t.ownerId === contextId);
+      setTeams(panelTeams);
+      const panelTeamIds = panelTeams.map(t => t.id);
+
+      // 2. Filter Users: Strict Multi-tenancy Rules
+      const filteredUsers = allUsers.filter(u => {
+          // Rule A: Never show Global Users in a Master Panel list
+          if (u.role === UserRole.GLOBAL) {
+              // Exception: If I am Global and I am viewing my own Global Context (contextId == myId)
+              if (loggedUser.role === UserRole.GLOBAL && contextId === loggedUser.id) return true;
+              return false;
+          }
+
+          // Rule B: Show the Master of this panel
+          if (u.role === UserRole.MASTER && u.id === contextId) return true;
+
+          // Rule C: Hide other Masters
+          if (u.role === UserRole.MASTER && u.id !== contextId) return false;
+
+          // Rule D: For Staff (Tecnico, Scout, etc.), show only if they are assigned to at least one team in this panel
+          // Check intersection of user.teamIds and panelTeamIds
+          if (u.teamIds && u.teamIds.length > 0) {
+              const hasAccessToPanelTeam = u.teamIds.some(tid => panelTeamIds.includes(tid));
+              return hasAccessToPanelTeam;
+          }
+
+          // Default: Hide users with no teams in this panel
+          return false;
+      });
+
+      setUsers(filteredUsers);
       setLoading(false);
   };
 
@@ -74,13 +114,18 @@ const UserManagement: React.FC = () => {
             teamIds: (roleToSave === UserRole.MASTER || roleToSave === UserRole.GLOBAL) ? [] : (editingUser.teamIds || [])
         };
         
+        // Ensure new users get 'created_at' if your DB expects it, though DB default handles it mostly.
         const { error: saveError } = await saveUser(user);
 
         if (saveError) {
             throw saveError;
         }
 
-        await loadData();
+        // Reload data with current context
+        if (currentUser) {
+            await loadData(currentContextId, currentUser);
+        }
+        
         setEditingUser(null);
         setSuccessMessage("Usuário salvo com sucesso!");
 
@@ -97,9 +142,9 @@ const UserManagement: React.FC = () => {
   };
 
   const confirmDelete = async () => {
-    if (deleteConfirmation) {
+    if (deleteConfirmation && currentUser) {
         await deleteUser(deleteConfirmation);
-        await loadData();
+        await loadData(currentContextId, currentUser);
         setDeleteConfirmation(null);
     }
   };
@@ -174,6 +219,16 @@ const UserManagement: React.FC = () => {
                <Plus size={20} /> Novo Usuário
            </button>
        </div>
+       
+       {teams.length === 0 && (
+           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-lg mb-6 flex items-center gap-3">
+               <AlertCircle size={24} />
+               <div>
+                   <p className="font-bold">Atenção</p>
+                   <p className="text-sm">Você ainda não possui times cadastrados neste painel. Crie times no menu "Admin" antes de adicionar usuários técnicos.</p>
+               </div>
+           </div>
+       )}
 
        {editingUser && (
            <div className="bg-white p-6 rounded-xl mb-8 border-2 border-blue-100 shadow-lg animate-fade-in relative">
@@ -220,8 +275,10 @@ const UserManagement: React.FC = () => {
                           onChange={e => handleRoleChange(e.target.value as UserRole)}
                        >
                            {Object.values(UserRole).map(role => (
-                               // Only show GLOBAL option if current user is GLOBAL
+                               // Hide GLOBAL unless current user is GLOBAL
                                (role === UserRole.GLOBAL && currentUser?.role !== UserRole.GLOBAL) ? null :
+                               // Hide MASTER unless current user is creating a new Master (only allowed for Global usually)
+                               (role === UserRole.MASTER && currentUser?.role !== UserRole.GLOBAL) ? null :
                                <option key={role} value={role}>{role}</option>
                            ))}
                        </select>
@@ -278,6 +335,9 @@ const UserManagement: React.FC = () => {
                               <AlertCircle size={12}/> É necessário selecionar pelo menos um time.
                           </p>
                       )}
+                      {teams.length === 0 && (
+                          <p className="text-sm text-gray-500 italic mt-2">Nenhum time disponível. Crie times antes de atribuir permissões.</p>
+                      )}
                    </div>
                )}
 
@@ -331,6 +391,11 @@ const UserManagement: React.FC = () => {
                    </div>
                </div>
            )})}
+           {users.length === 0 && (
+               <div className="p-8 text-center text-gray-500 italic border border-dashed border-gray-200 rounded-xl">
+                   Nenhum usuário adicional encontrado neste painel.
+               </div>
+           )}
        </div>
 
        {/* --- MODALS --- */}
