@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAthletes, getCategories, saveAthlete, getTrainingEntries, getTeams } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy, ArrowRight, UserCheck, XCircle } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy, ArrowRight, UserCheck, XCircle, ArrowRightLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -13,7 +13,7 @@ interface AthletesListProps {
 const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [incomingTransfers, setIncomingTransfers] = useState<Athlete[]>([]); // New state for transfers
-  const [teams, setTeams] = useState<Team[]>([]); // For displaying origin team name
+  const [teams, setTeams] = useState<Team[]>([]); // For displaying origin team name and selection
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [entries, setEntries] = useState<any[]>([]); // To calc scores
@@ -23,6 +23,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [sortBy, setSortBy] = useState('registration'); // registration, score, age, alpha
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Transfer Modal State
+  const [transferModal, setTransferModal] = useState<{ isOpen: boolean; athlete: Athlete | null }>({ isOpen: false, athlete: null });
+  const [targetTransferTeamId, setTargetTransferTeamId] = useState<string>('');
 
   // User State for Permissions
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -56,7 +60,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         // 1. Regular Athletes
         setAthletes(a.filter(item => item.teamId === teamId));
         
-        // 2. Incoming Transfers (Targeting this team)
+        // 2. Incoming Transfers (Targeting this team OR generally assigned to current user context logic if improved later)
+        // Currently checks if pendingTransferTeamId matches current view
         setIncomingTransfers(a.filter(item => item.pendingTransferTeamId === teamId));
 
         setCategories(c.filter(item => item.teamId === teamId));
@@ -153,20 +158,33 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   };
 
   // --- TRANSFER HANDLING ---
-  const handleAcceptTransfer = async (athlete: Athlete) => {
-      // 1. Move to current teamId
+  
+  const openTransferModal = (athlete: Athlete) => {
+      // Default to current teamId if available in the list
+      setTargetTransferTeamId(teamId);
+      setTransferModal({ isOpen: true, athlete });
+  };
+
+  const confirmTransfer = async () => {
+      const { athlete } = transferModal;
+      if (!athlete || !targetTransferTeamId) return;
+
+      // 1. Move to selected teamId
       // 2. Clear pending
       // 3. Clear category (must be reassigned in new team)
+      // Note: Data linked by athleteId (entries) moves automatically because ID persists
       const updatedAthlete = {
           ...athlete,
-          teamId: teamId,
-          pendingTransferTeamId: undefined, // remove pending
+          teamId: targetTransferTeamId,
+          pendingTransferTeamId: undefined, // remove pending (service handles undefined as null update)
           categoryId: '' // reset category
       };
-      // Explicitly pass undefined to ensure Supabase update clears it if needed, though saving with null/undefined usually works via the service logic
-      // In service we handle undefined -> null
+      
+      // Explicit casting to ensure type compatibility
       await saveAthlete(updatedAthlete as Athlete);
-      setFeedback({ type: 'success', message: `${athlete.name} transferido com sucesso!` });
+      
+      setTransferModal({ isOpen: false, athlete: null });
+      setFeedback({ type: 'success', message: `${athlete.name} transferido e dados migrados com sucesso!` });
       setRefreshKey(prev => prev + 1);
   };
 
@@ -190,6 +208,15 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   };
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 rounded p-2 text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
+
+  // Filter teams available for the current user to transfer INTO
+  const myAvailableTeams = useMemo(() => {
+      if (!currentUser) return [];
+      return teams.filter(t => 
+          t.ownerId === currentUser.id || // Owned
+          currentUser.teamIds?.includes(t.id) // Member
+      );
+  }, [teams, currentUser]);
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
@@ -222,7 +249,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                               </div>
                               <div className="flex gap-2">
                                   <button 
-                                    onClick={() => handleAcceptTransfer(athlete)}
+                                    onClick={() => openTransferModal(athlete)}
                                     className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 text-sm font-bold"
                                     title="Aceitar"
                                   >
@@ -438,9 +465,52 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         </div>
       )}
 
+      {/* ACCEPT TRANSFER MODAL */}
+      {transferModal.isOpen && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+                 <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                         <ArrowRightLeft className="text-blue-600" /> Aceitar Transferência
+                     </h3>
+                     <button onClick={() => setTransferModal({isOpen: false, athlete: null})}><X size={20} className="text-gray-400 hover:text-gray-600"/></button>
+                 </div>
+                 
+                 <p className="text-sm text-gray-600 mb-6">
+                     Selecione o time de destino para o atleta <strong>{transferModal.athlete?.name}</strong>. Todos os dados históricos serão migrados automaticamente.
+                 </p>
+
+                 <div className="mb-6">
+                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Time de Destino</label>
+                     <select 
+                        className={inputClass}
+                        value={targetTransferTeamId}
+                        onChange={(e) => setTargetTransferTeamId(e.target.value)}
+                     >
+                         <option value="">Selecione um time...</option>
+                         {myAvailableTeams.map(t => (
+                             <option key={t.id} value={t.id}>{t.name}</option>
+                         ))}
+                     </select>
+                 </div>
+
+                 <div className="flex gap-3">
+                     <button onClick={() => setTransferModal({isOpen: false, athlete: null})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                     <button 
+                        onClick={confirmTransfer} 
+                        disabled={!targetTransferTeamId}
+                        className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                         Confirmar
+                     </button>
+                 </div>
+             </div>
+         </div>
+      )}
+
       {/* FEEDBACK MODAL (Toast style but centered/modal as requested) */}
       {feedback && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
                  <button onClick={() => setFeedback(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
