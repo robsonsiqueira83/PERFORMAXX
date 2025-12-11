@@ -7,7 +7,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -15,7 +15,7 @@ interface AdminProps {
 }
 
 // Modal types
-type ModalType = 'none' | 'delete_confirm_simple' | 'delete_migrate_warn' | 'edit_team' | 'edit_category' | 'delete_category_confirm' | 'alert_error' | 'alert_success';
+type ModalType = 'none' | 'delete_confirm_simple' | 'delete_migrate_warn' | 'edit_team' | 'edit_category' | 'delete_category_confirm' | 'alert_error' | 'alert_success' | 'leave_team_confirm';
 
 const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   // Initialize tab from localStorage to persist state after reload
@@ -31,9 +31,11 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   const [loading, setLoading] = useState(false);
   const [viewingContextId, setViewingContextId] = useState<string>('');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   // Data State
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [ownedTeams, setOwnedTeams] = useState<Team[]>([]);
+  const [guestTeams, setGuestTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Modal State
@@ -58,6 +60,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   useEffect(() => {
     // Get context ID from local storage to ensure new teams are assigned to the correct Master/Panel
     const ctxId = localStorage.getItem('performax_context_id');
+    const userStr = localStorage.getItem('performax_current_user');
+    
+    if (userStr) setCurrentUser(JSON.parse(userStr));
     if (ctxId) setViewingContextId(ctxId);
 
     refreshData(ctxId);
@@ -66,15 +71,30 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const refreshData = async (ctxId?: string | null) => {
     setLoading(true);
     const allTeams = await getTeams();
-    // Filter teams displayed in Admin to only those owned by the current Context
-    // This prevents seeing teams from other contexts even if invited
+    const userStr = localStorage.getItem('performax_current_user');
+    const u: User | null = userStr ? JSON.parse(userStr) : null;
+
     const contextId = ctxId || viewingContextId;
+    
+    // 1. Owned Teams (Managed by this Panel)
     if (contextId) {
-        setTeams(allTeams.filter(t => t.ownerId === contextId));
+        setOwnedTeams(allTeams.filter(t => t.ownerId === contextId));
     } else {
-        setTeams(allTeams); // Fallback
+        setOwnedTeams(allTeams); 
+    }
+
+    // 2. Guest Teams (Teams I accepted to work in, but don't own)
+    // Only relevant if I am viewing my own context or I am the user
+    if (u) {
+        // Filter teams where user has access (in teamIds) BUT is not the owner
+        const myGuestTeams = allTeams.filter(t => 
+            u.teamIds?.includes(t.id) && t.ownerId !== u.id
+        );
+        setGuestTeams(myGuestTeams);
     }
     
+    // Categories for the currently selected team (in header)
+    // Only if the currentTeamId belongs to the owned/guest lists
     const c = await getCategories();
     setCategories(c.filter(item => item.teamId === currentTeamId));
     setLoading(false);
@@ -161,7 +181,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     if (hasData) {
         setModalType('delete_migrate_warn');
         // Pre-select first available other team if exists
-        const otherTeams = teams.filter(t => t.id !== team.id);
+        const otherTeams = ownedTeams.filter(t => t.id !== team.id);
         if (otherTeams.length > 0) setMigrationDestTeamId(otherTeams[0].id);
     } else {
         setModalType('delete_confirm_simple');
@@ -242,6 +262,27 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       }
   };
 
+  // --- LEAVE TEAM LOGIC ---
+  const handleLeaveTeamClick = (team: Team) => {
+      setTargetId(team.id);
+      setTargetName(team.name);
+      setModalType('leave_team_confirm');
+  };
+
+  const confirmLeaveTeam = async () => {
+      if (!targetId || !currentUser) return;
+      
+      const newTeamIds = (currentUser.teamIds || []).filter(id => id !== targetId);
+      const updatedUser = { ...currentUser, teamIds: newTeamIds };
+      
+      await saveUser(updatedUser);
+      // Update local storage to reflect change immediately
+      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
+      
+      closeModal();
+      window.location.reload();
+  };
+
 
   // --- CATEGORY MANAGEMENT LOGIC ---
 
@@ -284,8 +325,110 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
+  const fieldBoxClass = "flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full transition-colors hover:border-gray-300";
 
-  if (loading && teams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading && ownedTeams.length === 0 && guestTeams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+
+  const renderTeamCard = (team: Team, isGuest: boolean) => {
+      const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
+      return (
+        <div key={team.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-5 border rounded-xl hover:bg-gray-50 transition-all gap-4 bg-white shadow-sm group">
+            <div className="flex flex-col gap-3 w-full">
+                {/* 1. Header: Logo + Name */}
+                <div className="flex items-center gap-3 mb-1">
+                    {team.logoUrl ? (
+                        <img src={team.logoUrl} className="w-10 h-10 object-contain rounded bg-gray-100 p-1" />
+                    ) : (
+                        <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>
+                    )}
+                    <span className="font-bold text-gray-800 text-lg">{team.name}</span>
+                    {isGuest && <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200 uppercase">Convidado</span>}
+                </div>
+
+                {/* 2. Public Link Field */}
+                <div className={fieldBoxClass}>
+                    <LinkIcon size={14} className="text-gray-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 font-bold uppercase mr-1 hidden sm:inline">Link:</span>
+                    <input 
+                        type="text" 
+                        readOnly 
+                        value={publicLink} 
+                        className="text-xs text-gray-600 bg-transparent border-none focus:outline-none flex-1 min-w-0 font-mono truncate"
+                        onClick={(e) => e.currentTarget.select()}
+                    />
+                    <div className="flex items-center pl-1 ml-1 gap-1 flex-shrink-0 border-l border-gray-200">
+                        <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(publicLink);
+                                showAlert('alert_success', 'Link copiado!');
+                            }}
+                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                            title="Copiar Link"
+                        >
+                            <Copy size={14} />
+                        </button>
+                        <a 
+                            href={publicLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                            title="Abrir em nova aba"
+                        >
+                            <ExternalLink size={14} />
+                        </a>
+                    </div>
+                </div>
+
+                {/* 3. Team ID Field */}
+                <div className={fieldBoxClass}>
+                    <Hash size={14} className="text-gray-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 font-bold uppercase mr-1 hidden sm:inline">ID:</span>
+                    <input 
+                        type="text" 
+                        readOnly 
+                        value={team.id} 
+                        className="text-xs text-gray-600 bg-transparent border-none focus:outline-none flex-1 min-w-0 font-mono truncate"
+                        onClick={(e) => e.currentTarget.select()}
+                    />
+                    <div className="flex items-center pl-1 ml-1 gap-1 flex-shrink-0 border-l border-gray-200">
+                        <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(team.id);
+                                showAlert('alert_success', 'ID do time copiado!');
+                            }}
+                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                            title="Copiar ID"
+                        >
+                            <Copy size={14} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Actions Column */}
+            <div className="flex gap-2 w-full md:w-auto md:flex-col justify-end h-full">
+                {!isGuest ? (
+                    <>
+                        {canEdit && (
+                            <button onClick={() => openEditTeamModal(team)} className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 py-2 px-4 hover:bg-blue-100 rounded-lg transition-colors text-sm font-bold w-full">
+                                <Edit size={16}/> <span className="md:hidden">Editar</span>
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button onClick={() => handleDeleteTeamClick(team)} className="flex items-center justify-center gap-2 text-red-600 bg-red-50 py-2 px-4 hover:bg-red-100 rounded-lg transition-colors text-sm font-bold w-full">
+                                <Trash2 size={16}/> <span className="md:hidden">Excluir</span>
+                            </button>
+                        )}
+                    </>
+                ) : (
+                    <button onClick={() => handleLeaveTeamClick(team)} className="flex items-center justify-center gap-2 text-orange-600 bg-orange-50 py-2 px-4 hover:bg-orange-100 rounded-lg transition-colors text-sm font-bold w-full md:w-32 whitespace-nowrap" title="Deixar de trabalhar neste time">
+                        <LogOut size={16}/> Sair do Time
+                    </button>
+                )}
+            </div>
+        </div>
+      );
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
@@ -303,102 +446,40 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         
         {/* Teams Tab */}
         {activeTab === 'teams' && (
-          <div>
-            <div className="mb-6 flex justify-between items-center">
-               <h3 className="font-bold text-lg text-gray-800">Gerenciar Times (Painel Atual)</h3>
-               {canEdit && (
-                   <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                       <Plus size={16}/> Novo Time
-                   </button>
-               )}
-            </div>
+          <div className="space-y-8">
             
-            <div className="space-y-3">
-               {teams.map(team => {
-                 const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
-                 
-                 return (
-                    <div key={team.id} className="flex flex-col md:flex-row justify-between items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors gap-4 bg-white shadow-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-1 w-full">
-                            <div className="flex items-center gap-3">
-                                {team.logoUrl ? (
-                                    <img src={team.logoUrl} className="w-10 h-10 object-contain rounded bg-gray-100 p-1" />
-                                ) : (
-                                    <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>
-                                )}
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-gray-800 whitespace-nowrap text-lg">{team.name}</span>
-                                    
-                                    {/* TEAM ID DISPLAY */}
-                                    <div className="flex items-center gap-2 mt-1">
-                                         <div className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-xs text-gray-500 font-mono" title="ID do Time">
-                                             <Hash size={10} /> {team.id}
-                                         </div>
-                                         <button 
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(team.id);
-                                                showAlert('alert_success', 'ID do time copiado!');
-                                            }}
-                                            className="text-gray-400 hover:text-blue-600 p-0.5"
-                                            title="Copiar ID"
-                                         >
-                                             <Copy size={12} />
-                                         </button>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* Public Link Box */}
-                            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-full sm:max-w-md">
-                                <LinkIcon size={14} className="text-gray-400 flex-shrink-0" />
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={publicLink} 
-                                    className="text-xs text-gray-500 bg-transparent border-none focus:outline-none flex-1 min-w-0 font-mono"
-                                    onClick={(e) => e.currentTarget.select()}
-                                />
-                                <div className="flex items-center border-l border-gray-200 pl-1 ml-1 gap-1 flex-shrink-0">
-                                    <button 
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(publicLink);
-                                          showAlert('alert_success', 'Link copiado!');
-                                        }}
-                                        className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                                        title="Copiar Link"
-                                    >
-                                        <Copy size={14} />
-                                    </button>
-                                    <a 
-                                        href={publicLink} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                                        title="Abrir em nova aba"
-                                    >
-                                        <ExternalLink size={14} />
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2 w-full md:w-auto justify-end">
-                            {canEdit && (
-                                <button onClick={() => openEditTeamModal(team)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors">
-                                    <Edit size={18}/>
-                                </button>
-                            )}
-                            {canDelete && (
-                                <button onClick={() => handleDeleteTeamClick(team)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors">
-                                    <Trash2 size={18}/>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                 );
-               })}
-               {teams.length === 0 && <div className="text-gray-400 text-center py-4 italic">Nenhum time criado neste painel.</div>}
+            {/* SECTION 1: MY TEAMS */}
+            <div>
+                <div className="mb-4 flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                        Gerenciar Meus Times
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{ownedTeams.length}</span>
+                    </h3>
+                    {canEdit && (
+                        <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm">
+                            <Plus size={16}/> Novo Time
+                        </button>
+                    )}
+                </div>
+                <div className="space-y-4">
+                    {ownedTeams.map(team => renderTeamCard(team, false))}
+                    {ownedTeams.length === 0 && <div className="text-gray-400 text-center py-8 italic border border-dashed border-gray-200 rounded-xl bg-gray-50">Nenhum time criado neste painel.</div>}
+                </div>
             </div>
+
+            {/* SECTION 2: GUEST TEAMS */}
+            {guestTeams.length > 0 && (
+                <div className="pt-6 border-t border-gray-200">
+                    <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
+                        Times em que Colaboro
+                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{guestTeams.length}</span>
+                    </h3>
+                    <div className="space-y-4">
+                        {guestTeams.map(team => renderTeamCard(team, true))}
+                    </div>
+                </div>
+            )}
+
           </div>
         )}
 
@@ -406,7 +487,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         {activeTab === 'categories' && (
            <div>
              <div className="mb-6 flex justify-between items-center">
-               <h3 className="font-bold text-lg text-gray-800">Categorias ({teams.find(t => t.id === currentTeamId)?.name})</h3>
+               <h3 className="font-bold text-lg text-gray-800">
+                   Categorias ({[...ownedTeams, ...guestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
+               </h3>
                {canEdit && (
                    <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
                        <Plus size={16}/> Nova Categoria
@@ -574,7 +657,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                          <ArrowRightLeft size={16} /> Migrar dados para:
                      </label>
                      
-                     {teams.length > 1 ? (
+                     {ownedTeams.length > 1 ? (
                         <select 
                             className={inputClass}
                             value={migrationDestTeamId}
@@ -583,7 +666,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                                 setNewTeamName('');
                             }}
                         >
-                            {teams.filter(t => t.id !== targetId).map(t => (
+                            {ownedTeams.filter(t => t.id !== targetId).map(t => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                             <option value="">+ Criar Novo Time</option>
@@ -593,7 +676,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                      )}
 
                      {/* Create New Team Inline */}
-                     {(!migrationDestTeamId || teams.length <= 1) && (
+                     {(!migrationDestTeamId || ownedTeams.length <= 1) && (
                          <div className="mt-3 animate-fade-in bg-blue-50 p-3 rounded-lg border border-blue-100">
                              <label className="block text-xs font-bold text-blue-700 mb-1">Nome do Novo Time de Destino</label>
                              <input 
@@ -641,7 +724,24 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
          </div>
       )}
 
-      {/* 6. GENERIC ALERTS (Success/Error) */}
+      {/* 6. LEAVE TEAM CONFIRM */}
+      {modalType === 'leave_team_confirm' && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <LogOut className="text-orange-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Sair do Time?</h3>
+                 <p className="text-gray-500 mb-6">Você perderá o acesso ao time <strong>{targetName}</strong>. Esta ação não apaga o time, apenas remove seu acesso.</p>
+                 <div className="flex gap-3">
+                     <button onClick={closeModal} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                     <button onClick={confirmLeaveTeam} className="flex-1 bg-orange-600 text-white font-bold py-2 rounded-lg hover:bg-orange-700">Sair</button>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* 7. GENERIC ALERTS (Success/Error) */}
       {(modalType === 'alert_success' || modalType === 'alert_error') && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
