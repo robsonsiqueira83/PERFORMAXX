@@ -385,10 +385,38 @@ const AthleteProfile: React.FC = () => {
 
   const openNewTrainingModal = () => {
     setEditingEntryId(null);
-    setCurrentStats(resetStats());
+    setTrainingDate(new Date().toISOString().split('T')[0]);
+    
+    // --- CALCULATE AVERAGES FOR NEW ENTRY ---
+    if (entries.length > 0) {
+        const defaultKeys = resetStats();
+        const newStats: any = {};
+        
+        Object.keys(defaultKeys).forEach(key => {
+            let sum = 0;
+            let count = 0;
+            
+            entries.forEach(entry => {
+                const val = (entry.technical as any)[key] ?? (entry.physical as any)[key] ?? (entry.tactical as any)?.[key];
+                if (val !== undefined && val !== null) {
+                    sum += Number(val);
+                    count++;
+                }
+            });
+            
+            if (count > 0) {
+                newStats[key] = Math.round((sum / count) * 2) / 2;
+            } else {
+                newStats[key] = 5;
+            }
+        });
+        setCurrentStats(newStats);
+    } else {
+        setCurrentStats(resetStats());
+    }
+
     setCurrentHeatmapPoints([]);
     setCurrentNotes('');
-    setTrainingDate(new Date().toISOString().split('T')[0]);
     setShowTrainingModal(true);
   };
 

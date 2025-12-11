@@ -78,7 +78,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         {/* Header Section */}
         <div className="bg-white p-8 pb-0 flex flex-col items-center">
            <img 
-             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO2.png" 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO.png" 
              alt="PERFORMAXX" 
              className="w-64 max-w-full object-contain mb-2"
            />

@@ -33,14 +33,16 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   // Session State
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Stats State
-  const [stats, setStats] = useState({
+  const getDefaultStats = () => ({
     velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
     controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
     def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
     const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
     ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
   });
+
+  // Stats State
+  const [stats, setStats] = useState(getDefaultStats());
   
   // Heatmap State
   const [heatmapPoints, setHeatmapPoints] = useState<HeatmapPoint[]>([]);
@@ -102,51 +104,54 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     setLoading(true); 
     
     try {
-        const [allEntries, allSessions] = await Promise.all([
-            getTrainingEntries(),
-            getTrainingSessions()
-        ]);
-
+        const allEntries = await getTrainingEntries();
         const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
         
+        // --- NEW LOGIC: CALCULATE AVERAGES ---
         if (athleteEntries.length > 0) {
-            const entriesWithDate = athleteEntries.map(e => {
-                const s = allSessions.find(s => s.id === e.sessionId);
-                return { ...e, _date: s ? s.date : '1970-01-01' };
-            }).sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
-
-            const latest = entriesWithDate[0];
-            
-            if (latest.tactical && latest.tactical.def_posicionamento !== undefined) {
-                 setStats({ 
-                    ...latest.technical, 
-                    ...latest.physical, 
-                    ...latest.tactical
+             const defaultKeys = getDefaultStats();
+             const newStats: any = {};
+             
+             Object.keys(defaultKeys).forEach(key => {
+                 let sum = 0;
+                 let count = 0;
+                 
+                 athleteEntries.forEach(entry => {
+                     // Check technical, physical, then tactical
+                     // Casting to any to access dynamic properties for calculation
+                     const val = (entry.technical as any)[key] ?? (entry.physical as any)[key] ?? (entry.tactical as any)?.[key];
+                     
+                     if (val !== undefined && val !== null) {
+                         sum += Number(val);
+                         count++;
+                     }
                  });
-            } else {
-                setStats(getDefaultStats());
-            }
-            setHeatmapPoints([]); 
+                 
+                 if (count > 0) {
+                     // Calculate Average and Round to nearest 0.5
+                     newStats[key] = Math.round((sum / count) * 2) / 2;
+                 } else {
+                     newStats[key] = 5; // Fallback
+                 }
+             });
+             
+             setStats(newStats);
         } else {
             setStats(getDefaultStats());
-            setHeatmapPoints([]);
         }
+        
+        // Reset Heatmap and Notes for new entry
+        setHeatmapPoints([]); 
+        setNotes('');
+
     } catch (e) {
+        console.error("Error calculating averages", e);
         setStats(getDefaultStats());
         setHeatmapPoints([]);
     }
 
-    setNotes('');
     setLoading(false);
   };
-
-  const getDefaultStats = () => ({
-    velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-    controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-    def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-    const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-    ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-  });
 
   const handleSaveEntry = async () => {
     if (!selectedAthlete || !selectedCategory || !date) return;
