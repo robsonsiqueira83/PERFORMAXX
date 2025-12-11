@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { getUsers, saveUser, deleteUser } from '../services/storageService';
+import { processImageUpload } from '../services/imageService';
 import { User, UserRole } from '../types';
-import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save } from 'lucide-react';
+import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -17,10 +18,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   
-  // Create Global Modal State
-  const [isCreating, setIsCreating] = useState(false);
-  const [newGlobalData, setNewGlobalData] = useState({ name: '', email: '', password: '' });
-  const [createError, setCreateError] = useState('');
+  // Create/Edit Global Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editData, setEditData] = useState<Partial<User>>({ name: '', email: '', password: '', role: UserRole.GLOBAL });
+  const [modalError, setModalError] = useState('');
+
+  // Delete Confirmation State
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, userId: string | null, userName: string }>({ isOpen: false, userId: null, userName: '' });
 
   useEffect(() => {
     loadData();
@@ -37,42 +41,77 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
        setLoading(false);
   };
 
-  const handleCreateGlobal = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+      setEditData({ name: '', email: '', password: '', role: UserRole.GLOBAL, avatarUrl: '' });
+      setModalError('');
+      setIsModalOpen(true);
+  };
+
+  const openEditModal = (user: User) => {
+      setEditData({ ...user }); // Clone user data
+      setModalError('');
+      setIsModalOpen(true);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const url = await processImageUpload(e.target.files[0]);
+          setEditData({ ...editData, avatarUrl: url });
+      }
+  };
+
+  const handleSaveGlobal = async (e: React.FormEvent) => {
       e.preventDefault();
-      setCreateError('');
+      setModalError('');
       
-      if (!newGlobalData.name || !newGlobalData.email || !newGlobalData.password) {
-          setCreateError('Preencha todos os campos.');
+      if (!editData.name || !editData.email) {
+          setModalError('Preencha nome e email.');
+          return;
+      }
+      
+      // For new users, password is required
+      if (!editData.id && !editData.password) {
+          setModalError('Senha é obrigatória para novos usuários.');
           return;
       }
 
-      const newUser: User = {
-          id: uuidv4(),
-          name: newGlobalData.name,
-          email: newGlobalData.email,
-          password: newGlobalData.password,
+      const userToSave: User = {
+          id: editData.id || uuidv4(),
+          name: editData.name,
+          email: editData.email,
+          password: editData.password || undefined, // Keep existing if undefined in logic (backend handles usually, but here we assume upsert overrides if provided)
           role: UserRole.GLOBAL,
-          avatarUrl: '',
-          teamIds: []
+          avatarUrl: editData.avatarUrl || '',
+          teamIds: editData.teamIds || []
       };
+      
+      // If updating, preserve password if not changed (StorageService upsert overwrites whole object, need to ensure password persistence if logic requires)
+      if (editData.id && !editData.password) {
+          const existing = users.find(u => u.id === editData.id);
+          if (existing) userToSave.password = existing.password;
+      }
 
-      const { error } = await saveUser(newUser);
+      const { error } = await saveUser(userToSave);
       if (error) {
           if (error.code === '23505') {
-              setCreateError('Email já cadastrado.');
+              setModalError('Email já cadastrado.');
           } else {
-              setCreateError('Erro ao criar usuário.');
+              setModalError('Erro ao salvar usuário.');
           }
       } else {
-          setIsCreating(false);
-          setNewGlobalData({ name: '', email: '', password: '' });
+          setIsModalOpen(false);
           loadData();
       }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-      if (window.confirm("Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.")) {
-          await deleteUser(userId);
+  const requestDelete = (user: User) => {
+      setDeleteConfirm({ isOpen: true, userId: user.id, userName: user.name });
+  };
+
+  const confirmDelete = async () => {
+      if (deleteConfirm.userId) {
+          await deleteUser(deleteConfirm.userId);
+          setDeleteConfirm({ isOpen: false, userId: null, userName: '' });
           loadData();
       }
   };
@@ -127,9 +166,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
             {currentUser && (
                 <div className="bg-gradient-to-r from-blue-900 to-gray-800 rounded-xl border border-blue-700 p-6 flex items-center justify-between shadow-xl">
                     <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-2xl font-bold text-white border-2 border-white shadow-md">
-                            {currentUser.name.charAt(0)}
-                        </div>
+                         {currentUser.avatarUrl ? (
+                            <img src={currentUser.avatarUrl} className="w-16 h-16 rounded-full border-2 border-white shadow-md object-cover" />
+                        ) : (
+                            <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-2xl font-bold text-white border-2 border-white shadow-md">
+                                {currentUser.name.charAt(0)}
+                            </div>
+                        )}
                         <div>
                             <h2 className="text-xl font-bold text-white">Olá, {currentUser.name}</h2>
                             <p className="text-blue-200 text-sm">{currentUser.email}</p>
@@ -155,38 +198,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                         <ShieldCheck size={20} /> Administradores Globais
                     </h2>
                     <button 
-                        onClick={() => setIsCreating(true)}
+                        onClick={openCreateModal}
                         className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition"
                     >
                         <UserPlus size={16} /> Novo Admin
                     </button>
                 </div>
                 
-                {/* Create Global Form (Inline/Modal) */}
-                {isCreating && (
-                    <div className="p-6 bg-gray-900 border-b border-gray-700 animate-fade-in">
-                        <form onSubmit={handleCreateGlobal} className="max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Nome</label>
-                                <input required type="text" className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" value={newGlobalData.name} onChange={e => setNewGlobalData({...newGlobalData, name: e.target.value})} />
-                            </div>
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
-                                <input required type="email" className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" value={newGlobalData.email} onChange={e => setNewGlobalData({...newGlobalData, email: e.target.value})} />
-                            </div>
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Senha</label>
-                                <input required type="password" className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" value={newGlobalData.password} onChange={e => setNewGlobalData({...newGlobalData, password: e.target.value})} />
-                            </div>
-                            <div className="flex gap-2">
-                                <button type="button" onClick={() => setIsCreating(false)} className="bg-gray-700 text-white p-2 rounded hover:bg-gray-600"><X size={20}/></button>
-                                <button type="submit" className="bg-green-600 text-white p-2 rounded hover:bg-green-500 flex-1 flex items-center justify-center gap-1"><Save size={18}/> Salvar</button>
-                            </div>
-                        </form>
-                        {createError && <p className="text-red-400 text-center text-sm mt-2">{createError}</p>}
-                    </div>
-                )}
-
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-gray-900/30 text-gray-500 text-xs uppercase">
@@ -200,13 +218,14 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                             {globalAdmins.map(u => (
                                 <tr key={u.id} className="hover:bg-gray-700/30">
                                     <td className="px-6 py-3 font-medium text-white flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-purple-900/50 text-purple-300 flex items-center justify-center text-xs font-bold">{u.name.charAt(0)}</div>
+                                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-purple-900/50 text-purple-300 flex items-center justify-center text-xs font-bold">{u.name.charAt(0)}</div>}
                                         {u.name} {u.id === currentUser?.id && <span className="text-xs text-gray-500">(Você)</span>}
                                     </td>
                                     <td className="px-6 py-3 text-gray-400 text-sm">{u.email}</td>
-                                    <td className="px-6 py-3 text-right">
+                                    <td className="px-6 py-3 text-right flex justify-end gap-2">
+                                        <button onClick={() => openEditModal(u)} className="text-blue-400 hover:text-blue-300 p-1 hover:bg-gray-700 rounded transition"><Edit size={16}/></button>
                                         {u.id !== currentUser?.id && (
-                                            <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-400 p-1 hover:bg-gray-700 rounded transition"><Trash2 size={16} /></button>
+                                            <button onClick={() => requestDelete(u)} className="text-red-500 hover:text-red-400 p-1 hover:bg-gray-700 rounded transition"><Trash2 size={16} /></button>
                                         )}
                                     </td>
                                 </tr>
@@ -278,9 +297,8 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                                         >
                                             Acessar <ExternalLink size={14} />
                                         </button>
-                                        {/* Global can delete Master directly here */}
                                         <button 
-                                            onClick={() => handleDeleteUser(user.id)}
+                                            onClick={() => requestDelete(user)}
                                             className="bg-red-900/30 border border-red-900 hover:bg-red-900/50 text-red-400 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all"
                                         >
                                             <Trash2 size={14} />
@@ -296,6 +314,80 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                 </div>
             </div>
         </div>
+
+        {/* --- MODALS --- */}
+
+        {/* 1. EDIT/CREATE GLOBAL USER MODAL */}
+        {isModalOpen && (
+             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-700">
+                   <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                         {editData.id ? <Edit className="text-blue-400"/> : <UserPlus className="text-green-400"/>}
+                         {editData.id ? 'Editar Admin Global' : 'Novo Admin Global'}
+                      </h3>
+                      <button onClick={() => setIsModalOpen(false)}><X className="text-gray-500 hover:text-white" /></button>
+                   </div>
+
+                   <form onSubmit={handleSaveGlobal} className="space-y-4">
+                      <div className="flex flex-col items-center mb-6">
+                         <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-500">
+                             {editData.avatarUrl ? (
+                                 <img src={editData.avatarUrl} className="w-full h-full object-cover" />
+                             ) : (
+                                 <UserIcon size={32} className="text-gray-400" />
+                             )}
+                         </div>
+                         <label className="cursor-pointer text-blue-400 text-sm font-bold flex items-center gap-1 hover:text-blue-300">
+                             <Upload size={14} /> Alterar Foto
+                             <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                         </label>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">Nome Completo</label>
+                          <input required type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
+                          <input required type="email" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">Senha {editData.id && '(Opcional)'}</label>
+                          <input type="password" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.password || ''} onChange={e => setEditData({...editData, password: e.target.value})} placeholder={editData.id ? 'Manter senha atual' : ''} />
+                      </div>
+                      
+                      {modalError && <p className="text-red-400 text-center text-sm font-bold bg-red-900/20 p-2 rounded">{modalError}</p>}
+
+                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md transition flex items-center justify-center gap-2 mt-2">
+                          <Save size={18}/> Salvar
+                      </button>
+                   </form>
+                </div>
+             </div>
+        )}
+
+        {/* 2. DELETE CONFIRMATION MODAL */}
+        {deleteConfirm.isOpen && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-gray-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center border border-red-900/50">
+                     <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-800">
+                         <AlertTriangle className="text-red-500" size={32} />
+                     </div>
+                     <h3 className="text-xl font-bold text-white mb-2">Atenção!</h3>
+                     <p className="text-gray-400 mb-6">
+                        Você está prestes a excluir o usuário <strong>{deleteConfirm.userName}</strong>. 
+                        <br/><br/>
+                        <span className="text-red-400 font-bold">Esta ação é irreversível e pode remover acesso a times vinculados.</span>
+                     </p>
+                     <div className="flex gap-3">
+                         <button onClick={() => setDeleteConfirm({isOpen: false, userId: null, userName: ''})} className="flex-1 bg-gray-700 text-white font-bold py-2 rounded-lg hover:bg-gray-600">Cancelar</button>
+                         <button onClick={confirmDelete} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Confirmar Exclusão</button>
+                     </div>
+                </div>
+            </div>
+        )}
+
     </div>
   );
 };

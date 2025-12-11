@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [allSystemUsers, setAllSystemUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,6 +19,11 @@ const UserManagement: React.FC = () => {
   // Modal States
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
+  
+  // Invite Modal State
+  const [inviteModal, setInviteModal] = useState<{ isOpen: boolean, user: User | null, newTeams: string[] }>({ isOpen: false, user: null, newTeams: [] });
+  // Pending Invites (For the logged in user)
+  const [pendingInvites, setPendingInvites] = useState<{team: Team, inviterId: string}[]>([]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('performax_current_user');
@@ -36,6 +42,7 @@ const UserManagement: React.FC = () => {
   const loadData = async (contextId: string, loggedUser: User) => {
       setLoading(true);
       const [allUsers, allTeams] = await Promise.all([getUsers(), getTeams()]);
+      setAllSystemUsers(allUsers);
       
       // 1. Filter Teams: Only show teams owned by the current Context (Master)
       const panelTeams = allTeams.filter(t => t.ownerId === contextId);
@@ -46,7 +53,6 @@ const UserManagement: React.FC = () => {
       const filteredUsers = allUsers.filter(u => {
           // Rule A: Never show Global Users in a Master Panel list
           if (u.role === UserRole.GLOBAL) {
-              // Exception: If I am Global and I am viewing my own Global Context (contextId == myId)
               if (loggedUser.role === UserRole.GLOBAL && contextId === loggedUser.id) return true;
               return false;
           }
@@ -57,29 +63,32 @@ const UserManagement: React.FC = () => {
           // Rule C: Hide other Masters
           if (u.role === UserRole.MASTER && u.id !== contextId) return false;
 
-          // Rule D: For Staff (Tecnico, Scout, etc.), show only if they are assigned to at least one team in this panel
-          // Check intersection of user.teamIds and panelTeamIds
+          // Rule D: For Staff, show only if they are assigned to at least one team in this panel (exclude pending)
           if (u.teamIds && u.teamIds.length > 0) {
-              const hasAccessToPanelTeam = u.teamIds.some(tid => panelTeamIds.includes(tid));
+              // We filter out pending IDs to determine visibility in the "Active Users" list
+              const activeTeamIds = u.teamIds.filter(id => !id.startsWith('pending:'));
+              const hasAccessToPanelTeam = activeTeamIds.some(tid => panelTeamIds.includes(tid));
               return hasAccessToPanelTeam;
           }
 
-          // Default: Hide users with no teams in this panel
           return false;
       });
 
       setUsers(filteredUsers);
+
+      // 3. Check for Pending Invites for the CURRENT USER (Logged in)
+      if (loggedUser.teamIds) {
+          const pendingIds = loggedUser.teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
+          const invites = allTeams.filter(t => pendingIds.includes(t.id)).map(t => ({ team: t, inviterId: t.ownerId || '' }));
+          setPendingInvites(invites);
+      }
+
       setLoading(false);
   };
 
   const handleRoleChange = (newRole: UserRole) => {
     if (!editingUser) return;
-    
-    // Logic: 
-    // MASTER/GLOBAL -> teamIds = [] (Implies access to all or via Dashboard)
-    // OTHERS -> teamIds = current selection or []
     const isSuper = newRole === UserRole.MASTER || newRole === UserRole.GLOBAL;
-    
     setEditingUser({
         ...editingUser,
         role: newRole,
@@ -93,6 +102,30 @@ const UserManagement: React.FC = () => {
         if (!editingUser?.name || !editingUser?.email || !editingUser.role) {
             setError("Preencha todos os campos obrigatórios.");
             return;
+        }
+
+        // Check if email already exists in system (Global check)
+        const existingUser = allSystemUsers.find(u => u.email === editingUser.email && u.id !== editingUser.id);
+        
+        if (existingUser) {
+             // INVITE FLOW
+             if (editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL) {
+                 // Calculate which teams are new to this user
+                 const selectedTeams = editingUser.teamIds || [];
+                 // Filter out teams the user already has
+                 const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
+                 
+                 if (newTeamsToInvite.length > 0) {
+                     setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
+                     return; // Stop standard save
+                 } else {
+                     setError("Este usuário já possui acesso ou convite pendente para os times selecionados.");
+                     return;
+                 }
+             } else {
+                 setError("Este email já está cadastrado como usuário do sistema.");
+                 return;
+             }
         }
 
         // Security Check: Non-MASTER/GLOBAL users MUST have at least one team
@@ -114,31 +147,59 @@ const UserManagement: React.FC = () => {
             teamIds: (roleToSave === UserRole.MASTER || roleToSave === UserRole.GLOBAL) ? [] : (editingUser.teamIds || [])
         };
         
-        // Ensure new users get 'created_at' if your DB expects it, though DB default handles it mostly.
         const { error: saveError } = await saveUser(user);
 
-        if (saveError) {
-            throw saveError;
-        }
+        if (saveError) throw saveError;
 
-        // Reload data with current context
-        if (currentUser) {
-            await loadData(currentContextId, currentUser);
-        }
+        if (currentUser) await loadData(currentContextId, currentUser);
         
         setEditingUser(null);
         setSuccessMessage("Usuário salvo com sucesso!");
 
     } catch (err: any) {
         console.error("Erro ao salvar usuário:", err);
-        if (err.code === '23505') {
-            setError("Este email já está em uso por outro usuário.");
-        } else {
-            setError(err.message || "Erro desconhecido ao salvar.");
-        }
+        setError(err.message || "Erro desconhecido ao salvar.");
     } finally {
         setSaving(false);
     }
+  };
+
+  const confirmInvite = async () => {
+      if (!inviteModal.user) return;
+      
+      const userToUpdate = { ...inviteModal.user };
+      const currentTeamIds = userToUpdate.teamIds || [];
+      
+      // Add "pending:" prefix to new teams
+      const pendingTeamIds = inviteModal.newTeams.map(id => `pending:${id}`);
+      
+      userToUpdate.teamIds = [...currentTeamIds, ...pendingTeamIds];
+      
+      await saveUser(userToUpdate);
+      setInviteModal({ isOpen: false, user: null, newTeams: [] });
+      setEditingUser(null);
+      setSuccessMessage("Convite enviado com sucesso! O usuário deverá aceitar o acesso.");
+  };
+
+  const acceptInvite = async (teamId: string) => {
+      if (!currentUser) return;
+      
+      const updatedIds = (currentUser.teamIds || []).map(id => {
+          if (id === `pending:${teamId}`) return teamId; // Remove pending prefix
+          return id;
+      });
+      
+      const updatedUser = { ...currentUser, teamIds: updatedIds };
+      
+      // Optimistic update
+      setCurrentUser(updatedUser);
+      setPendingInvites(prev => prev.filter(i => i.team.id !== teamId));
+      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
+      
+      await saveUser(updatedUser);
+      setSuccessMessage(`Convite para ${teams.find(t=>t.id === teamId)?.name || 'o time'} aceito!`);
+      // Reload to reflect access in layout
+      setTimeout(() => window.location.reload(), 1000);
   };
 
   const confirmDelete = async () => {
@@ -166,42 +227,14 @@ const UserManagement: React.FC = () => {
       }
   };
 
-  // Helper to get permission description
   const getPermissionDescription = (role: UserRole) => {
     switch (role) {
-        case UserRole.GLOBAL:
-            return {
-                icon: <Globe className="text-purple-600" size={24} />,
-                title: "Super Admin (Global)",
-                desc: "Acesso irrestrito a TODOS os painéis Master do sistema. Pode criar outros Globais.",
-                color: "bg-purple-50 border-purple-200 text-purple-900"
-            };
-        case UserRole.MASTER:
-            return {
-                icon: <ShieldCheck className="text-blue-600" size={24} />,
-                title: "Dono do Painel (Master)",
-                desc: "Controle total do seu próprio painel (Times, Atletas). Possui ID único de Tenant.",
-                color: "bg-blue-50 border-blue-200 text-blue-900"
-            };
+        case UserRole.GLOBAL: return { icon: <Globe className="text-purple-600" size={24} />, title: "Super Admin (Global)", desc: "Acesso irrestrito a TODOS os painéis Master.", color: "bg-purple-50 border-purple-200 text-purple-900" };
+        case UserRole.MASTER: return { icon: <ShieldCheck className="text-blue-600" size={24} />, title: "Dono do Painel (Master)", desc: "Controle total do seu próprio painel.", color: "bg-blue-50 border-blue-200 text-blue-900" };
         case UserRole.TECNICO:
         case UserRole.AUXILIAR:
-        case UserRole.SCOUT:
-            return {
-                icon: <Database className="text-green-600" size={24} />,
-                title: "Gestão de Dados (Restrito)",
-                desc: "Pode cadastrar e editar dados (Atletas, Treinos) dos times selecionados.",
-                color: "bg-green-50 border-green-200 text-green-900"
-            };
-        case UserRole.PREPARADOR:
-        case UserRole.MASSAGISTA:
-            return {
-                icon: <Eye className="text-orange-600" size={24} />,
-                title: "Apenas Visualização",
-                desc: "Acesso somente leitura aos dados dos times selecionados.",
-                color: "bg-orange-50 border-orange-200 text-orange-900"
-            };
-        default:
-            return { icon: null, title: "", desc: "", color: "" };
+        case UserRole.SCOUT: return { icon: <Database className="text-green-600" size={24} />, title: "Gestão de Dados", desc: "Pode cadastrar e editar dados nos times selecionados.", color: "bg-green-50 border-green-200 text-green-900" };
+        default: return { icon: <Eye className="text-orange-600" size={24} />, title: "Apenas Visualização", desc: "Acesso somente leitura.", color: "bg-orange-50 border-orange-200 text-orange-900" };
     }
   };
 
@@ -211,6 +244,36 @@ const UserManagement: React.FC = () => {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
+       
+       {/* PENDING INVITES SECTION (For the logged in user) */}
+       {pendingInvites.length > 0 && (
+           <div className="mb-8 bg-indigo-50 border border-indigo-200 rounded-xl p-6 animate-fade-in">
+               <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2 mb-4">
+                   <Mail className="text-indigo-600" /> Convites Pendentes
+               </h3>
+               <p className="text-sm text-indigo-700 mb-4">Você foi convidado para colaborar nos seguintes times:</p>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   {pendingInvites.map((invite) => (
+                       <div key={invite.team.id} className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100 flex justify-between items-center">
+                           <div className="flex items-center gap-3">
+                                {invite.team.logoUrl ? <img src={invite.team.logoUrl} className="w-10 h-10 object-contain" /> : <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center font-bold text-gray-500">{invite.team.name.charAt(0)}</div>}
+                                <div>
+                                    <h4 className="font-bold text-gray-800">{invite.team.name}</h4>
+                                    <p className="text-xs text-gray-500">Convite ID: {invite.inviterId.substring(0,8)}...</p>
+                                </div>
+                           </div>
+                           <button 
+                                onClick={() => acceptInvite(invite.team.id)}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
+                           >
+                               <UserCheck size={16} /> Aceitar
+                           </button>
+                       </div>
+                   ))}
+               </div>
+           </div>
+       )}
+
        <div className="flex justify-between items-center mb-6">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
@@ -275,9 +338,7 @@ const UserManagement: React.FC = () => {
                           onChange={e => handleRoleChange(e.target.value as UserRole)}
                        >
                            {Object.values(UserRole).map(role => (
-                               // Hide GLOBAL unless current user is GLOBAL
                                (role === UserRole.GLOBAL && currentUser?.role !== UserRole.GLOBAL) ? null :
-                               // Hide MASTER unless current user is creating a new Master (only allowed for Global usually)
                                (role === UserRole.MASTER && currentUser?.role !== UserRole.GLOBAL) ? null :
                                <option key={role} value={role}>{role}</option>
                            ))}
@@ -296,7 +357,6 @@ const UserManagement: React.FC = () => {
                    </div>
                </div>
 
-               {/* PERMISSION INFO BOX */}
                {editingUser.role && (() => {
                    const info = getPermissionDescription(editingUser.role);
                    return (
@@ -310,7 +370,6 @@ const UserManagement: React.FC = () => {
                    );
                })()}
 
-               {/* TEAM SELECTION */}
                {editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (
                    <div className="mt-6 border-t border-gray-100 pt-4">
                       <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
@@ -367,7 +426,6 @@ const UserManagement: React.FC = () => {
                        <div className="flex-1 min-w-0">
                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
-                               {/* SHOW ID FOR MASTER/GLOBAL */}
                                {(u.role === UserRole.MASTER || u.role === UserRole.GLOBAL) && (
                                    <span className="text-[10px] bg-gray-100 text-gray-500 font-mono px-2 py-0.5 rounded border border-gray-200 truncate" title="ID do Painel">ID: {u.id}</span>
                                )}
@@ -377,8 +435,6 @@ const UserManagement: React.FC = () => {
                                <span className="hidden sm:inline text-gray-300">•</span>
                                <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
                            </div>
-                           
-                           {/* Info Permissions */}
                            <div className="flex items-center gap-1 mt-1">
                                <div className="text-xs text-gray-400">{perm.title}</div>
                            </div>
@@ -386,7 +442,6 @@ const UserManagement: React.FC = () => {
                    </div>
                    <div className="flex gap-2 self-end md:self-center">
                        <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
-                       {/* Cannot delete self or Master if not Global */}
                        {u.id !== currentUser?.id && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
                    </div>
                </div>
@@ -399,6 +454,27 @@ const UserManagement: React.FC = () => {
        </div>
 
        {/* --- MODALS --- */}
+       {inviteModal.isOpen && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Mail className="text-blue-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Enviar Convite?</h3>
+                 <p className="text-gray-500 mb-4">
+                     O email <strong>{inviteModal.user?.email}</strong> já possui cadastro no PerformaXX.
+                 </p>
+                 <p className="text-sm text-blue-700 bg-blue-50 p-3 rounded-lg mb-6">
+                     Deseja enviar um convite para colaborar nos times selecionados? O usuário verá um pedido de aprovação ao logar.
+                 </p>
+                 <div className="flex gap-3">
+                     <button onClick={() => setInviteModal({isOpen: false, user: null, newTeams: []})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                     <button onClick={confirmInvite} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Enviar Convite</button>
+                 </div>
+             </div>
+         </div>
+       )}
+
        {successMessage && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
