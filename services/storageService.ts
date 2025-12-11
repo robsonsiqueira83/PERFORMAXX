@@ -26,16 +26,10 @@ export const saveUser = async (user: User) => {
     name: user.name,
     email: user.email,
     password: user.password,
-    role: user.role,
-    avatar_url: user.avatarUrl
+    role: user.role, // Ensure this is passed
+    avatar_url: user.avatarUrl,
+    team_ids: user.teamIds || [] // ALWAYS pass this, even if empty array, to ensure DB updates (e.g. clearing permissions)
   };
-
-  // Only include team_ids if there are actually teams to save.
-  // This allows Master registration (empty teamIds) to succeed even if the 'team_ids' column 
-  // is missing from the database schema.
-  if (user.teamIds && user.teamIds.length > 0) {
-    dbUser.team_ids = user.teamIds;
-  }
 
   const { error } = await supabase.from('users').upsert(dbUser);
   if (error) console.error('Error saving user:', error);
