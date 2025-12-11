@@ -32,6 +32,7 @@ export const saveUser = async (user: User) => {
   };
   const { error } = await supabase.from('users').upsert(dbUser);
   if (error) console.error('Error saving user:', error);
+  return { error };
 };
 
 export const deleteUser = async (id: string) => {
