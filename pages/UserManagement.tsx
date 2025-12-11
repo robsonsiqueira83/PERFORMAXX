@@ -59,14 +59,18 @@ const UserManagement: React.FC = () => {
 
         setSaving(true);
 
+        // Ensure role is strictly typed from state
+        const roleToSave = editingUser.role as UserRole;
+
         const user: User = {
             id: editingUser.id || uuidv4(),
             name: editingUser.name,
             email: editingUser.email,
-            role: editingUser.role,
+            role: roleToSave,
             password: editingUser.password || '123456', // Simple default
             avatarUrl: editingUser.avatarUrl,
-            teamIds: editingUser.role === UserRole.MASTER ? [] : (editingUser.teamIds || [])
+            // Logic duplicated here for safety: if Master, force empty teamIds
+            teamIds: roleToSave === UserRole.MASTER ? [] : (editingUser.teamIds || [])
         };
         
         const { error: saveError } = await saveUser(user);
