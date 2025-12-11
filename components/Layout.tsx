@@ -59,12 +59,14 @@ const Layout: React.FC<LayoutProps> = ({
             // Master sees their own teams + teams they are invited to
             // Teams owned by them
             const ownedTeams = allTeams.filter(t => t.ownerId === user.id);
+            
             // Teams they are invited to (via teamIds) - FILTER OUT PENDING INVITES
-            const invitedTeams = allTeams.filter(t => user.teamIds?.includes(t.id));
+            const activeTeamIds = (user.teamIds || []).filter(id => !id.startsWith('pending:'));
+            const invitedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
+            
             userAllowedTeams = [...ownedTeams, ...invitedTeams];
         } else {
             // Regular user sees only invited teams - FILTER OUT PENDING INVITES
-            // Pending invites start with "pending:"
             const activeTeamIds = (user.teamIds || []).filter(id => !id.startsWith('pending:'));
             userAllowedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
         }
