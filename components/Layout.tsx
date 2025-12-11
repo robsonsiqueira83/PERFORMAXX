@@ -234,7 +234,7 @@ const Layout: React.FC<LayoutProps> = ({
                             Olá, <span className="font-bold text-blue-900">{user.name}</span>. <span className="text-gray-500">Em qual time deseja trabalhar?</span>
                          </h2>
                          {/* Return to Global Dashboard Button in Header */}
-                         {isGlobalImpersonating && (
+                         {user.role === UserRole.GLOBAL && (
                              <button
                                  onClick={onReturnToGlobal}
                                  className="flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200"
