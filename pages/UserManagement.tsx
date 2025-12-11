@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X, Info, Lock } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -29,6 +29,20 @@ const UserManagement: React.FC = () => {
       setLoading(false);
   };
 
+  const handleRoleChange = (newRole: UserRole) => {
+    if (!editingUser) return;
+    
+    // Logic: If switching TO Master, we clear teamIds because Master implies access to all.
+    // Logic: If switching FROM Master to others, we ensure teamIds is an array (user must select).
+    const updatedTeamIds = newRole === UserRole.MASTER ? [] : (editingUser.teamIds || []);
+    
+    setEditingUser({
+        ...editingUser,
+        role: newRole,
+        teamIds: updatedTeamIds
+    });
+  };
+
   const handleSave = async () => {
     try {
         setError(null);
@@ -39,7 +53,7 @@ const UserManagement: React.FC = () => {
 
         // Security Check: Non-MASTER users MUST have at least one team
         if (editingUser.role !== UserRole.MASTER && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
-            setError("Para usuários que não são MASTER, é obrigatório selecionar pelo menos um time.");
+            setError("Para usuários com permissão restrita (não-Master), é obrigatório selecionar pelo menos um time.");
             return;
         }
 
@@ -155,7 +169,7 @@ const UserManagement: React.FC = () => {
                        <select 
                           className={inputClass}
                           value={editingUser.role} 
-                          onChange={e => setEditingUser({...editingUser, role: e.target.value as UserRole})}
+                          onChange={e => handleRoleChange(e.target.value as UserRole)}
                        >
                            {Object.values(UserRole).map(role => (
                                <option key={role} value={role}>{role}</option>
@@ -175,30 +189,52 @@ const UserManagement: React.FC = () => {
                    </div>
                </div>
 
-               {editingUser.role !== UserRole.MASTER && (
-                   <div className="mt-6 bg-white p-4 rounded-xl border border-gray-200">
-                      <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                          <CheckSquare size={16} className="text-green-600"/> Liberar Acesso aos Times
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                          {teams.map(team => {
-                              const isSelected = editingUser.teamIds?.includes(team.id);
-                              return (
-                                  <div key={team.id} 
-                                       onClick={() => toggleTeamSelection(team.id)}
-                                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-100'}`}
-                                  >
-                                      {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} className="text-gray-300" />}
-                                      <span className={`text-sm ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
-                                  </div>
-                              );
-                          })}
-                      </div>
-                      {(!editingUser.teamIds || editingUser.teamIds.length === 0) && (
-                          <p className="text-xs text-red-500 mt-2 font-medium">* Selecione pelo menos um time para este usuário.</p>
-                      )}
-                   </div>
-               )}
+               {/* PERMISSION LOGIC UI */}
+               <div className="mt-6">
+                   {editingUser.role === UserRole.MASTER ? (
+                       <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-blue-800 flex items-start gap-3 animate-fade-in">
+                            <ShieldCheck size={24} className="mt-0.5 shrink-0" />
+                            <div>
+                                <p className="font-bold text-sm">Permissão de Acesso Total (Master)</p>
+                                <p className="text-xs mt-1 leading-relaxed">
+                                    Usuários com a função <strong>MASTER</strong> possuem acesso administrativo completo. 
+                                    Eles podem visualizar e editar <strong>todos os times</strong>, gerenciar outros usuários e acessar todas as configurações do sistema.
+                                    Não é necessário selecionar times específicos.
+                                </p>
+                            </div>
+                       </div>
+                   ) : (
+                       <div className="bg-white p-4 rounded-xl border border-gray-200 animate-fade-in">
+                          <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                              <Lock size={16} className="text-orange-500"/> Permissões de Acesso (Restrito)
+                          </label>
+                          <p className="text-xs text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex items-start gap-2">
+                              <Info size={14} className="mt-0.5 shrink-0" />
+                              O usuário terá acesso <strong>apenas</strong> aos dados (atletas, treinos, relatórios) dos times selecionados abaixo.
+                          </p>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                              {teams.map(team => {
+                                  const isSelected = editingUser.teamIds?.includes(team.id);
+                                  return (
+                                      <div key={team.id} 
+                                           onClick={() => toggleTeamSelection(team.id)}
+                                           className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-100'}`}
+                                      >
+                                          {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} className="text-gray-300" />}
+                                          <span className={`text-sm ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                          {(!editingUser.teamIds || editingUser.teamIds.length === 0) && (
+                              <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
+                                  <AlertCircle size={12}/> Selecione pelo menos um time.
+                              </p>
+                          )}
+                       </div>
+                   )}
+               </div>
 
                {error && (
                    <div className="mt-4 bg-red-100 text-red-700 p-3 rounded-lg flex items-center gap-2 text-sm font-bold animate-pulse">
