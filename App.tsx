@@ -10,7 +10,7 @@ import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
 import PublicTeamDashboard from './pages/PublicTeamDashboard';
 import PublicAthleteProfile from './pages/PublicAthleteProfile';
-import { User } from './types';
+import { User, UserRole } from './types';
 import { getTeams } from './services/storageService';
 
 const App: React.FC = () => {
@@ -19,16 +19,48 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check local session (simplified)
-    const storedUser = localStorage.getItem('performax_current_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    // 1. Check local session
+    const storedUserStr = localStorage.getItem('performax_current_user');
+    let currentUser: User | null = null;
+    
+    if (storedUserStr) {
+      currentUser = JSON.parse(storedUserStr);
+      setUser(currentUser);
     }
     
-    // Set default team - Async
+    // 2. Load Teams with PERMISSION check
     const init = async () => {
-        const teams = await getTeams();
-        if (teams.length > 0) setSelectedTeamId(teams[0].id);
+        const allTeams = await getTeams();
+        
+        if (currentUser && allTeams.length > 0) {
+            let allowedTeams = allTeams;
+            
+            // SECURITY: If not MASTER, filter teams strictly by user.teamIds
+            if (currentUser.role !== UserRole.MASTER) {
+                const userTeamIds = currentUser.teamIds || [];
+                allowedTeams = allTeams.filter(t => userTeamIds.includes(t.id));
+            }
+
+            // Only set selectedTeamId if we have allowed teams
+            if (allowedTeams.length > 0) {
+                // Check if currently selected (from props or memory) is still valid, else default to first allowed
+                setSelectedTeamId(prev => {
+                    const isStillValid = allowedTeams.some(t => t.id === prev);
+                    return isStillValid ? prev : allowedTeams[0].id;
+                });
+            } else if (currentUser.role !== UserRole.MASTER) {
+                // If user exists but has NO teams, clear selection (handled in Layout usually)
+                setSelectedTeamId('');
+            } else {
+                // Master default
+                setSelectedTeamId(allTeams[0].id);
+            }
+        } else if (allTeams.length > 0 && !currentUser) {
+             // Not logged in yet, but we might want a default for logic later? 
+             // Usually irrelevant until login, but keeping robust.
+             setSelectedTeamId(allTeams[0].id);
+        }
+        
         setLoading(false);
     };
     init();
@@ -39,10 +71,18 @@ const App: React.FC = () => {
     setUser(u);
     localStorage.setItem('performax_current_user', JSON.stringify(u));
     
-    // Ensure default team is selected if not already
-    if (!selectedTeamId) {
-        const teams = await getTeams();
-        if (teams.length > 0) setSelectedTeamId(teams[0].id);
+    const allTeams = await getTeams();
+    let allowedTeams = allTeams;
+
+    // Apply strict filtering on Login as well
+    if (u.role !== UserRole.MASTER) {
+        allowedTeams = allTeams.filter(t => u.teamIds?.includes(t.id));
+    }
+
+    if (allowedTeams.length > 0) {
+        setSelectedTeamId(allowedTeams[0].id);
+    } else {
+        setSelectedTeamId(''); // User has no teams assigned
     }
 
     // Force redirect to Dashboard
@@ -76,7 +116,8 @@ const App: React.FC = () => {
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
-                  {user.role === 'MASTER' && (
+                  {/* Master Only Route */}
+                  {user.role === UserRole.MASTER && (
                     <Route path="/users" element={<UserManagement />} />
                   )}
                   <Route path="*" element={<Navigate to="/" />} />
