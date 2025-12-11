@@ -137,7 +137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     return filtered.slice(0, 3);
   }, [athletesWithScores, selectedCategory, selectedPosition]);
 
-  // --- Best XI Logic (Field Distribution - 4-4-2) ---
+  // --- Best XI Logic (Field Distribution - 4-1-2-3) ---
   const bestXI = useMemo(() => {
     const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
        const pool = athletesWithScores.filter(a => 
@@ -150,47 +150,60 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
     const selectedIds: string[] = [];
     
-    // Formation 4-4-2 Logic
-    
-    // 1. Goleiro
+    // Formation Logic based on User Request:
+    // Goleiro, Laterais, Zagueiros, Volante, Meio campo, Atacantes, Centro avante
+
+    // 1. Goleiro (1)
     const goleiro = getTopPlayers([Position.GOLEIRO], 1, selectedIds);
     selectedIds.push(...goleiro.map(a => a.id));
 
-    // 2. Defesa (2 Zagueiros, 2 Laterais)
-    const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
-    selectedIds.push(...zagueiros.map(a => a.id));
-
+    // 2. Laterais (2)
     const laterais = getTopPlayers([Position.LATERAL], 2, selectedIds);
     selectedIds.push(...laterais.map(a => a.id));
 
-    // 3. Meio Campo (4 Jogadores - Volantes/Meias)
-    const meioCampo = getTopPlayers([Position.VOLANTE, Position.MEIO_CAMPO], 4, selectedIds);
-    selectedIds.push(...meioCampo.map(a => a.id));
+    // 3. Zagueiros (2)
+    const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
+    selectedIds.push(...zagueiros.map(a => a.id));
 
-    // 4. Ataque (2 Jogadores)
-    const ataque = getTopPlayers([Position.ATACANTE, Position.CENTROAVANTE], 2, selectedIds);
-    selectedIds.push(...ataque.map(a => a.id));
+    // 4. Volante (1)
+    const volante = getTopPlayers([Position.VOLANTE], 1, selectedIds);
+    selectedIds.push(...volante.map(a => a.id));
 
-    // Coordinates adjusted for safety margin (approx 15% from edges)
+    // 5. Meio Campo (2)
+    const meios = getTopPlayers([Position.MEIO_CAMPO], 2, selectedIds);
+    selectedIds.push(...meios.map(a => a.id));
+
+    // 6. Atacantes (2)
+    const atacantes = getTopPlayers([Position.ATACANTE], 2, selectedIds);
+    selectedIds.push(...atacantes.map(a => a.id));
+
+    // 7. Centro Avante (1)
+    const centroavante = getTopPlayers([Position.CENTROAVANTE], 1, selectedIds);
+    selectedIds.push(...centroavante.map(a => a.id));
+
     return [
-        // GK
-        { role: 'GK', player: goleiro[0], style: { bottom: '12%', left: '50%' } }, 
+        // GK (Bottom 5% - Close to goal line)
+        { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } }, 
         
-        // Defense Line
-        { role: 'LE', player: laterais[0], style: { bottom: '30%', left: '15%' } }, 
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '28%', left: '38%' } }, 
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '28%', left: '62%' } }, 
-        { role: 'LD', player: laterais[1], style: { bottom: '30%', left: '85%' } }, 
+        // Defesa (Laterais + Zagueiros)
+        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '15%' } }, 
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '18%', left: '38%' } }, 
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '18%', left: '62%' } }, 
+        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '85%' } }, 
         
-        // Midfield Line
-        { role: 'ME', player: meioCampo[0], style: { bottom: '55%', left: '15%' } }, 
-        { role: 'MC', player: meioCampo[1], style: { bottom: '52%', left: '38%' } }, 
-        { role: 'MC', player: meioCampo[2], style: { bottom: '52%', left: '62%' } }, 
-        { role: 'MD', player: meioCampo[3], style: { bottom: '55%', left: '85%' } }, 
+        // Volante (Central)
+        { role: 'VOL', player: volante[0], style: { bottom: '40%', left: '50%' } }, 
         
-        // Attack Line
-        { role: 'AT', player: ataque[0], style: { bottom: '82%', left: '35%' } }, 
-        { role: 'AT', player: ataque[1], style: { bottom: '82%', left: '65%' } }, 
+        // Meio Campo (Ahead of Volante)
+        { role: 'MC', player: meios[0], style: { bottom: '55%', left: '30%' } }, 
+        { role: 'MC', player: meios[1], style: { bottom: '55%', left: '70%' } }, 
+        
+        // Ataque (Wingers)
+        { role: 'AT', player: atacantes[0], style: { bottom: '70%', left: '20%' } }, 
+        { role: 'AT', player: atacantes[1], style: { bottom: '70%', left: '80%' } }, 
+        
+        // Centro Avante (Max 80% to safe margin from top)
+        { role: 'CA', player: centroavante[0], style: { bottom: '80%', left: '50%' } }, 
     ];
   }, [athletesWithScores, selectedCategory]);
 
@@ -437,7 +450,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
          <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
             <Shirt size={20} className="text-green-600"/>
-            Seleção do Momento (4-4-2) {selectedCategory !== 'all' && `- ${categories.find(c => c.id === selectedCategory)?.name}`}
+            Seleção do Momento (4-3-3) {selectedCategory !== 'all' && `- ${categories.find(c => c.id === selectedCategory)?.name}`}
          </h3>
          
          {/* Field Container */}
