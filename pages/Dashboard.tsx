@@ -11,7 +11,7 @@ import {
   getTrainingEntries, 
   getTrainingSessions 
 } from '../services/storageService';
-import { calculateTotalScore, Position, Athlete, Category, TrainingSession, TrainingEntry, getCalculatedCategory } from '../types';
+import { calculateTotalScore, Position, Athlete, Category, TrainingSession, TrainingEntry, getCalculatedCategory, User, canEditData } from '../types';
 
 interface DashboardProps {
   teamId: string;
@@ -20,13 +20,15 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
-  // Default set to 'all' as requested
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   
   // Custom Date Range State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // User for permissions
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Data State
   const [athletes, setAthletes] = useState<Athlete[]>([]);
@@ -35,6 +37,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [entries, setEntries] = useState<TrainingEntry[]>([]);
 
   useEffect(() => {
+    // Get current user for permission check
+    const storedUser = localStorage.getItem('performax_current_user');
+    if (storedUser) setCurrentUser(JSON.parse(storedUser));
+
     const loadData = async () => {
         setLoading(true);
         const [a, c, s, e] = await Promise.all([
@@ -55,7 +61,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   // --- Filter Sessions by Period ---
   const filteredSessions = useMemo(() => {
     const now = new Date();
-    // Reset time to midnight for accurate day comparison
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     
     return sessions.filter(s => {
@@ -77,7 +82,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
            const startYear = `${now.getFullYear()}-01-01`;
            return sIso >= startYear;
         case 'custom':
-           if (!startDate || !endDate) return true; // Return all if dates invalid
+           if (!startDate || !endDate) return true; 
            return sIso >= startDate && sIso <= endDate;
         case 'all':
         default:
@@ -134,12 +139,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   // --- Best XI Logic (Field Distribution) ---
   const bestXI = useMemo(() => {
-    // Helper to get top N players by position list
     const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
        const pool = athletesWithScores.filter(a => 
          positions.includes(a.position) && 
          !excludeIds.includes(a.id) && 
-         (selectedCategory === 'all' || a.categoryId === selectedCategory) // Filter by category
+         (selectedCategory === 'all' || a.categoryId === selectedCategory) 
        );
        return pool.slice(0, count);
     };
@@ -163,22 +167,22 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     selectedIds.push(...ataque.map(a => a.id));
 
     return [
-        { role: 'GK', player: goleiro[0], style: { bottom: '10%', left: '50%' } }, // Goleiro (up from 5%)
-        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '20%' } }, // Lateral Esq (in from 15%)
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '25%', left: '38%' } }, // Zagueiro 1
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '25%', left: '62%' } }, // Zagueiro 2
-        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '80%' } }, // Lateral Dir (in from 85%)
-        { role: 'MC', player: meioCampo[0], style: { bottom: '50%', left: '25%' } }, // Meio 1 (in from 20%)
-        { role: 'MC', player: meioCampo[1], style: { bottom: '50%', left: '50%' } }, // Meio 2
-        { role: 'MC', player: meioCampo[2], style: { bottom: '50%', left: '75%' } }, // Meio 3 (in from 80%)
-        { role: 'AT', player: ataque[0], style: { bottom: '75%', left: '25%' } }, // Atacante 1 (in from 20%, down from 80%)
-        { role: 'AT', player: ataque[1], style: { bottom: '80%', left: '50%' } }, // Centroavante (down from 85%)
-        { role: 'AT', player: ataque[2], style: { bottom: '75%', left: '75%' } }, // Atacante 2 (in from 80%, down from 80%)
+        { role: 'GK', player: goleiro[0], style: { bottom: '10%', left: '50%' } }, 
+        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '20%' } }, 
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '25%', left: '38%' } }, 
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '25%', left: '62%' } }, 
+        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '80%' } }, 
+        { role: 'MC', player: meioCampo[0], style: { bottom: '50%', left: '25%' } }, 
+        { role: 'MC', player: meioCampo[1], style: { bottom: '50%', left: '50%' } }, 
+        { role: 'MC', player: meioCampo[2], style: { bottom: '50%', left: '75%' } }, 
+        { role: 'AT', player: ataque[0], style: { bottom: '75%', left: '25%' } }, 
+        { role: 'AT', player: ataque[1], style: { bottom: '80%', left: '50%' } }, 
+        { role: 'AT', player: ataque[2], style: { bottom: '75%', left: '75%' } }, 
     ];
   }, [athletesWithScores, selectedCategory]);
 
 
-  // --- Logic for Evolution Chart (Average of team/category over time) ---
+  // --- Logic for Evolution Chart ---
   const evolutionData = useMemo(() => {
       let relevantSessions = filteredSessions;
       if (selectedCategory !== 'all') {
@@ -201,7 +205,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       }).filter(Boolean);
   }, [filteredSessions, filteredEntries, selectedCategory]);
 
-  // --- Logic for Aggregate Stats (Averages of filtered entries) ---
+  // --- Logic for Aggregate Stats ---
   const teamStats = useMemo(() => {
     if (filteredEntries.length === 0) return null;
 
@@ -291,6 +295,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       {/* Top Controls & Quick Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto flex-wrap">
+          {/* ... filters ... */}
           <div className="flex flex-col">
              <label className="text-xs font-semibold text-gray-500 mb-1">CATEGORIA</label>
              <select 
@@ -359,10 +364,13 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
               <Users size={16} />
               Atletas
            </Link>
-           <Link to="/training" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              <ClipboardList size={16} />
-              Nova Atuação
-           </Link>
+           {/* HIDE NEW TRAINING IF READ ONLY */}
+           {currentUser && canEditData(currentUser.role) && (
+               <Link to="/training" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                  <ClipboardList size={16} />
+                  Nova Atuação
+               </Link>
+           )}
         </div>
       </div>
 

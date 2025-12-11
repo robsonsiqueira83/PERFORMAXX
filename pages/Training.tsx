@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions, getTrainingEntries
 } from '../services/storageService';
-import { Athlete, Category, TrainingEntry, TrainingSession, Position, HeatmapPoint } from '../types';
+import { Athlete, Category, TrainingEntry, TrainingSession, Position, HeatmapPoint, User, canEditData } from '../types';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
-import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2, Search, Filter } from 'lucide-react';
+import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2, Search, Filter, AlertOctagon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface TrainingProps {
@@ -15,6 +15,8 @@ interface TrainingProps {
 
 const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCategory, setSelectedCategory] = useState('');
   
@@ -31,21 +33,12 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   // Session State
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Stats State - Updated Structure
+  // Stats State
   const [stats, setStats] = useState({
-    // Condição Física
     velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-    
-    // Fundamentos
     controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-
-    // Tático - Defendendo
     def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-
-    // Tático - Construindo
     const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-
-    // Tático - Último Terço
     ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
   });
   
@@ -58,6 +51,13 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const [notification, setNotification] = useState<string | null>(null);
 
   useEffect(() => {
+    // Permission check
+    const storedUser = localStorage.getItem('performax_current_user');
+    if (storedUser) {
+        const u = JSON.parse(storedUser);
+        setCurrentUser(u);
+    }
+
     const init = async () => {
         setLoading(true);
         const [c, a] = await Promise.all([getCategories(), getAthletes()]);
@@ -71,20 +71,12 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   // Auto-list athletes and manage session creation when filters change
   useEffect(() => {
     if (selectedCategory && date) {
-      // Base filter by category
       let filtered = allAthletes.filter(a => a.categoryId === selectedCategory);
-      
-      // Apply Position Filter
-      if (selectedPosition) {
-          filtered = filtered.filter(a => a.position === selectedPosition);
-      }
-
-      // Apply Search Filter
+      if (selectedPosition) filtered = filtered.filter(a => a.position === selectedPosition);
       if (searchTerm) {
           const lowerTerm = searchTerm.toLowerCase();
           filtered = filtered.filter(a => a.name.toLowerCase().includes(lowerTerm));
       }
-
       setAthletes(filtered);
       
       const checkSession = async () => {
@@ -107,9 +99,8 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
   const handleSelectAthlete = async (athlete: Athlete) => {
     setSelectedAthlete(athlete);
-    setLoading(true); // Temp loading
+    setLoading(true); 
     
-    // Fetch previous data to pre-fill
     try {
         const [allEntries, allSessions] = await Promise.all([
             getTrainingEntries(),
@@ -119,7 +110,6 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
         const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
         
         if (athleteEntries.length > 0) {
-            // Sort by date descending
             const entriesWithDate = athleteEntries.map(e => {
                 const s = allSessions.find(s => s.id === e.sessionId);
                 return { ...e, _date: s ? s.date : '1970-01-01' };
@@ -127,7 +117,6 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
             const latest = entriesWithDate[0];
             
-            // Check if latest entry has new keys, otherwise default
             if (latest.tactical && latest.tactical.def_posicionamento !== undefined) {
                  setStats({ 
                     ...latest.technical, 
@@ -135,10 +124,8 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                     ...latest.tactical
                  });
             } else {
-                // Legacy data fallback or default
                 setStats(getDefaultStats());
             }
-            // Don't prefill heatmap points, start fresh for new session
             setHeatmapPoints([]); 
         } else {
             setStats(getDefaultStats());
@@ -149,7 +136,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
         setHeatmapPoints([]);
     }
 
-    setNotes(''); // Reset notes
+    setNotes('');
     setLoading(false);
   };
 
@@ -166,7 +153,6 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
     let sessionIdToUse = currentSessionId;
 
-    // If session doesn't exist yet, create it now
     if (!sessionIdToUse) {
         sessionIdToUse = uuidv4();
         const session: TrainingSession = {
@@ -184,25 +170,22 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       id: uuidv4(),
       sessionId: sessionIdToUse,
       athleteId: selectedAthlete.id,
-      technical: { // Fundamentals
+      technical: {
         controle_bola: stats.controle_bola, conducao: stats.conducao, passe: stats.passe,
         recepcao: stats.recepcao, drible: stats.drible, finalizacao: stats.finalizacao,
         cruzamento: stats.cruzamento, desarme: stats.desarme, interceptacao: stats.interceptacao
       },
-      physical: { // Condition
+      physical: {
         velocidade: stats.velocidade, agilidade: stats.agilidade, resistencia: stats.resistencia,
         forca: stats.forca, coordenacao: stats.coordenacao, mobilidade: stats.mobilidade, estabilidade: stats.estabilidade
       },
       tactical: {
-        // Defendendo
         def_posicionamento: stats.def_posicionamento, def_pressao: stats.def_pressao, def_cobertura: stats.def_cobertura,
         def_fechamento: stats.def_fechamento, def_temporizacao: stats.def_temporizacao, def_desarme_tatico: stats.def_desarme_tatico,
         def_reacao: stats.def_reacao,
-        // Construindo
         const_qualidade_passe: stats.const_qualidade_passe, const_visao: stats.const_visao, const_apoios: stats.const_apoios,
         const_mobilidade: stats.const_mobilidade, const_circulacao: stats.const_circulacao, const_quebra_linhas: stats.const_quebra_linhas,
         const_tomada_decisao: stats.const_tomada_decisao,
-        // Ultimo Terço
         ult_movimentacao: stats.ult_movimentacao, ult_ataque_espaco: stats.ult_ataque_espaco, ult_1v1: stats.ult_1v1,
         ult_ultimo_passe: stats.ult_ultimo_passe, ult_finalizacao_eficiente: stats.ult_finalizacao_eficiente,
         ult_ritmo: stats.ult_ritmo, ult_bolas_paradas: stats.ult_bolas_paradas
@@ -213,7 +196,6 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
     await saveTrainingEntry(entry);
     
-    // Notify and Redirect
     setNotification(`Dados salvos para ${selectedAthlete.name}!`);
     setTimeout(() => {
         setNotification(null);
@@ -222,6 +204,20 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   };
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:ring-blue-500 focus:border-blue-500";
+
+  // Permission Block
+  if (currentUser && !canEditData(currentUser.role)) {
+      return (
+          <div className="flex flex-col items-center justify-center h-[50vh] text-center p-6 bg-red-50 rounded-xl border border-red-100">
+              <AlertOctagon size={48} className="text-red-500 mb-4" />
+              <h2 className="text-2xl font-bold text-red-700">Acesso Restrito</h2>
+              <p className="text-red-600 mt-2">Seu perfil ({currentUser.role}) não possui permissão para lançar atuações.</p>
+              <button onClick={() => navigate('/')} className="mt-6 bg-red-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-red-700 transition-colors">
+                  Voltar ao Dashboard
+              </button>
+          </div>
+      );
+  }
 
   return (
     <div className="space-y-6">
