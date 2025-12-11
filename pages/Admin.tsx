@@ -5,7 +5,7 @@ import {
   getAthletes, getUsers, saveAthlete, saveUser, getTrainingSessions, saveTrainingSession
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Team, Category, UserRole, Athlete, User, TrainingSession } from '../types';
+import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle } from 'lucide-react';
 
@@ -50,8 +50,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   // Edit Form State (for Team/Category)
   const [formData, setFormData] = useState<{ name: string, logoUrl?: string }>({ name: '', logoUrl: '' });
 
-  const canEdit = ['MASTER', 'TECNICO', 'AUXILIAR', 'SCOUT'].includes(userRole);
-  const canDelete = ['MASTER', 'TECNICO', 'AUXILIAR'].includes(userRole);
+  // Use helper functions from types.ts where applicable or define local scope
+  const canEdit = canEditData(userRole);
+  const canDelete = canDeleteData(userRole); // Only Master
 
   useEffect(() => {
     refreshData();
@@ -394,6 +395,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       </div>
 
       {/* --- MODALS --- */}
+      {/* ... (Existing modals logic same as before, no changes needed inside modals, just the triggers above are gated by canEdit/canDelete) ... */}
 
       {/* 1. EDIT TEAM MODAL */}
       {modalType === 'edit_team' && (
@@ -404,7 +406,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                  <button onClick={closeModal}><X className="text-gray-400 hover:text-gray-600" /></button>
               </div>
               
-              {/* Logo Upload Section */}
               <div className="flex flex-col items-center mb-6">
                 <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
                     {formData.logoUrl ? (

@@ -12,12 +12,12 @@ import {
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,6 +29,9 @@ const AthleteProfile: React.FC = () => {
   // Refresh trigger to reload data without page reload
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // User Permissions
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Data State
   const [athlete, setAthlete] = useState<Athlete | null>(null);
@@ -78,6 +81,10 @@ const AthleteProfile: React.FC = () => {
   const calendarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+     // Get User for permissions
+     const storedUser = localStorage.getItem('performax_current_user');
+     if (storedUser) setCurrentUser(JSON.parse(storedUser));
+
      const load = async () => {
          setLoading(true);
          const allAthletes = await getAthletes();
@@ -480,7 +487,7 @@ const AthleteProfile: React.FC = () => {
             <Link to="/athletes" className="text-gray-500 hover:text-blue-600">
                 <ArrowLeft size={24} />
             </Link>
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><User className="text-blue-600"/> Perfil do Atleta</h2>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><UserIcon className="text-blue-600"/> Perfil do Atleta</h2>
          </div>
          {/* ... (Date Filter Select code remains similar) ... */}
          <div className="relative" ref={calendarRef}>
@@ -536,18 +543,26 @@ const AthleteProfile: React.FC = () => {
                 </div>
               </div>
             </div>
+            
             <div className="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0">
                  <div className="text-center px-6 py-2 bg-gray-50 rounded-xl border border-gray-100 min-w-[140px]">
                     <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Média Geral</span>
                     <span className={`block text-5xl font-black ${overallScore >= 8 ? 'text-[#4ade80]' : overallScore >= 4 ? 'text-gray-500' : 'text-red-500'}`}>{overallScore > 0 ? overallScore.toFixed(1) : '--'}</span>
                  </div>
-                 <div className="flex flex-col gap-2 w-full sm:w-auto">
-                    <button onClick={openNewTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
-                    <div className="flex gap-2 w-full">
-                        <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Edit size={16} /> Editar</button>
-                        <button onClick={() => setConfirmModal({isOpen: true, type: 'athlete'})} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Trash2 size={16} /></button>
+                 
+                 {/* ACTION BUTTONS (PERMISSION GATED) */}
+                 {currentUser && canEditData(currentUser.role) && (
+                    <div className="flex flex-col gap-2 w-full sm:w-auto">
+                        <button onClick={openNewTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
+                        <div className="flex gap-2 w-full">
+                            <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Edit size={16} /> Editar</button>
+                            {/* STRICT DELETE PERMISSION */}
+                            {canDeleteData(currentUser.role) && (
+                                <button onClick={() => setConfirmModal({isOpen: true, type: 'athlete'})} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Trash2 size={16} /></button>
+                            )}
+                        </div>
                     </div>
-                </div>
+                 )}
             </div>
         </div>
       </div>
@@ -597,8 +612,12 @@ const AthleteProfile: React.FC = () => {
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"><Edit size={16} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); setConfirmModal({isOpen: true, type: 'entry', id: item!.entry.id}); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full"><Trash2 size={16} /></button>
+                                {currentUser && canEditData(currentUser.role) && (
+                                    <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"><Edit size={16} /></button>
+                                )}
+                                {currentUser && canDeleteData(currentUser.role) && (
+                                    <button onClick={(e) => { e.stopPropagation(); setConfirmModal({isOpen: true, type: 'entry', id: item!.entry.id}); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full"><Trash2 size={16} /></button>
+                                )}
                                 <button onClick={(e) => { e.stopPropagation(); setViewingEntry(item); }} className="p-2 text-gray-400 hover:bg-gray-50 rounded-full"><Eye size={16} /></button>
                             </div>
                         </div>
@@ -644,7 +663,7 @@ const AthleteProfile: React.FC = () => {
               <form onSubmit={handleUpdateProfile} className="space-y-4">
                  <div className="flex flex-col items-center mb-4">
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                       {editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <User size={32} className="text-gray-400" />}
+                       {editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={32} className="text-gray-400" />}
                     </div>
                     <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800">
                        <Upload size={14} /> Alterar Foto

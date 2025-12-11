@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getAthletes, getCategories, saveAthlete, getTrainingEntries } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore } from '../types';
+import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData } from '../types';
 import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,6 +21,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // User State for Permissions
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
   // Form State
   const [formData, setFormData] = useState<Partial<Athlete>>({
     name: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: ''
@@ -31,6 +34,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
+    // Get current user for permission check
+    const storedUser = localStorage.getItem('performax_current_user');
+    if (storedUser) setCurrentUser(JSON.parse(storedUser));
+
     const load = async () => {
         setLoading(true);
         const [a, c, e] = await Promise.all([
@@ -204,12 +211,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              />
           </div>
 
-          <button 
-            onClick={() => setShowModal(true)}
-            className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 whitespace-nowrap w-full md:w-auto"
-          >
-            <Plus size={18} /> Novo Atleta
-          </button>
+          {currentUser && canEditData(currentUser.role) && (
+            <button 
+                onClick={() => setShowModal(true)}
+                className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 whitespace-nowrap w-full md:w-auto"
+            >
+                <Plus size={18} /> Novo Atleta
+            </button>
+          )}
         </div>
       </div>
 

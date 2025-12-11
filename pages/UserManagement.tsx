@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X, Lock, Info } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Info, Eye, Database, X } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -15,7 +15,7 @@ const UserManagement: React.FC = () => {
 
   // Modal States
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null); // Stores ID to delete
+  const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -32,14 +32,15 @@ const UserManagement: React.FC = () => {
   const handleRoleChange = (newRole: UserRole) => {
     if (!editingUser) return;
     
-    // Logic: If switching TO Master, we clear teamIds because Master implies access to all.
-    // Logic: If switching FROM Master to others, we ensure teamIds is an array (user must select).
-    const updatedTeamIds = newRole === UserRole.MASTER ? [] : (editingUser.teamIds || []);
+    // Logic: 
+    // MASTER -> teamIds = [] (Implies access to all)
+    // OTHERS -> teamIds = current selection or []
+    const isMaster = newRole === UserRole.MASTER;
     
     setEditingUser({
         ...editingUser,
         role: newRole,
-        teamIds: updatedTeamIds
+        teamIds: isMaster ? [] : (editingUser.teamIds || [])
     });
   };
 
@@ -53,13 +54,11 @@ const UserManagement: React.FC = () => {
 
         // Security Check: Non-MASTER users MUST have at least one team
         if (editingUser.role !== UserRole.MASTER && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
-            setError("Para usuários com permissão restrita (não-Master), é obrigatório selecionar pelo menos um time.");
+            setError("Para usuários com permissão restrita, é obrigatório selecionar pelo menos um time.");
             return;
         }
 
         setSaving(true);
-
-        // Ensure role is strictly typed from state
         const roleToSave = editingUser.role as UserRole;
 
         const user: User = {
@@ -67,9 +66,8 @@ const UserManagement: React.FC = () => {
             name: editingUser.name,
             email: editingUser.email,
             role: roleToSave,
-            password: editingUser.password || '123456', // Simple default
+            password: editingUser.password || '123456', 
             avatarUrl: editingUser.avatarUrl,
-            // Logic duplicated here for safety: if Master, force empty teamIds
             teamIds: roleToSave === UserRole.MASTER ? [] : (editingUser.teamIds || [])
         };
         
@@ -88,7 +86,7 @@ const UserManagement: React.FC = () => {
         if (err.code === '23505') {
             setError("Este email já está em uso por outro usuário.");
         } else {
-            setError(err.message || "Erro desconhecido ao salvar. Tente novamente.");
+            setError(err.message || "Erro desconhecido ao salvar.");
         }
     } finally {
         setSaving(false);
@@ -120,6 +118,38 @@ const UserManagement: React.FC = () => {
       }
   };
 
+  // Helper to get permission description
+  const getPermissionDescription = (role: UserRole) => {
+    switch (role) {
+        case UserRole.MASTER:
+            return {
+                icon: <ShieldCheck className="text-blue-600" size={24} />,
+                title: "Acesso Total (Master)",
+                desc: "Controle total do sistema. Pode criar, editar e excluir tudo (Times, Usuários, Atletas). Não requer seleção de times.",
+                color: "bg-blue-50 border-blue-200 text-blue-900"
+            };
+        case UserRole.TECNICO:
+        case UserRole.AUXILIAR:
+        case UserRole.SCOUT:
+            return {
+                icon: <Database className="text-green-600" size={24} />,
+                title: "Gestão de Dados (Restrito)",
+                desc: "Pode cadastrar e editar dados (Atletas, Treinos) dos times selecionados. SEM permissão de exclusão.",
+                color: "bg-green-50 border-green-200 text-green-900"
+            };
+        case UserRole.PREPARADOR:
+        case UserRole.MASSAGISTA:
+            return {
+                icon: <Eye className="text-orange-600" size={24} />,
+                title: "Apenas Visualização",
+                desc: "Acesso somente leitura aos dados dos times selecionados. Não pode alterar nada.",
+                color: "bg-orange-50 border-orange-200 text-orange-900"
+            };
+        default:
+            return { icon: null, title: "", desc: "", color: "" };
+    }
+  };
+
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -128,7 +158,7 @@ const UserManagement: React.FC = () => {
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        <div className="flex justify-between items-center mb-6">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-               <ShieldCheck className="text-blue-600"/> Gestão de Usuários
+               <ShieldCheck className="text-blue-600"/> Gestão de Usuários e Permissões
            </h2>
            <button onClick={() => setEditingUser({role: UserRole.TECNICO, teamIds: []})} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-sm transition-colors">
                <Plus size={20} /> Novo Usuário
@@ -136,15 +166,19 @@ const UserManagement: React.FC = () => {
        </div>
 
        {editingUser && (
-           <div className="bg-gray-50 p-6 rounded-xl mb-8 border border-gray-200 shadow-inner animate-fade-in relative">
-               <h3 className="font-bold mb-6 text-lg text-gray-800 border-b pb-2">{editingUser.id ? 'Editar' : 'Novo'} Usuário</h3>
+           <div className="bg-white p-6 rounded-xl mb-8 border-2 border-blue-100 shadow-lg animate-fade-in relative">
+               <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 rounded-t-xl"></div>
+               <h3 className="font-bold mb-6 text-xl text-gray-800 pb-2 flex justify-between items-center">
+                   {editingUser.id ? 'Editar Usuário' : 'Novo Usuário'}
+                   <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-red-500"><X size={24} /></button>
+               </h3>
                
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <div className="md:col-span-2 flex items-center gap-4 mb-2">
+                   <div className="md:col-span-2 flex items-center gap-4 mb-2 p-4 bg-gray-50 rounded-lg">
                         {editingUser.avatarUrl ? (
                             <img src={editingUser.avatarUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm" />
                         ) : <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-400">?</div>}
-                        <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50">
+                        <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors shadow-sm">
                             Alterar Foto
                             <input type="file" onChange={handleAvatarUpload} className="hidden" />
                         </label>
@@ -169,9 +203,9 @@ const UserManagement: React.FC = () => {
                    </div>
                    
                    <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Função (Permissão)</label>
+                       <label className="block text-sm font-bold text-gray-700 mb-1">Função (Define Permissões)</label>
                        <select 
-                          className={inputClass}
+                          className={`${inputClass} font-semibold`}
                           value={editingUser.role} 
                           onChange={e => handleRoleChange(e.target.value as UserRole)}
                        >
@@ -182,7 +216,7 @@ const UserManagement: React.FC = () => {
                    </div>
                    
                    <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Senha {editingUser.id && '(Preencha para alterar)'}</label>
+                       <label className="block text-sm font-bold text-gray-700 mb-1">Senha {editingUser.id && '(Deixe em branco para manter)'}</label>
                        <input 
                           type="password"
                           placeholder="******" 
@@ -193,52 +227,47 @@ const UserManagement: React.FC = () => {
                    </div>
                </div>
 
-               {/* PERMISSION LOGIC UI */}
-               <div className="mt-6">
-                   {editingUser.role === UserRole.MASTER ? (
-                       <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-blue-800 flex items-start gap-3 animate-fade-in">
-                            <ShieldCheck size={24} className="mt-0.5 shrink-0" />
-                            <div>
-                                <p className="font-bold text-sm">Permissão de Acesso Total (Master)</p>
-                                <p className="text-xs mt-1 leading-relaxed">
-                                    Usuários com a função <strong>MASTER</strong> possuem acesso administrativo completo. 
-                                    Eles podem visualizar e editar <strong>todos os times</strong>, gerenciar outros usuários e acessar todas as configurações do sistema.
-                                    Não é necessário selecionar times específicos.
-                                </p>
-                            </div>
+               {/* PERMISSION INFO BOX */}
+               {editingUser.role && (() => {
+                   const info = getPermissionDescription(editingUser.role);
+                   return (
+                       <div className={`mt-6 p-4 rounded-xl border flex items-start gap-4 ${info.color}`}>
+                           <div className="mt-1">{info.icon}</div>
+                           <div>
+                               <h4 className="font-bold">{info.title}</h4>
+                               <p className="text-sm opacity-90 leading-relaxed">{info.desc}</p>
+                           </div>
                        </div>
-                   ) : (
-                       <div className="bg-white p-4 rounded-xl border border-gray-200 animate-fade-in">
-                          <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                              <Lock size={16} className="text-orange-500"/> Permissões de Acesso (Restrito)
-                          </label>
-                          <p className="text-xs text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex items-start gap-2">
-                              <Info size={14} className="mt-0.5 shrink-0" />
-                              O usuário terá acesso <strong>apenas</strong> aos dados (atletas, treinos, relatórios) dos times selecionados abaixo.
+                   );
+               })()}
+
+               {/* TEAM SELECTION */}
+               {editingUser.role !== UserRole.MASTER && (
+                   <div className="mt-6 border-t border-gray-100 pt-4">
+                      <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                          <Lock size={16} className="text-gray-500"/> Selecionar Times Permitidos
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {teams.map(team => {
+                              const isSelected = editingUser.teamIds?.includes(team.id);
+                              return (
+                                  <div key={team.id} 
+                                       onClick={() => toggleTeamSelection(team.id)}
+                                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-200'}`}
+                                  >
+                                      {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} className="text-gray-300" />}
+                                      <span className={`text-sm ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                      {(!editingUser.teamIds || editingUser.teamIds.length === 0) && (
+                          <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
+                              <AlertCircle size={12}/> É necessário selecionar pelo menos um time.
                           </p>
-                          
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                              {teams.map(team => {
-                                  const isSelected = editingUser.teamIds?.includes(team.id);
-                                  return (
-                                      <div key={team.id} 
-                                           onClick={() => toggleTeamSelection(team.id)}
-                                           className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-100'}`}
-                                      >
-                                          {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} className="text-gray-300" />}
-                                          <span className={`text-sm ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
-                                      </div>
-                                  );
-                              })}
-                          </div>
-                          {(!editingUser.teamIds || editingUser.teamIds.length === 0) && (
-                              <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
-                                  <AlertCircle size={12}/> Selecione pelo menos um time.
-                              </p>
-                          )}
-                       </div>
-                   )}
-               </div>
+                      )}
+                   </div>
+               )}
 
                {error && (
                    <div className="mt-4 bg-red-100 text-red-700 p-3 rounded-lg flex items-center gap-2 text-sm font-bold animate-pulse">
@@ -246,7 +275,7 @@ const UserManagement: React.FC = () => {
                    </div>
                )}
 
-               <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+               <div className="flex gap-3 mt-8 pt-4 border-t border-gray-200">
                    <button onClick={() => setEditingUser(null)} disabled={saving} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
                    <button onClick={handleSave} disabled={saving} className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
                        {saving && <Loader2 className="animate-spin" size={18} />}
@@ -256,9 +285,11 @@ const UserManagement: React.FC = () => {
            </div>
        )}
 
-       <div className="space-y-3">
-           {users.map(u => (
-               <div key={u.id} className="flex justify-between items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm">
+       <div className="grid grid-cols-1 gap-3">
+           {users.map(u => {
+               const perm = getPermissionDescription(u.role);
+               return (
+               <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm gap-4">
                    <div className="flex items-center gap-4">
                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
                        <div>
@@ -266,26 +297,30 @@ const UserManagement: React.FC = () => {
                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                <p className="text-sm text-gray-500">{u.email}</p>
                                <span className="hidden sm:inline text-gray-300">•</span>
-                               <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded uppercase">{u.role}</span>
+                               <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
                            </div>
+                           
+                           {/* Info Permissions */}
+                           <div className="flex items-center gap-1 mt-1">
+                               <div className="text-xs text-gray-400">{perm.title}</div>
+                           </div>
+
                            {u.role !== UserRole.MASTER && u.teamIds && u.teamIds.length > 0 && (
-                               <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                               <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                                    <CheckSquare size={12}/> Acesso a {u.teamIds.length} times
                                </p>
                            )}
                        </div>
                    </div>
-                   <div className="flex gap-2">
+                   <div className="flex gap-2 self-end md:self-center">
                        <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
                        {u.role !== UserRole.MASTER && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
                    </div>
                </div>
-           ))}
+           )})}
        </div>
 
        {/* --- MODALS --- */}
-
-       {/* Success Modal */}
        {successMessage && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
@@ -301,7 +336,6 @@ const UserManagement: React.FC = () => {
          </div>
        )}
 
-       {/* Confirm Delete Modal */}
        {deleteConfirmation && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
