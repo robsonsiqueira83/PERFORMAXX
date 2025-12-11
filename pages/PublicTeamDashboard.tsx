@@ -128,17 +128,17 @@ const PublicTeamDashboard: React.FC = () => {
     selectedIds.push(...ataque.map(a => a.id));
 
     return [
-        { role: 'GK', player: goleiro[0], style: { bottom: '10%', left: '50%' } },
-        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '20%' } },
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '25%', left: '38%' } },
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '25%', left: '62%' } },
-        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '80%' } },
-        { role: 'MC', player: meioCampo[0], style: { bottom: '50%', left: '25%' } },
-        { role: 'MC', player: meioCampo[1], style: { bottom: '50%', left: '50%' } },
-        { role: 'MC', player: meioCampo[2], style: { bottom: '50%', left: '75%' } },
-        { role: 'AT', player: ataque[0], style: { bottom: '75%', left: '25%' } },
-        { role: 'AT', player: ataque[1], style: { bottom: '80%', left: '50%' } },
-        { role: 'AT', player: ataque[2], style: { bottom: '75%', left: '75%' } },
+        { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } },
+        { role: 'LE', player: laterais[0], style: { bottom: '22%', left: '15%' } },
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '16%', left: '38%' } },
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '16%', left: '62%' } },
+        { role: 'LD', player: laterais[1], style: { bottom: '22%', left: '85%' } },
+        { role: 'MC', player: meioCampo[0], style: { bottom: '48%', left: '25%' } },
+        { role: 'MC', player: meioCampo[1], style: { bottom: '48%', left: '50%' } },
+        { role: 'MC', player: meioCampo[2], style: { bottom: '48%', left: '75%' } },
+        { role: 'AT', player: ataque[0], style: { bottom: '65%', left: '20%' } },
+        { role: 'AT', player: ataque[1], style: { bottom: '75%', left: '50%' } },
+        { role: 'AT', player: ataque[2], style: { bottom: '65%', left: '80%' } },
     ];
   }, [athletesWithScores, selectedCategory]);
 

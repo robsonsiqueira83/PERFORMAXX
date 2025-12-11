@@ -185,25 +185,25 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
         // GK (Bottom 5% - Close to goal line)
         { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } }, 
         
-        // Defesa (Laterais + Zagueiros)
-        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '15%' } }, 
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '18%', left: '38%' } }, 
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '18%', left: '62%' } }, 
-        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '85%' } }, 
+        // Defesa (Laterais + Zagueiros) - Slightly lowered for spacing
+        { role: 'LE', player: laterais[0], style: { bottom: '22%', left: '15%' } }, 
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '16%', left: '38%' } }, 
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '16%', left: '62%' } }, 
+        { role: 'LD', player: laterais[1], style: { bottom: '22%', left: '85%' } }, 
         
         // Volante (Central)
-        { role: 'VOL', player: volante[0], style: { bottom: '40%', left: '50%' } }, 
+        { role: 'VOL', player: volante[0], style: { bottom: '35%', left: '50%' } }, 
         
         // Meio Campo (Ahead of Volante)
-        { role: 'MC', player: meios[0], style: { bottom: '55%', left: '30%' } }, 
-        { role: 'MC', player: meios[1], style: { bottom: '55%', left: '70%' } }, 
+        { role: 'MC', player: meios[0], style: { bottom: '50%', left: '30%' } }, 
+        { role: 'MC', player: meios[1], style: { bottom: '50%', left: '70%' } }, 
         
-        // Ataque (Wingers)
-        { role: 'AT', player: atacantes[0], style: { bottom: '70%', left: '20%' } }, 
-        { role: 'AT', player: atacantes[1], style: { bottom: '70%', left: '80%' } }, 
+        // Ataque (Wingers) - Lowered from 70% to 65%
+        { role: 'AT', player: atacantes[0], style: { bottom: '65%', left: '20%' } }, 
+        { role: 'AT', player: atacantes[1], style: { bottom: '65%', left: '80%' } }, 
         
-        // Centro Avante (Max 80% to safe margin from top)
-        { role: 'CA', player: centroavante[0], style: { bottom: '80%', left: '50%' } }, 
+        // Centro Avante (Lowered from 80% to 75% to prevent top margin cut-off)
+        { role: 'CA', player: centroavante[0], style: { bottom: '75%', left: '50%' } }, 
     ];
   }, [athletesWithScores, selectedCategory]);
 
