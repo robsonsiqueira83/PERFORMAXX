@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 // --- Users ---
 export const getUsers = async (): Promise<User[]> => {
-  const { data, error } = await supabase.from('users').select('*');
+  // Add created_at sort for Global Dashboard chronology
+  const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: true });
   if (error) {
     console.error('Error fetching users:', error);
     return [];
@@ -52,7 +53,8 @@ export const getTeams = async (): Promise<Team[]> => {
   return data.map((t: any) => ({
       id: t.id,
       name: t.name,
-      logoUrl: t.logo_url
+      logoUrl: t.logo_url,
+      ownerId: t.owner_id // New column for Multi-Tenancy
   }));
 };
 
@@ -60,7 +62,8 @@ export const saveTeam = async (team: Team) => {
   const dbTeam = {
     id: team.id,
     name: team.name,
-    logo_url: team.logoUrl
+    logo_url: team.logoUrl,
+    owner_id: team.ownerId
   };
   const { error } = await supabase.from('teams').upsert(dbTeam);
   if (error) console.error('Error saving team:', error);
