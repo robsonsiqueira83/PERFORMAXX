@@ -17,7 +17,8 @@ export const getUsers = async (): Promise<User[]> => {
     role: u.role as UserRole,
     avatarUrl: u.avatar_url,
     password: u.password,
-    teamIds: u.team_ids || [] // JSONB column
+    teamIds: u.team_ids || [],
+    createdAt: u.created_at // Map DB column to type
   }));
 };
 
