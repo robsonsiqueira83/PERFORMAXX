@@ -26,6 +26,7 @@ export interface User {
   role: UserRole;
   avatarUrl?: string;
   teamIds?: string[];
+  createdAt?: string;
 }
 
 export interface Team {
