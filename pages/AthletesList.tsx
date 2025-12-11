@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getAthletes, getCategories, saveAthlete, getTrainingEntries } from '../services/storageService';
+import { getAthletes, getCategories, saveAthlete, getTrainingEntries, getTeams } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy } from 'lucide-react';
+import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team } from '../types';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy, ArrowRight, UserCheck, XCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -12,6 +12,9 @@ interface AthletesListProps {
 
 const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [incomingTransfers, setIncomingTransfers] = useState<Athlete[]>([]); // New state for transfers
+  const [teams, setTeams] = useState<Team[]>([]); // For displaying origin team name
+  
   const [categories, setCategories] = useState<Category[]>([]);
   const [entries, setEntries] = useState<any[]>([]); // To calc scores
   const [search, setSearch] = useState('');
@@ -33,6 +36,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   // Feedback State
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
+  // Refresh trigger
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
     // Get current user for permission check
     const storedUser = localStorage.getItem('performax_current_user');
@@ -40,18 +46,26 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
     const load = async () => {
         setLoading(true);
-        const [a, c, e] = await Promise.all([
+        const [a, c, e, t] = await Promise.all([
             getAthletes(),
             getCategories(),
-            getTrainingEntries()
+            getTrainingEntries(),
+            getTeams()
         ]);
+        
+        // 1. Regular Athletes
         setAthletes(a.filter(item => item.teamId === teamId));
+        
+        // 2. Incoming Transfers (Targeting this team)
+        setIncomingTransfers(a.filter(item => item.pendingTransferTeamId === teamId));
+
         setCategories(c.filter(item => item.teamId === teamId));
         setEntries(e);
+        setTeams(t);
         setLoading(false);
     };
     load();
-  }, [teamId, showModal]);
+  }, [teamId, showModal, refreshKey]);
 
   // 1. Attach Meta Data (Score) to Athletes
   const athletesWithMeta = useMemo(() => {
@@ -138,6 +152,35 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     setFeedback({ type: 'success', message: 'Atleta cadastrado com sucesso!' });
   };
 
+  // --- TRANSFER HANDLING ---
+  const handleAcceptTransfer = async (athlete: Athlete) => {
+      // 1. Move to current teamId
+      // 2. Clear pending
+      // 3. Clear category (must be reassigned in new team)
+      const updatedAthlete = {
+          ...athlete,
+          teamId: teamId,
+          pendingTransferTeamId: undefined, // remove pending
+          categoryId: '' // reset category
+      };
+      // Explicitly pass undefined to ensure Supabase update clears it if needed, though saving with null/undefined usually works via the service logic
+      // In service we handle undefined -> null
+      await saveAthlete(updatedAthlete as Athlete);
+      setFeedback({ type: 'success', message: `${athlete.name} transferido com sucesso!` });
+      setRefreshKey(prev => prev + 1);
+  };
+
+  const handleRejectTransfer = async (athlete: Athlete) => {
+      // Just clear the pending field, athlete stays in old team
+      const updatedAthlete = {
+          ...athlete,
+          pendingTransferTeamId: undefined
+      };
+      await saveAthlete(updatedAthlete as Athlete);
+      setFeedback({ type: 'success', message: `Transferência de ${athlete.name} recusada.` });
+      setRefreshKey(prev => prev + 1);
+  };
+
   const copyPublicLink = (e: React.MouseEvent, athleteId: string) => {
       e.preventDefault();
       e.stopPropagation();
@@ -152,6 +195,54 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   return (
     <div className="space-y-6 relative">
+      
+      {/* INCOMING TRANSFERS SECTION */}
+      {incomingTransfers.length > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6 shadow-sm animate-fade-in">
+              <h3 className="text-lg font-bold text-yellow-800 flex items-center gap-2 mb-4">
+                  <ArrowRight className="text-yellow-600" /> Solicitações de Transferência ({incomingTransfers.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {incomingTransfers.map(athlete => {
+                      const originTeam = teams.find(t => t.id === athlete.teamId);
+                      return (
+                          <div key={athlete.id} className="bg-white p-4 rounded-lg shadow-sm border border-yellow-100 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                  {athlete.photoUrl ? (
+                                      <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover" />
+                                  ) : (
+                                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
+                                  )}
+                                  <div>
+                                      <h4 className="font-bold text-gray-900">{athlete.name}</h4>
+                                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                                          Origem: <span className="font-bold">{originTeam?.name || 'Desconhecido'}</span>
+                                      </p>
+                                  </div>
+                              </div>
+                              <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => handleAcceptTransfer(athlete)}
+                                    className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 text-sm font-bold"
+                                    title="Aceitar"
+                                  >
+                                      <UserCheck size={18} /> <span className="hidden sm:inline">Aceitar</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => handleRejectTransfer(athlete)}
+                                    className="bg-red-100 text-red-700 p-2 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1 text-sm font-bold"
+                                    title="Recusar"
+                                  >
+                                      <XCircle size={18} /> <span className="hidden sm:inline">Recusar</span>
+                                  </button>
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      )}
+
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Users className="text-blue-600" /> Atletas
@@ -259,6 +350,13 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                        {getCalculatedCategory(athlete.birthDate)}
                    </span>
                </div>
+               
+               {/* Pending Transfer Badge */}
+               {athlete.pendingTransferTeamId && (
+                   <div className="mt-2 text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded border border-yellow-200 font-bold">
+                       Transferência Solicitada
+                   </div>
+               )}
            </Link>
          ))}
          {sorted.length === 0 && (

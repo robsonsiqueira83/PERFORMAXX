@@ -13,12 +13,13 @@ import {
   getTeams
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData, Team } from '../types';
+// Added UserRole to imports
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData, Team, UserRole } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -345,8 +346,8 @@ const AthleteProfile: React.FC = () => {
           // Verify Team ID
           const targetTeam = allTeams.find(t => t.id === transferTeamId);
           if (targetTeam) {
-              finalData.teamId = transferTeamId;
-              finalData.categoryId = ''; // Reset category as it is team specific
+              // SET PENDING TRANSFER, DO NOT CHANGE TEAM ID YET
+              finalData.pendingTransferTeamId = transferTeamId;
           } else {
               alert('ID do time inválido. Verifique e tente novamente.');
               return;
@@ -359,12 +360,14 @@ const AthleteProfile: React.FC = () => {
       setIsTransferring(false);
       setTransferTeamId('');
       
-      // If transferred, likely navigate back or reload fully
-      if (finalData.teamId !== athlete.teamId) {
-          navigate('/athletes'); // Go back to list as user might not have access to new team immediately context-wise
-      } else {
-          setRefreshKey(prev => prev + 1);
-      }
+      setRefreshKey(prev => prev + 1);
+  };
+
+  const cancelTransfer = async () => {
+      if (!athlete) return;
+      // Clear pending transfer
+      await saveAthlete({ ...athlete, pendingTransferTeamId: undefined } as any); // Cast slightly to avoid strict null check issues if type mismatch
+      setRefreshKey(prev => prev + 1);
   };
 
   const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -589,6 +592,30 @@ const AthleteProfile: React.FC = () => {
 
       {/* Header Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        {/* PENDING TRANSFER NOTIFICATION */}
+        {athlete.pendingTransferTeamId && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Clock className="text-yellow-600" size={24} />
+                    <div>
+                        <h4 className="font-bold text-yellow-800 text-sm">Transferência Solicitada</h4>
+                        <p className="text-xs text-yellow-700">
+                            Aguardando aceite do time de destino (ID: {athlete.pendingTransferTeamId.substring(0,8)}...). 
+                            O atleta permanece neste painel até a confirmação.
+                        </p>
+                    </div>
+                </div>
+                {canEditData(currentUser?.role || UserRole.TECNICO) && (
+                    <button 
+                        onClick={cancelTransfer}
+                        className="text-xs bg-white border border-yellow-300 text-yellow-700 px-3 py-1.5 rounded hover:bg-yellow-100 font-bold"
+                    >
+                        Cancelar
+                    </button>
+                )}
+            </div>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-6">
               {athlete.photoUrl ? (
@@ -629,6 +656,7 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
+      {/* ... (Existing charts and heatmap code remains identical) ... */}
       {/* --- AGGREGATE HEATMAP & ANALYSIS GRID --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-hidden flex flex-col items-center justify-center">
@@ -835,24 +863,33 @@ const AthleteProfile: React.FC = () => {
                              <p className="text-xs font-bold text-blue-600 uppercase">Vínculo com Time</p>
                              <p className="font-bold text-gray-800">{allTeams.find(t => t.id === athlete?.teamId)?.name || 'Desconhecido'}</p>
                          </div>
-                         {!isTransferring ? (
+                         {!isTransferring && !athlete?.pendingTransferTeamId ? (
                              <button 
                                 type="button"
                                 onClick={() => setIsTransferring(true)}
                                 className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-colors flex items-center gap-1 font-bold"
                              >
-                                 <ArrowRightLeft size={12} /> Transferir
+                                 <ArrowRightLeft size={12} /> Solicitar Transferência
                              </button>
                          ) : (
-                             <button 
-                                type="button"
-                                onClick={() => setIsTransferring(false)}
-                                className="text-xs text-gray-500 hover:text-gray-700"
-                             >
-                                 Cancelar
-                             </button>
+                             isTransferring && (
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsTransferring(false)}
+                                    className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                    Cancelar
+                                </button>
+                             )
                          )}
                      </div>
+
+                     {/* Pending Status inside Modal */}
+                     {athlete?.pendingTransferTeamId && !isTransferring && (
+                         <div className="mt-3 bg-yellow-100 text-yellow-800 p-2 rounded text-xs">
+                             <p><strong>Aguardando Aprovação:</strong> O time de destino deve aceitar a transferência para que ela seja concluída.</p>
+                         </div>
+                     )}
 
                      {isTransferring && (
                          <div className="mt-3 animate-fade-in">
@@ -868,7 +905,7 @@ const AthleteProfile: React.FC = () => {
                              </div>
                              <p className="text-[10px] text-orange-600 mt-2 flex items-center gap-1">
                                  <AlertTriangle size={10} />
-                                 Atenção: A transferência removerá a categoria atual.
+                                 Ao solicitar, o atleta aguardará aprovação no novo time.
                              </p>
                          </div>
                      )}
@@ -886,7 +923,7 @@ const AthleteProfile: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
-                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})} disabled={isTransferring}>
+                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})} disabled={isTransferring || !!athlete?.pendingTransferTeamId}>
                          <option value="">Selecione...</option>
                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
@@ -919,7 +956,7 @@ const AthleteProfile: React.FC = () => {
         </div>
       )}
 
-      {/* 2. TRAINING MODAL (Same as before) */}
+      {/* 2. TRAINING MODAL ... (rest is same) */}
       {showTrainingModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
            <div className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
