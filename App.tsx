@@ -8,6 +8,7 @@ import AthleteProfile from './pages/AthleteProfile';
 import Training from './pages/Training';
 import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
+import GlobalDashboard from './pages/GlobalDashboard';
 import PublicTeamDashboard from './pages/PublicTeamDashboard';
 import PublicAthleteProfile from './pages/PublicAthleteProfile';
 import { User, UserRole } from './types';
@@ -16,30 +17,39 @@ import { getTeams, getUsers } from './services/storageService';
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [viewingAsMasterId, setViewingAsMasterId] = useState<string>(''); // Context ID (Panel ID)
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const init = async () => {
-        // 1. Check local session first
         const storedUserStr = localStorage.getItem('performax_current_user');
         let currentUser: User | null = null;
         
         if (storedUserStr) {
             try {
                 const localUser = JSON.parse(storedUserStr);
-                
-                // CRITICAL FIX: Fetch fresh user data from DB to ensure Role/Permissions are up to date.
-                // This prevents users from having stale permissions (e.g. seeing Edit buttons after being demoted).
                 const allUsers = await getUsers();
                 const freshUser = allUsers.find(u => u.id === localUser.id);
                 
                 if (freshUser) {
                     currentUser = freshUser;
                     setUser(freshUser);
-                    // Update local storage with fresh data so it persists correctly next time
                     localStorage.setItem('performax_current_user', JSON.stringify(freshUser));
+                    
+                    // Restore Context if previously set, otherwise default to self
+                    const storedContext = localStorage.getItem('performax_context_id');
+                    if (storedContext && storedContext !== freshUser.id && freshUser.role === UserRole.GLOBAL) {
+                         // Keep impersonation context if Global
+                         setViewingAsMasterId(storedContext);
+                    } else if (storedContext && freshUser.role === UserRole.MASTER) {
+                         // Keep selected context for Masters (could be own or invited)
+                         setViewingAsMasterId(storedContext);
+                    } else {
+                        // Default to self or first owner in invited list
+                        // For now default to self, Layout will adjust if self is not available
+                        setViewingAsMasterId(freshUser.id);
+                    }
                 } else {
-                    // User might have been deleted from DB, logout locally
                     localStorage.removeItem('performax_current_user');
                 }
             } catch (e) {
@@ -48,69 +58,93 @@ const App: React.FC = () => {
             }
         }
         
-        // 2. Load Teams with PERMISSION check based on the FRESH currentUser
-        const allTeams = await getTeams();
-        
-        if (currentUser && allTeams.length > 0) {
-            let allowedTeams = allTeams;
-            
-            // SECURITY: If not MASTER, filter teams strictly by user.teamIds
-            if (currentUser.role !== UserRole.MASTER) {
-                const userTeamIds = currentUser.teamIds || [];
-                allowedTeams = allTeams.filter(t => userTeamIds.includes(t.id));
-            }
-
-            // Only set selectedTeamId if we have allowed teams
-            if (allowedTeams.length > 0) {
-                // Check if currently selected (from props or memory) is still valid, else default to first allowed
-                setSelectedTeamId(prev => {
-                    const isStillValid = allowedTeams.some(t => t.id === prev);
-                    return isStillValid ? prev : allowedTeams[0].id;
-                });
-            } else if (currentUser.role !== UserRole.MASTER) {
-                // If user exists but has NO teams allowed, clear selection
-                setSelectedTeamId('');
-            } else {
-                // Master default
-                setSelectedTeamId(allTeams[0].id);
-            }
-        } else if (allTeams.length > 0 && !currentUser) {
-             setSelectedTeamId(allTeams[0].id);
+        // Initial Team Load based on Context
+        if (currentUser) {
+            await updateSelectedTeamForContext(viewingAsMasterId || currentUser.id, currentUser);
         }
         
         setLoading(false);
     };
     init();
-
   }, []);
 
+  const updateSelectedTeamForContext = async (contextId: string, currentUser: User) => {
+      const allTeams = await getTeams();
+      // Filter teams belonging to this Context (Master)
+      // AND that the current user has access to
+      let contextTeams = allTeams.filter(t => t.ownerId === contextId);
+      
+      if (currentUser.role !== UserRole.GLOBAL && currentUser.role !== UserRole.MASTER) {
+          // Strict filter for non-admins
+          contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
+      } else if (currentUser.role === UserRole.MASTER && contextId !== currentUser.id) {
+          // Master viewing another panel they are invited to
+          contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
+      }
+
+      if (contextTeams.length > 0) {
+          // If current selection is valid for this context, keep it. Else pick first.
+          setSelectedTeamId(prev => {
+              return contextTeams.find(t => t.id === prev) ? prev : contextTeams[0].id;
+          });
+      } else {
+          setSelectedTeamId('');
+      }
+  };
+
   const handleLogin = async (u: User) => {
-    // On login, we assume 'u' is fresh from the login process (which fetches from DB)
     setUser(u);
     localStorage.setItem('performax_current_user', JSON.stringify(u));
+    const defaultContext = u.id;
+    setViewingAsMasterId(defaultContext);
+    localStorage.setItem('performax_context_id', defaultContext);
     
-    const allTeams = await getTeams();
-    let allowedTeams = allTeams;
-
-    // Apply strict filtering on Login as well
-    if (u.role !== UserRole.MASTER) {
-        allowedTeams = allTeams.filter(t => u.teamIds?.includes(t.id));
-    }
-
-    if (allowedTeams.length > 0) {
-        setSelectedTeamId(allowedTeams[0].id);
+    await updateSelectedTeamForContext(defaultContext, u);
+    
+    // Global User Logic: Stay on Global Dashboard if logging in
+    if (u.role === UserRole.GLOBAL) {
+        window.location.hash = '/global';
     } else {
-        setSelectedTeamId(''); // User has no teams assigned
+        window.location.hash = '/';
     }
-
-    // Force redirect to Dashboard
-    window.location.hash = '/';
   };
 
   const handleLogout = () => {
     setUser(null);
+    setViewingAsMasterId('');
+    setSelectedTeamId('');
     localStorage.removeItem('performax_current_user');
-    window.location.hash = '/'; // Reset to root
+    localStorage.removeItem('performax_context_id');
+    window.location.hash = '/';
+  };
+
+  // Change Context (Panel Switcher)
+  const handleContextChange = async (newMasterId: string) => {
+      setViewingAsMasterId(newMasterId);
+      localStorage.setItem('performax_context_id', newMasterId);
+      if (user) {
+          await updateSelectedTeamForContext(newMasterId, user);
+      }
+      // Force redirect to dashboard to avoid stale data on current page
+      window.location.hash = '/';
+  };
+
+  // Global Admin Accessing Specific Master
+  const handleGlobalAccessMaster = async (masterId: string) => {
+      setViewingAsMasterId(masterId);
+      localStorage.setItem('performax_context_id', masterId);
+      if (user) {
+         await updateSelectedTeamForContext(masterId, user);
+      }
+      window.location.hash = '/';
+  };
+
+  // Return to Global Dashboard
+  const handleReturnToGlobal = () => {
+      if (user?.role === UserRole.GLOBAL) {
+          setViewingAsMasterId(user.id); // Reset context to self (optional)
+          window.location.hash = '/global';
+      }
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50 text-blue-600 font-bold">Carregando PerformaXX...</div>;
@@ -118,24 +152,43 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        {/* PUBLIC ROUTES (No Auth Required) */}
+        {/* PUBLIC ROUTES */}
         <Route path="/p/team/:teamId" element={<PublicTeamDashboard />} />
         <Route path="/p/athlete/:athleteId" element={<PublicAthleteProfile />} />
 
-        {/* AUTHENTICATED ROUTES */}
+        {/* AUTH ROUTES */}
+        <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        
+        {/* GLOBAL DASHBOARD */}
+        <Route path="/global" element={
+            user && user.role === UserRole.GLOBAL ? (
+                <GlobalDashboard onAccessMaster={handleGlobalAccessMaster} onLogout={handleLogout} />
+            ) : <Navigate to={user ? "/" : "/login"} />
+        } />
+
+        {/* APP ROUTES */}
         <Route path="*" element={
            !user ? (
-             <Login onLogin={handleLogin} />
+             <Navigate to="/login" />
            ) : (
-             <Layout user={user} onLogout={handleLogout} selectedTeamId={selectedTeamId} onTeamChange={setSelectedTeamId}>
+             <Layout 
+                user={user} 
+                viewingAsMasterId={viewingAsMasterId}
+                onLogout={handleLogout} 
+                selectedTeamId={selectedTeamId} 
+                onTeamChange={setSelectedTeamId}
+                onContextChange={handleContextChange}
+                onReturnToGlobal={handleReturnToGlobal}
+             >
                <Routes>
                   <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
-                  {/* Master Only Route */}
-                  {user.role === UserRole.MASTER && (
+                  
+                  {/* Master & Global Route */}
+                  {(user.role === UserRole.MASTER || user.role === UserRole.GLOBAL) && (
                     <Route path="/users" element={<UserManagement />} />
                   )}
                   <Route path="*" element={<Navigate to="/" />} />

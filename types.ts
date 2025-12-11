@@ -1,4 +1,5 @@
 export enum UserRole {
+  GLOBAL = 'GLOBAL', // Super Admin
   MASTER = 'MASTER',
   TECNICO = 'Técnico',
   AUXILIAR = 'Auxiliar',
@@ -31,6 +32,7 @@ export interface Team {
   id: string;
   name: string;
   logoUrl?: string;
+  ownerId?: string; // The Master User ID who owns this team/panel
 }
 
 export interface Category {
@@ -131,17 +133,17 @@ export interface TrainingEntry {
 
 // Can Create or Update data (Athletes, Training, etc.)
 export const canEditData = (role: UserRole): boolean => {
-  return [UserRole.MASTER, UserRole.TECNICO, UserRole.AUXILIAR, UserRole.SCOUT].includes(role);
+  return [UserRole.GLOBAL, UserRole.MASTER, UserRole.TECNICO, UserRole.AUXILIAR, UserRole.SCOUT].includes(role);
 };
 
 // Can Delete data (Strictly Master based on new requirements)
 export const canDeleteData = (role: UserRole): boolean => {
-  return role === UserRole.MASTER;
+  return role === UserRole.MASTER || role === UserRole.GLOBAL;
 };
 
 // Can Manage System (Users, Teams, Categories creation/deletion)
 export const canManageSystem = (role: UserRole): boolean => {
-  return role === UserRole.MASTER;
+  return role === UserRole.MASTER || role === UserRole.GLOBAL;
 };
 
 // Helper to calculate total score
