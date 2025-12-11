@@ -30,6 +30,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   };
 
   const [loading, setLoading] = useState(false);
+  const [viewingContextId, setViewingContextId] = useState<string>('');
   
   // Data State
   const [teams, setTeams] = useState<Team[]>([]);
@@ -52,16 +53,27 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   // Use helper functions from types.ts where applicable or define local scope
   const canEdit = canEditData(userRole);
-  const canDelete = canDeleteData(userRole); // Only Master
+  const canDelete = canDeleteData(userRole);
 
   useEffect(() => {
-    refreshData();
+    // Get context ID from local storage to ensure new teams are assigned to the correct Master/Panel
+    const ctxId = localStorage.getItem('performax_context_id');
+    if (ctxId) setViewingContextId(ctxId);
+
+    refreshData(ctxId);
   }, [currentTeamId]);
 
-  const refreshData = async () => {
+  const refreshData = async (ctxId?: string | null) => {
     setLoading(true);
-    const t = await getTeams();
-    setTeams(t);
+    const allTeams = await getTeams();
+    // Filter teams displayed in Admin to only those owned by the current Context
+    // This prevents seeing teams from other contexts even if invited
+    const contextId = ctxId || viewingContextId;
+    if (contextId) {
+        setTeams(allTeams.filter(t => t.ownerId === contextId));
+    } else {
+        setTeams(allTeams); // Fallback
+    }
     
     const c = await getCategories();
     setCategories(c.filter(item => item.teamId === currentTeamId));
@@ -111,10 +123,13 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   const handleSaveTeam = async () => {
     if (!formData.name) return;
+    
+    // Save with current Viewing Context ID as owner
     await saveTeam({ 
         id: targetId || uuidv4(), 
         name: formData.name, 
-        logoUrl: formData.logoUrl 
+        logoUrl: formData.logoUrl,
+        ownerId: viewingContextId 
     });
     closeModal();
     // Force reload to update Layout context (header selector) and lists
@@ -163,7 +178,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         // 1. If creating a new team during migration
         if (!destinationId && newTeamName) {
             destinationId = uuidv4();
-            await saveTeam({ id: destinationId, name: newTeamName });
+            await saveTeam({ id: destinationId, name: newTeamName, ownerId: viewingContextId });
         }
 
         if (!destinationId) {
@@ -290,7 +305,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         {activeTab === 'teams' && (
           <div>
             <div className="mb-6 flex justify-between items-center">
-               <h3 className="font-bold text-lg text-gray-800">Gerenciar Times</h3>
+               <h3 className="font-bold text-lg text-gray-800">Gerenciar Times (Painel Atual)</h3>
                {canEdit && (
                    <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
                        <Plus size={16}/> Novo Time
@@ -363,6 +378,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     </div>
                  );
                })}
+               {teams.length === 0 && <div className="text-gray-400 text-center py-4 italic">Nenhum time criado neste painel.</div>}
             </div>
           </div>
         )}
@@ -389,6 +405,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     </div>
                  </div>
                ))}
+               {categories.length === 0 && <div className="text-gray-400 text-center py-4 italic">Nenhuma categoria encontrada para o time selecionado.</div>}
             </div>
            </div>
         )}

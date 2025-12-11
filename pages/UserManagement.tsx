@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Info, Eye, Database, X } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Info, Eye, Database, X, Globe } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -12,12 +12,15 @@ const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Modal States
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
+    const stored = localStorage.getItem('performax_current_user');
+    if (stored) setCurrentUser(JSON.parse(stored));
     loadData();
   }, []);
 
@@ -33,14 +36,14 @@ const UserManagement: React.FC = () => {
     if (!editingUser) return;
     
     // Logic: 
-    // MASTER -> teamIds = [] (Implies access to all)
+    // MASTER/GLOBAL -> teamIds = [] (Implies access to all or via Dashboard)
     // OTHERS -> teamIds = current selection or []
-    const isMaster = newRole === UserRole.MASTER;
+    const isSuper = newRole === UserRole.MASTER || newRole === UserRole.GLOBAL;
     
     setEditingUser({
         ...editingUser,
         role: newRole,
-        teamIds: isMaster ? [] : (editingUser.teamIds || [])
+        teamIds: isSuper ? [] : (editingUser.teamIds || [])
     });
   };
 
@@ -52,8 +55,8 @@ const UserManagement: React.FC = () => {
             return;
         }
 
-        // Security Check: Non-MASTER users MUST have at least one team
-        if (editingUser.role !== UserRole.MASTER && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
+        // Security Check: Non-MASTER/GLOBAL users MUST have at least one team
+        if (editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
             setError("Para usuários com permissão restrita, é obrigatório selecionar pelo menos um time.");
             return;
         }
@@ -68,7 +71,7 @@ const UserManagement: React.FC = () => {
             role: roleToSave,
             password: editingUser.password || '123456', 
             avatarUrl: editingUser.avatarUrl,
-            teamIds: roleToSave === UserRole.MASTER ? [] : (editingUser.teamIds || [])
+            teamIds: (roleToSave === UserRole.MASTER || roleToSave === UserRole.GLOBAL) ? [] : (editingUser.teamIds || [])
         };
         
         const { error: saveError } = await saveUser(user);
@@ -121,11 +124,18 @@ const UserManagement: React.FC = () => {
   // Helper to get permission description
   const getPermissionDescription = (role: UserRole) => {
     switch (role) {
+        case UserRole.GLOBAL:
+            return {
+                icon: <Globe className="text-purple-600" size={24} />,
+                title: "Super Admin (Global)",
+                desc: "Acesso irrestrito a TODOS os painéis Master do sistema. Pode criar outros Globais.",
+                color: "bg-purple-50 border-purple-200 text-purple-900"
+            };
         case UserRole.MASTER:
             return {
                 icon: <ShieldCheck className="text-blue-600" size={24} />,
-                title: "Acesso Total (Master)",
-                desc: "Controle total do sistema. Pode criar, editar e excluir tudo (Times, Usuários, Atletas). Não requer seleção de times.",
+                title: "Dono do Painel (Master)",
+                desc: "Controle total do seu próprio painel (Times, Atletas). Possui ID único de Tenant.",
                 color: "bg-blue-50 border-blue-200 text-blue-900"
             };
         case UserRole.TECNICO:
@@ -134,7 +144,7 @@ const UserManagement: React.FC = () => {
             return {
                 icon: <Database className="text-green-600" size={24} />,
                 title: "Gestão de Dados (Restrito)",
-                desc: "Pode cadastrar e editar dados (Atletas, Treinos) dos times selecionados. SEM permissão de exclusão.",
+                desc: "Pode cadastrar e editar dados (Atletas, Treinos) dos times selecionados.",
                 color: "bg-green-50 border-green-200 text-green-900"
             };
         case UserRole.PREPARADOR:
@@ -142,7 +152,7 @@ const UserManagement: React.FC = () => {
             return {
                 icon: <Eye className="text-orange-600" size={24} />,
                 title: "Apenas Visualização",
-                desc: "Acesso somente leitura aos dados dos times selecionados. Não pode alterar nada.",
+                desc: "Acesso somente leitura aos dados dos times selecionados.",
                 color: "bg-orange-50 border-orange-200 text-orange-900"
             };
         default:
@@ -158,7 +168,7 @@ const UserManagement: React.FC = () => {
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        <div className="flex justify-between items-center mb-6">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-               <ShieldCheck className="text-blue-600"/> Gestão de Usuários e Permissões
+               <ShieldCheck className="text-blue-600"/> Gestão de Usuários
            </h2>
            <button onClick={() => setEditingUser({role: UserRole.TECNICO, teamIds: []})} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-sm transition-colors">
                <Plus size={20} /> Novo Usuário
@@ -203,13 +213,15 @@ const UserManagement: React.FC = () => {
                    </div>
                    
                    <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Função (Define Permissões)</label>
+                       <label className="block text-sm font-bold text-gray-700 mb-1">Função</label>
                        <select 
                           className={`${inputClass} font-semibold`}
                           value={editingUser.role} 
                           onChange={e => handleRoleChange(e.target.value as UserRole)}
                        >
                            {Object.values(UserRole).map(role => (
+                               // Only show GLOBAL option if current user is GLOBAL
+                               (role === UserRole.GLOBAL && currentUser?.role !== UserRole.GLOBAL) ? null :
                                <option key={role} value={role}>{role}</option>
                            ))}
                        </select>
@@ -242,7 +254,7 @@ const UserManagement: React.FC = () => {
                })()}
 
                {/* TEAM SELECTION */}
-               {editingUser.role !== UserRole.MASTER && (
+               {editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (
                    <div className="mt-6 border-t border-gray-100 pt-4">
                       <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                           <Lock size={16} className="text-gray-500"/> Selecionar Times Permitidos
@@ -290,31 +302,32 @@ const UserManagement: React.FC = () => {
                const perm = getPermissionDescription(u.role);
                return (
                <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm gap-4">
-                   <div className="flex items-center gap-4">
+                   <div className="flex items-center gap-4 w-full">
                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
-                       <div>
-                           <p className="font-bold text-gray-800 text-lg">{u.name}</p>
+                       <div className="flex-1 min-w-0">
+                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                               <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
+                               {/* SHOW ID FOR MASTER/GLOBAL */}
+                               {(u.role === UserRole.MASTER || u.role === UserRole.GLOBAL) && (
+                                   <span className="text-[10px] bg-gray-100 text-gray-500 font-mono px-2 py-0.5 rounded border border-gray-200 truncate" title="ID do Painel">ID: {u.id}</span>
+                               )}
+                           </div>
                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                <p className="text-sm text-gray-500">{u.email}</p>
                                <span className="hidden sm:inline text-gray-300">•</span>
-                               <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+                               <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
                            </div>
                            
                            {/* Info Permissions */}
                            <div className="flex items-center gap-1 mt-1">
                                <div className="text-xs text-gray-400">{perm.title}</div>
                            </div>
-
-                           {u.role !== UserRole.MASTER && u.teamIds && u.teamIds.length > 0 && (
-                               <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                   <CheckSquare size={12}/> Acesso a {u.teamIds.length} times
-                               </p>
-                           )}
                        </div>
                    </div>
                    <div className="flex gap-2 self-end md:self-center">
                        <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
-                       {u.role !== UserRole.MASTER && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
+                       {/* Cannot delete self or Master if not Global */}
+                       {u.id !== currentUser?.id && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
                    </div>
                </div>
            )})}

@@ -8,6 +8,8 @@ interface LoginProps {
   onLogin: (user: User) => void;
 }
 
+const GLOBAL_EMAIL = 'robson.jsiqueira@gmail.com';
+
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +39,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               name,
               email,
               password,
-              role: UserRole.MASTER,
+              role: email === GLOBAL_EMAIL ? UserRole.GLOBAL : UserRole.MASTER, // Auto-assign Global if email matches
               avatarUrl: '',
               teamIds: [] // Explicitly initialize
             };
@@ -58,6 +60,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             const users = await getUsers();
             const found = users.find(u => u.email === email && u.password === password);
             if (found) {
+              // Safety check for hardcoded global access
+              if (found.email === GLOBAL_EMAIL && found.role !== UserRole.GLOBAL) {
+                  found.role = UserRole.GLOBAL;
+                  await saveUser(found); // Update DB if needed
+              }
               onLogin(found);
             } else {
               setError('Credenciais inválidas.');
@@ -120,7 +127,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div className="relative">
                <label className="block text-sm font-bold text-gray-700 mb-1">Senha</label>
                <input 
-                 type={showPassword ? "text" : "password"} 
+                 type="password" 
                  value={password}
                  onChange={(e) => setPassword(e.target.value)}
                  className="w-full bg-[#EEEDEC] border border-gray-300 rounded-lg p-3 text-gray-800 focus:outline-none focus:border-blue-500 pr-10"
