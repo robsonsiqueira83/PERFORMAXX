@@ -273,14 +273,14 @@ const PublicTeamDashboard: React.FC = () => {
                     <Shirt className="text-green-600"/> Seleção do Momento (4-3-3)
                 </h3>
 
-                {/* Field Container - Aspect Ratio Optimized */}
-                <div className="relative w-full aspect-[3/4] md:aspect-[16/9] lg:aspect-[2/1] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
+                {/* Field Container - Reverted to Vertical Aspect Ratio */}
+                <div className="relative w-full aspect-[2/3] sm:aspect-[3/4] lg:aspect-[3/4] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
                     {/* Field Markings */}
                     <div className="absolute inset-4 border-2 border-white/40 rounded-sm"></div>
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2"></div>
-                    <div className="absolute top-1/2 left-1/2 w-24 h-24 md:w-32 md:h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
-                    <div className="absolute bottom-4 left-1/2 w-48 h-24 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
-                    <div className="absolute top-4 left-1/2 w-48 h-24 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
+                    <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+                    <div className="absolute bottom-4 left-1/2 w-40 h-20 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
+                    <div className="absolute top-4 left-1/2 w-40 h-20 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
 
                     {/* Players */}
                     {bestXI.map((pos, idx) => (
@@ -321,6 +321,8 @@ const PublicTeamDashboard: React.FC = () => {
                         </div>
                     ))}
                     
+                    <div className="absolute bottom-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Defesa</div>
+                    <div className="absolute top-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Ataque</div>
                 </div>
             </div>
         </div>
