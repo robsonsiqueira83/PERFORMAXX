@@ -11,7 +11,7 @@ import UserManagement from './pages/UserManagement';
 import PublicTeamDashboard from './pages/PublicTeamDashboard';
 import PublicAthleteProfile from './pages/PublicAthleteProfile';
 import { User, UserRole } from './types';
-import { getTeams } from './services/storageService';
+import { getTeams, getUsers } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -19,17 +19,36 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Check local session
-    const storedUserStr = localStorage.getItem('performax_current_user');
-    let currentUser: User | null = null;
-    
-    if (storedUserStr) {
-      currentUser = JSON.parse(storedUserStr);
-      setUser(currentUser);
-    }
-    
-    // 2. Load Teams with PERMISSION check
     const init = async () => {
+        // 1. Check local session first
+        const storedUserStr = localStorage.getItem('performax_current_user');
+        let currentUser: User | null = null;
+        
+        if (storedUserStr) {
+            try {
+                const localUser = JSON.parse(storedUserStr);
+                
+                // CRITICAL FIX: Fetch fresh user data from DB to ensure Role/Permissions are up to date.
+                // This prevents users from having stale permissions (e.g. seeing Edit buttons after being demoted).
+                const allUsers = await getUsers();
+                const freshUser = allUsers.find(u => u.id === localUser.id);
+                
+                if (freshUser) {
+                    currentUser = freshUser;
+                    setUser(freshUser);
+                    // Update local storage with fresh data so it persists correctly next time
+                    localStorage.setItem('performax_current_user', JSON.stringify(freshUser));
+                } else {
+                    // User might have been deleted from DB, logout locally
+                    localStorage.removeItem('performax_current_user');
+                }
+            } catch (e) {
+                console.error("Error parsing user session", e);
+                localStorage.removeItem('performax_current_user');
+            }
+        }
+        
+        // 2. Load Teams with PERMISSION check based on the FRESH currentUser
         const allTeams = await getTeams();
         
         if (currentUser && allTeams.length > 0) {
@@ -49,15 +68,13 @@ const App: React.FC = () => {
                     return isStillValid ? prev : allowedTeams[0].id;
                 });
             } else if (currentUser.role !== UserRole.MASTER) {
-                // If user exists but has NO teams, clear selection (handled in Layout usually)
+                // If user exists but has NO teams allowed, clear selection
                 setSelectedTeamId('');
             } else {
                 // Master default
                 setSelectedTeamId(allTeams[0].id);
             }
         } else if (allTeams.length > 0 && !currentUser) {
-             // Not logged in yet, but we might want a default for logic later? 
-             // Usually irrelevant until login, but keeping robust.
              setSelectedTeamId(allTeams[0].id);
         }
         
@@ -68,6 +85,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = async (u: User) => {
+    // On login, we assume 'u' is fresh from the login process (which fetches from DB)
     setUser(u);
     localStorage.setItem('performax_current_user', JSON.stringify(u));
     
@@ -95,7 +113,7 @@ const App: React.FC = () => {
     window.location.hash = '/'; // Reset to root
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen">Carregando...</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50 text-blue-600 font-bold">Carregando PerformaXX...</div>;
 
   return (
     <Router>
