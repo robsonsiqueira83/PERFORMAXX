@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -22,7 +22,10 @@ const UserManagement: React.FC = () => {
   
   // Invite Modal State
   const [inviteModal, setInviteModal] = useState<{ isOpen: boolean, user: User | null, newTeams: string[] }>({ isOpen: false, user: null, newTeams: [] });
-  // Pending Invites (For the logged in user)
+  // Selected Role for Invite
+  const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.TECNICO);
+
+  // Pending Invites (For the logged in user to see, handled in Admin, but we keep state here if needed for list)
   const [pendingInvites, setPendingInvites] = useState<{team: Team, inviterId: string}[]>([]);
 
   useEffect(() => {
@@ -80,14 +83,6 @@ const UserManagement: React.FC = () => {
       });
 
       setUsers(filteredUsers);
-
-      // 3. Check for Pending Invites for the CURRENT USER (Logged in)
-      if (loggedUser.teamIds) {
-          const pendingIds = loggedUser.teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
-          const invites = allTeams.filter(t => pendingIds.includes(t.id)).map(t => ({ team: t, inviterId: t.ownerId || '' }));
-          setPendingInvites(invites);
-      }
-
       setLoading(false);
   };
 
@@ -121,6 +116,7 @@ const UserManagement: React.FC = () => {
                  const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
                  
                  if (newTeamsToInvite.length > 0) {
+                     setInviteRole(editingUser.role as UserRole); // Set intended role
                      setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
                      return; // Stop standard save
                  } else {
@@ -180,36 +176,22 @@ const UserManagement: React.FC = () => {
       
       userToUpdate.teamIds = [...currentTeamIds, ...pendingTeamIds];
       
+      // Update role if permitted (Only if not a Master/Global, to prevent accidental downgrades)
+      if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
+          userToUpdate.role = inviteRole; 
+      }
+      
       await saveUser(userToUpdate);
       setInviteModal({ isOpen: false, user: null, newTeams: [] });
       setEditingUser(null);
       setSuccessMessage("Convite enviado com sucesso! O usuário deverá aceitar o acesso.");
   };
 
-  const acceptInvite = async (teamId: string) => {
-      if (!currentUser) return;
-      
-      const updatedIds = (currentUser.teamIds || []).map(id => {
-          if (id === `pending:${teamId}`) return teamId; // Remove pending prefix
-          return id;
-      });
-      
-      const updatedUser = { ...currentUser, teamIds: updatedIds };
-      
-      // Optimistic update
-      setCurrentUser(updatedUser);
-      setPendingInvites(prev => prev.filter(i => i.team.id !== teamId));
-      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
-      
-      await saveUser(updatedUser);
-      setSuccessMessage(`Convite para ${teams.find(t=>t.id === teamId)?.name || 'o time'} aceito!`);
-      // Reload to reflect access in layout
-      setTimeout(() => window.location.reload(), 1000);
-  };
-
   const requestDelete = (user: User) => {
       // If the user is a MASTER but NOT the owner of this panel, it's a Guest Master
-      const isGuestMaster = user.role === UserRole.MASTER && user.id !== currentContextId;
+      // OR if it's a regular user created outside but invited here (External Collaborator)
+      // Logic: If user ID != currentContextID, and we are in that context, treating as guest removal from THIS context.
+      const isGuestMaster = user.id !== currentContextId;
       setDeleteConfirmation({ id: user.id, isGuestMaster });
   };
 
@@ -217,20 +199,23 @@ const UserManagement: React.FC = () => {
     if (!deleteConfirmation || !currentUser) return;
 
     if (deleteConfirmation.isGuestMaster) {
-        // REVOKE ACCESS ONLY
+        // REVOKE ACCESS ONLY (Remove from teams of this panel)
         // Find the user to revoke
         const targetUser = users.find(u => u.id === deleteConfirmation.id);
         if (targetUser) {
             // Get IDs of teams owned by CURRENT CONTEXT
             const panelTeamIds = teams.map(t => t.id);
-            // Remove these teams from the target user
-            const newTeamIds = (targetUser.teamIds || []).filter(tid => !panelTeamIds.includes(tid) && !panelTeamIds.includes(tid.replace('pending:', '')));
+            // Remove these teams from the target user (both active and pending)
+            const newTeamIds = (targetUser.teamIds || []).filter(tid => {
+                const cleanId = tid.replace('pending:', '');
+                return !panelTeamIds.includes(cleanId);
+            });
             
             await saveUser({ ...targetUser, teamIds: newTeamIds });
-            setSuccessMessage("Acesso revogado com sucesso!");
+            setSuccessMessage("Colaborador removido deste painel com sucesso!");
         }
     } else {
-        // DELETE USER (Regular Staff created in this panel)
+        // DELETE USER (Regular Staff created in this panel and owned by it - currently assuming full delete)
         await deleteUser(deleteConfirmation.id);
     }
 
@@ -270,38 +255,15 @@ const UserManagement: React.FC = () => {
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
+  // Split users for display
+  // 1. External Collaborators (Accepted)
+  const externalCollaborators = users.filter(u => u.id !== currentContextId);
+  // 2. Internal Users (Created here/Owner) - Usually just the owner in this strict view unless we allow creating "internal" non-master users which we do
+  const internalUsers = users.filter(u => u.id === currentContextId);
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        
-       {/* PENDING INVITES SECTION (For the logged in user) */}
-       {pendingInvites.length > 0 && (
-           <div className="mb-8 bg-indigo-50 border border-indigo-200 rounded-xl p-6 animate-fade-in">
-               <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2 mb-4">
-                   <Mail className="text-indigo-600" /> Convites Pendentes
-               </h3>
-               <p className="text-sm text-indigo-700 mb-4">Você foi convidado para colaborar nos seguintes times:</p>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {pendingInvites.map((invite) => (
-                       <div key={invite.team.id} className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100 flex justify-between items-center">
-                           <div className="flex items-center gap-3">
-                                {invite.team.logoUrl ? <img src={invite.team.logoUrl} className="w-10 h-10 object-contain" /> : <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center font-bold text-gray-500">{invite.team.name.charAt(0)}</div>}
-                                <div>
-                                    <h4 className="font-bold text-gray-800">{invite.team.name}</h4>
-                                    <p className="text-xs text-gray-500">Convite ID: {invite.inviterId.substring(0,8)}...</p>
-                                </div>
-                           </div>
-                           <button 
-                                onClick={() => acceptInvite(invite.team.id)}
-                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
-                           >
-                               <UserCheck size={16} /> Aceitar
-                           </button>
-                       </div>
-                   ))}
-               </div>
-           </div>
-       )}
-
        <div className="flex justify-between items-center mb-6">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
@@ -444,60 +406,91 @@ const UserManagement: React.FC = () => {
            </div>
        )}
 
-       <div className="grid grid-cols-1 gap-3">
-           {users.map(u => {
-               const perm = getPermissionDescription(u.role);
-               // Check if user is a Guest Master (Master role but not owner of this panel)
-               const isGuestMaster = u.role === UserRole.MASTER && u.id !== currentContextId;
-               
-               return (
-               <div key={u.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 ${isGuestMaster ? 'bg-purple-50 border-purple-200' : 'bg-white'}`}>
-                   <div className="flex items-center gap-4 w-full">
-                       {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
-                       <div className="flex-1 min-w-0">
-                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                               <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
-                               {isGuestMaster && (
-                                   <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300 truncate flex items-center gap-1">
-                                       <Briefcase size={10} /> Mestre Convidado
-                                   </span>
-                               )}
+       {/* EXTERNAL COLLABORATORS LIST */}
+       {externalCollaborators.length > 0 && (
+           <div className="mb-8">
+               <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3">Colaboradores Externos (Aceitaram o Convite)</h3>
+               <div className="grid grid-cols-1 gap-3">
+                   {externalCollaborators.map(u => {
+                       const perm = getPermissionDescription(u.role);
+                       return (
+                           <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-purple-200 rounded-xl bg-purple-50 shadow-sm gap-4">
+                               <div className="flex items-center gap-4 w-full">
+                                   {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-purple-200" /> : <div className="w-12 h-12 rounded-full bg-purple-200 flex items-center justify-center font-bold text-purple-700 text-lg">{u.name.charAt(0)}</div>}
+                                   <div className="flex-1 min-w-0">
+                                       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                           <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
+                                           <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300 truncate flex items-center gap-1">
+                                               <Briefcase size={10} /> Externo
+                                           </span>
+                                       </div>
+                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                           <p className="text-sm text-gray-500">{u.email}</p>
+                                           <span className="hidden sm:inline text-gray-300">•</span>
+                                           <span className="text-xs font-bold px-2 py-0.5 rounded uppercase bg-gray-100 text-gray-700">{u.role}</span>
+                                       </div>
+                                   </div>
+                               </div>
+                               <div className="flex gap-2 self-end md:self-center">
+                                   <button 
+                                       onClick={() => requestDelete(u)} 
+                                       className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors flex items-center gap-1 text-sm font-bold border border-red-100"
+                                       title="Remover Colaborador"
+                                   >
+                                       <UserX size={16} /> <span className="hidden sm:inline">Remover</span>
+                                   </button>
+                               </div>
                            </div>
-                           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                               <p className="text-sm text-gray-500">{u.email}</p>
-                               <span className="hidden sm:inline text-gray-300">•</span>
-                               <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
-                           </div>
-                           <div className="flex flex-col mt-1">
-                               <div className="text-xs text-gray-400">{isGuestMaster ? "Colaborador Externo (Acesso Master)" : perm.title}</div>
-                               {(u.role === UserRole.MASTER || u.role === UserRole.GLOBAL) && (
-                                   <span className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {u.id}</span>
-                               )}
+                       );
+                   })}
+               </div>
+           </div>
+       )}
+
+       {/* INTERNAL USERS LIST */}
+       <div className="mb-4">
+           {internalUsers.length > 0 && <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3">Usuários do Painel</h3>}
+           <div className="grid grid-cols-1 gap-3">
+               {internalUsers.map(u => {
+                   const perm = getPermissionDescription(u.role);
+                   return (
+                   <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 bg-white">
+                       <div className="flex items-center gap-4 w-full">
+                           {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
+                           <div className="flex-1 min-w-0">
+                               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                   <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
+                               </div>
+                               <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                   <p className="text-sm text-gray-500">{u.email}</p>
+                                   <span className="hidden sm:inline text-gray-300">•</span>
+                                   <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+                               </div>
+                               <div className="text-xs text-gray-400 mt-1">{perm.title}</div>
                            </div>
                        </div>
+                       <div className="flex gap-2 self-end md:self-center">
+                           <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
+                           {u.id !== currentUser?.id && (
+                               <button 
+                                   onClick={() => requestDelete(u)} 
+                                   className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                                   title="Excluir Usuário"
+                               >
+                                   <Trash2 size={18} />
+                               </button>
+                           )}
+                       </div>
                    </div>
-                   <div className="flex gap-2 self-end md:self-center">
-                       {/* Don't allow editing Guest Masters, only Revoke */}
-                       {!isGuestMaster && <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>}
-                       
-                       {u.id !== currentUser?.id && (
-                           <button 
-                               onClick={() => requestDelete(u)} 
-                               className={`${isGuestMaster ? 'text-orange-600 bg-orange-50 hover:bg-orange-100' : 'text-red-600 bg-red-50 hover:bg-red-100'} p-2 rounded-lg transition-colors`}
-                               title={isGuestMaster ? "Revogar Acesso" : "Excluir Usuário"}
-                           >
-                               {isGuestMaster ? <UserMinus size={18} /> : <Trash2 size={18} />}
-                           </button>
-                       )}
-                   </div>
-               </div>
-           )})}
-           {users.length === 0 && (
-               <div className="p-8 text-center text-gray-500 italic border border-dashed border-gray-200 rounded-xl">
-                   Nenhum usuário adicional encontrado neste painel.
-               </div>
-           )}
+               )})}
+           </div>
        </div>
+
+       {users.length === 0 && (
+           <div className="p-8 text-center text-gray-500 italic border border-dashed border-gray-200 rounded-xl">
+               Nenhum usuário adicional encontrado neste painel.
+           </div>
+       )}
 
        {/* --- MODALS --- */}
        {inviteModal.isOpen && (
@@ -513,6 +506,22 @@ const UserManagement: React.FC = () => {
                  <p className="text-sm text-blue-700 bg-blue-50 p-3 rounded-lg mb-6">
                      Deseja enviar um convite para colaborar nos times selecionados? O usuário verá um pedido de aprovação ao logar.
                  </p>
+                 
+                 <div className="mb-6 text-left">
+                     <label className="block text-xs font-bold text-gray-700 mb-1">Selecione a Função no Painel</label>
+                     <select 
+                        className={inputClass}
+                        value={inviteRole} 
+                        onChange={e => setInviteRole(e.target.value as UserRole)}
+                     >
+                         <option value={UserRole.TECNICO}>Técnico</option>
+                         <option value={UserRole.AUXILIAR}>Auxiliar</option>
+                         <option value={UserRole.SCOUT}>Scout</option>
+                         <option value={UserRole.PREPARADOR}>Preparador Físico</option>
+                         <option value={UserRole.MASSAGISTA}>Massagista</option>
+                     </select>
+                 </div>
+
                  <div className="flex gap-3">
                      <button onClick={() => setInviteModal({isOpen: false, user: null, newTeams: []})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
                      <button onClick={confirmInvite} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Enviar Convite</button>
@@ -542,7 +551,7 @@ const UserManagement: React.FC = () => {
                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${deleteConfirmation.isGuestMaster ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>
                      {deleteConfirmation.isGuestMaster ? <UserMinus size={32} /> : <Trash2 size={32} />}
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">{deleteConfirmation.isGuestMaster ? 'Revogar Acesso?' : 'Excluir Usuário?'}</h3>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">{deleteConfirmation.isGuestMaster ? 'Remover Colaborador?' : 'Excluir Usuário?'}</h3>
                  <p className="text-gray-500 mb-6">
                      {deleteConfirmation.isGuestMaster 
                         ? "O usuário perderá acesso aos times deste painel, mas a conta dele continuará existindo."
@@ -551,7 +560,7 @@ const UserManagement: React.FC = () => {
                  <div className="flex gap-3">
                      <button onClick={() => setDeleteConfirmation(null)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
                      <button onClick={confirmDelete} className={`flex-1 text-white font-bold py-2 rounded-lg ${deleteConfirmation.isGuestMaster ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                         {deleteConfirmation.isGuestMaster ? 'Revogar' : 'Excluir'}
+                         {deleteConfirmation.isGuestMaster ? 'Remover' : 'Excluir'}
                      </button>
                  </div>
              </div>

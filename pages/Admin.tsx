@@ -7,7 +7,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -35,7 +35,8 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   
   // Data State
   const [ownedTeams, setOwnedTeams] = useState<Team[]>([]);
-  const [guestTeams, setGuestTeams] = useState<Team[]>([]);
+  const [activeGuestTeams, setActiveGuestTeams] = useState<Team[]>([]);
+  const [pendingGuestTeams, setPendingGuestTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Modal State
@@ -84,17 +85,23 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     }
 
     // 2. Guest Teams (Teams I accepted to work in, but don't own)
-    // Only relevant if I am viewing my own context or I am the user
     if (u) {
-        // Filter teams where user has access (in teamIds) BUT is not the owner
-        const myGuestTeams = allTeams.filter(t => 
-            u.teamIds?.includes(t.id) && t.ownerId !== u.id
+        const teamIds = u.teamIds || [];
+        
+        // Find Pending Teams
+        const pendingIds = teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
+        setPendingGuestTeams(allTeams.filter(t => pendingIds.includes(t.id)));
+
+        // Find Active Guest Teams (Not pending, not owned)
+        // Clean active IDs logic
+        const activeIds = teamIds.filter(id => !id.startsWith('pending:'));
+        const myActiveTeams = allTeams.filter(t => 
+            activeIds.includes(t.id) && t.ownerId !== u.id
         );
-        setGuestTeams(myGuestTeams);
+        setActiveGuestTeams(myActiveTeams);
     }
     
     // Categories for the currently selected team (in header)
-    // Only if the currentTeamId belongs to the owned/guest lists
     const c = await getCategories();
     setCategories(c.filter(item => item.teamId === currentTeamId));
     setLoading(false);
@@ -152,7 +159,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         ownerId: viewingContextId 
     });
     closeModal();
-    // Force reload to update Layout context (header selector) and lists
     window.location.reload();
   };
 
@@ -180,7 +186,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
     if (hasData) {
         setModalType('delete_migrate_warn');
-        // Pre-select first available other team if exists
         const otherTeams = ownedTeams.filter(t => t.id !== team.id);
         if (otherTeams.length > 0) setMigrationDestTeamId(otherTeams[0].id);
     } else {
@@ -212,25 +217,21 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             getAthletes(), getUsers(), getCategories(), getTrainingSessions()
         ]);
 
-        // Migrate Categories (Must happen before athletes technically, but ID remains same so order allows parallel)
         const teamCategories = allCategories.filter(c => c.teamId === targetId);
         for (const cat of teamCategories) {
             await saveCategory({ ...cat, teamId: destinationId });
         }
 
-        // Migrate Athletes
         const teamAthletes = allAthletes.filter(a => a.teamId === targetId);
         for (const ath of teamAthletes) {
             await saveAthlete({ ...ath, teamId: destinationId });
         }
 
-        // Migrate Sessions
         const teamSessions = allSessions.filter(s => s.teamId === targetId);
         for (const ses of teamSessions) {
             await saveTrainingSession({ ...ses, teamId: destinationId });
         }
 
-        // Update Users (Access List)
         const teamUsers = allUsers.filter(u => u.teamIds?.includes(targetId));
         for (const usr of teamUsers) {
             const newTeamIds = (usr.teamIds || []).filter(id => id !== targetId);
@@ -276,11 +277,32 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       const updatedUser = { ...currentUser, teamIds: newTeamIds };
       
       await saveUser(updatedUser);
-      // Update local storage to reflect change immediately
       localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
       
       closeModal();
       window.location.reload();
+  };
+
+  // --- ACCEPT INVITE LOGIC ---
+  const handleAcceptInvite = async (team: Team) => {
+      if (!currentUser) return;
+      const teamId = team.id;
+      
+      // Remove pending: prefix for this team in user's list
+      const updatedIds = (currentUser.teamIds || []).map(id => {
+          if (id === `pending:${teamId}`) return teamId;
+          return id;
+      });
+      
+      const updatedUser = { ...currentUser, teamIds: updatedIds };
+      
+      await saveUser(updatedUser);
+      // Update local storage
+      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+      
+      showAlert('alert_success', `Convite para ${team.name} aceito com sucesso! O time agora está disponível no menu.`);
+      setTimeout(() => window.location.reload(), 1500);
   };
 
 
@@ -306,7 +328,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         teamId: currentTeamId 
     });
     closeModal();
-    // Force reload to ensure category is available in dropdowns throughout the app
     window.location.reload();
   };
 
@@ -327,7 +348,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
   const fieldBoxClass = "flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full transition-colors hover:border-gray-300";
 
-  if (loading && ownedTeams.length === 0 && guestTeams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading && ownedTeams.length === 0 && activeGuestTeams.length === 0 && pendingGuestTeams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   const renderTeamCard = (team: Team, isGuest: boolean) => {
       const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
@@ -448,6 +469,39 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         {activeTab === 'teams' && (
           <div className="space-y-8">
             
+            {/* SECTION 0: PENDING INVITES (Important!) */}
+            {pendingGuestTeams.length > 0 && (
+                <div className="mb-8 bg-orange-50 border border-orange-200 rounded-xl p-6 animate-fade-in">
+                    <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2 mb-4">
+                        <Mail className="text-orange-600" /> Convites Pendentes
+                    </h3>
+                    <p className="text-sm text-orange-700 mb-4">Você foi convidado para colaborar nos seguintes times. Aceite para visualizar os dados e acessar o painel.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pendingGuestTeams.map(team => (
+                            <div key={team.id} className="bg-white p-4 rounded-lg shadow-sm border border-orange-100 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    {team.logoUrl ? (
+                                        <img src={team.logoUrl} className="w-10 h-10 object-contain" />
+                                    ) : (
+                                        <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center font-bold text-gray-500">{team.name.charAt(0)}</div>
+                                    )}
+                                    <div>
+                                        <h4 className="font-bold text-gray-800">{team.name}</h4>
+                                        <p className="text-xs text-gray-500">Aguardando aceite</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => handleAcceptInvite(team)}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
+                                >
+                                    <UserCheck size={16} /> Aceitar
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* SECTION 1: MY TEAMS */}
             <div>
                 <div className="mb-4 flex justify-between items-center">
@@ -467,15 +521,15 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                 </div>
             </div>
 
-            {/* SECTION 2: GUEST TEAMS */}
-            {guestTeams.length > 0 && (
+            {/* SECTION 2: ACTIVE GUEST TEAMS */}
+            {activeGuestTeams.length > 0 && (
                 <div className="pt-6 border-t border-gray-200">
                     <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
                         Times em que Colaboro
-                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{guestTeams.length}</span>
+                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{activeGuestTeams.length}</span>
                     </h3>
                     <div className="space-y-4">
-                        {guestTeams.map(team => renderTeamCard(team, true))}
+                        {activeGuestTeams.map(team => renderTeamCard(team, true))}
                     </div>
                 </div>
             )}
@@ -488,7 +542,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
            <div>
              <div className="mb-6 flex justify-between items-center">
                <h3 className="font-bold text-lg text-gray-800">
-                   Categorias ({[...ownedTeams, ...guestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
+                   Categorias ({[...ownedTeams, ...activeGuestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
                </h3>
                {canEdit && (
                    <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
