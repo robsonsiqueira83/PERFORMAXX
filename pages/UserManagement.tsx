@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X, Info, Lock } from 'lucide-react';
+import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X, Lock, Info } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
