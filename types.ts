@@ -52,6 +52,7 @@ export interface Athlete {
   birthDate: string;
   responsibleName: string;
   responsiblePhone: string;
+  pendingTransferTeamId?: string; // New field for transfer request
 }
 
 // Re-purposing 'TechnicalStats' as 'FundamentalsStats'
