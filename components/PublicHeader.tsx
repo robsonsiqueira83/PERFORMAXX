@@ -12,7 +12,7 @@ const PublicHeader: React.FC<PublicHeaderProps> = ({ team }) => {
       <div className="bg-[#1e3a8a] text-white py-4 px-6 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-center md:justify-start gap-3">
           <img 
-             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO3.png" 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
              alt="PERFORMAXX" 
              className="h-10 object-contain"
            />

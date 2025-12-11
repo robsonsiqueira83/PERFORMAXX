@@ -69,7 +69,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
       <div className="md:hidden bg-[#1e3a8a] text-white p-4 flex justify-between items-center shadow-md z-50">
         <div className="flex items-center gap-2">
              <img 
-               src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO3.png" 
+               src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
                alt="PERFORMAXX" 
                className="h-8 object-contain"
              />
@@ -87,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
       `}>
         <div className="p-6 flex items-center justify-center border-b border-blue-800">
            <img 
-             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/refs/heads/main/PERFORMAXX%20LOGO3.png" 
+             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
              alt="PERFORMAXX" 
              className="w-40 object-contain"
            />
