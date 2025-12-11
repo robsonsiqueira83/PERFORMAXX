@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   Globe,
   Briefcase,
-  ChevronDown
+  ChevronDown,
+  User as UserIcon
 } from 'lucide-react';
 import { Team, User, UserRole, canEditData } from '../types';
 import { getTeams, getUsers } from '../services/storageService';
@@ -58,12 +59,14 @@ const Layout: React.FC<LayoutProps> = ({
             // Master sees their own teams + teams they are invited to
             // Teams owned by them
             const ownedTeams = allTeams.filter(t => t.ownerId === user.id);
-            // Teams they are invited to (via teamIds)
+            // Teams they are invited to (via teamIds) - FILTER OUT PENDING INVITES
             const invitedTeams = allTeams.filter(t => user.teamIds?.includes(t.id));
             userAllowedTeams = [...ownedTeams, ...invitedTeams];
         } else {
-            // Regular user sees only invited teams
-            userAllowedTeams = allTeams.filter(t => user.teamIds?.includes(t.id));
+            // Regular user sees only invited teams - FILTER OUT PENDING INVITES
+            // Pending invites start with "pending:"
+            const activeTeamIds = (user.teamIds || []).filter(id => !id.startsWith('pending:'));
+            userAllowedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
         }
 
         // 2. Build Context List (Panel Selector)
@@ -139,24 +142,39 @@ const Layout: React.FC<LayoutProps> = ({
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-xl
+        fixed inset-y-0 left-0 z-40 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-xl flex flex-col
         md:relative md:translate-x-0
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
+        {/* Logo Area */}
         <div className="p-6 flex flex-col items-center justify-center border-b border-blue-800 relative">
            <img 
              src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
              alt="PERFORMAXX" 
-             className="w-40 object-contain"
+             className="w-40 object-contain mb-4"
            />
+           
+           {/* User Profile in Sidebar */}
+           <div className="flex flex-col items-center w-full">
+               <div className="w-16 h-16 rounded-full border-2 border-blue-400 bg-blue-800 flex items-center justify-center overflow-hidden mb-2">
+                   {user.avatarUrl ? (
+                       <img src={user.avatarUrl} alt="User" className="w-full h-full object-cover" />
+                   ) : (
+                       <UserIcon size={32} className="text-blue-300" />
+                   )}
+               </div>
+               <h3 className="font-bold text-sm text-center truncate w-full px-2">{user.name}</h3>
+               <span className="text-xs text-blue-300 bg-blue-900/50 px-2 py-0.5 rounded border border-blue-800 mt-1">{user.role}</span>
+           </div>
+
            {isGlobalImpersonating && (
-               <div className="mt-2 bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded border border-blue-700 w-full text-center animate-pulse">
+               <div className="mt-4 bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded border border-blue-700 w-full text-center animate-pulse">
                    Modo Visualização Global
                </div>
            )}
         </div>
 
-        <nav className="mt-6 px-4 space-y-2">
+        <nav className="mt-6 px-4 space-y-2 flex-1">
           {navigation.map((item) => (
             <Link
               key={item.name}
@@ -172,7 +190,7 @@ const Layout: React.FC<LayoutProps> = ({
               <span className="font-medium">{item.name}</span>
             </Link>
           ))}
-           {/* Global users can access User Management anywhere */}
+           {/* Global/Master User Management */}
            {(user.role === UserRole.MASTER || user.role === UserRole.GLOBAL) && (
              <Link
               to="/users"
@@ -189,27 +207,15 @@ const Layout: React.FC<LayoutProps> = ({
            )}
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-blue-800 bg-[#1e3a8a]">
-          <div className="flex gap-2">
-            {isGlobalImpersonating ? (
-                <button
-                    onClick={onReturnToGlobal}
-                    className="flex-1 flex items-center justify-center px-3 py-2 text-xs text-blue-100 hover:bg-blue-800 rounded transition-colors bg-blue-900/50 border border-blue-700"
-                    title="Voltar ao Painel Global"
-                >
-                    <Globe className="h-4 w-4 mr-1" />
-                    Global
-                </button>
-            ) : null}
+        <div className="p-4 border-t border-blue-800 bg-[#1e3a8a]">
             <button
                 onClick={onLogout}
-                className={`flex items-center justify-center ${isGlobalImpersonating ? 'w-auto px-3' : 'w-full px-4'} py-2 text-sm text-red-200 hover:text-red-100 hover:bg-red-900/30 rounded transition-colors`}
+                className={`flex items-center justify-center w-full px-4 py-2 text-sm text-red-200 hover:text-red-100 hover:bg-red-900/30 rounded transition-colors`}
                 title="Sair"
             >
-                <LogOut className="h-4 w-4" />
-                {!isGlobalImpersonating && <span className="ml-2">Sair</span>}
+                <LogOut className="h-4 w-4 mr-2" />
+                <span>Sair</span>
             </button>
-          </div>
         </div>
       </aside>
 
@@ -221,9 +227,21 @@ const Layout: React.FC<LayoutProps> = ({
                 
                 {/* Welcome & Team Selection Group */}
                 <div className="flex flex-col gap-2 w-full md:w-auto flex-1">
-                    <h2 className="text-lg text-gray-800 font-medium">
-                        Olá, <span className="font-bold text-blue-900">{user.name}</span>. <span className="text-gray-500">Em qual time deseja trabalhar?</span>
-                    </h2>
+                    <div className="flex items-center gap-3">
+                         <h2 className="text-lg text-gray-800 font-medium">
+                            Olá, <span className="font-bold text-blue-900">{user.name}</span>. <span className="text-gray-500">Em qual time deseja trabalhar?</span>
+                         </h2>
+                         {/* Return to Global Dashboard Button in Header */}
+                         {isGlobalImpersonating && (
+                             <button
+                                 onClick={onReturnToGlobal}
+                                 className="flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200"
+                             >
+                                 <Globe size={12} />
+                                 Voltar ao Painel Global
+                             </button>
+                         )}
+                    </div>
                     
                     <div className="flex flex-col sm:flex-row gap-3">
                          {/* TEAM SELECTOR */}
