@@ -17,7 +17,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,9 +51,11 @@ const AthleteProfile: React.FC = () => {
   // Edit Profile State
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
 
-  // Add Training State
+  // Add/Edit Training State
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newStats, setNewStats] = useState({
+  
+  // Used for both New and Edit modes
+  const [currentStats, setCurrentStats] = useState({
     // Condição Física
     velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
     // Fundamentos
@@ -65,13 +67,10 @@ const AthleteProfile: React.FC = () => {
     // Tático - Último Terço
     ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
   });
-  const [newHeatmapPoints, setNewHeatmapPoints] = useState<HeatmapPoint[]>([]);
-  const [newNotes, setNewNotes] = useState('');
-
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [tempStats, setTempStats] = useState<any>(null);
-  const [tempHeatmap, setTempHeatmap] = useState<HeatmapPoint[]>([]);
-  const [tempNotes, setTempNotes] = useState('');
+  
+  const [currentHeatmapPoints, setCurrentHeatmapPoints] = useState<HeatmapPoint[]>([]);
+  const [currentNotes, setCurrentNotes] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null); // If null, it's a new entry
   
   const calendarRef = useRef<HTMLDivElement>(null);
 
@@ -196,8 +195,8 @@ const AthleteProfile: React.FC = () => {
       return allPoints;
   }, [filteredEntries]);
 
-  // Current Stats / Radar Data
-  const currentStats = useMemo(() => {
+  // Radar Data Logic
+  const currentRadarStats = useMemo(() => {
     if (filteredEntries.length === 0) return null;
 
     const dataToAverage = filteredEntries;
@@ -267,7 +266,7 @@ const AthleteProfile: React.FC = () => {
 
   // --- PERFORMANCE RANKING ---
   const performanceAnalysis = useMemo(() => {
-    if (!currentStats) return { best: [], worst: [] };
+    if (!currentRadarStats) return { best: [], worst: [] };
     
     let allStats: { label: string; score: number; type: string }[] = [];
     
@@ -279,13 +278,13 @@ const AthleteProfile: React.FC = () => {
 
     const hasTactical = filteredEntries.some(e => e.tactical !== undefined && e.tactical !== null);
 
-    addStats(currentStats.technical, 'Fundamentos');
-    addStats(currentStats.physical, 'Físico');
+    addStats(currentRadarStats.technical, 'Fundamentos');
+    addStats(currentRadarStats.physical, 'Físico');
     
     if (hasTactical) {
-        addStats(currentStats.tactical_def, 'Tático Def');
-        addStats(currentStats.tactical_const, 'Tático Cons');
-        addStats(currentStats.tactical_ult, 'Tático Ult');
+        addStats(currentRadarStats.tactical_def, 'Tático Def');
+        addStats(currentRadarStats.tactical_const, 'Tático Cons');
+        addStats(currentRadarStats.tactical_ult, 'Tático Ult');
     }
 
     allStats.sort((a, b) => b.score - a.score);
@@ -295,7 +294,7 @@ const AthleteProfile: React.FC = () => {
         worst: [...allStats].sort((a, b) => a.score - b.score).slice(0, 3) 
     };
 
-  }, [currentStats, filteredEntries]);
+  }, [currentRadarStats, filteredEntries]);
 
   const getTacticalColor = (data: any[]) => {
       if (!data || data.length === 0) return { stroke: '#8884d8', fill: '#8884d8' };
@@ -331,6 +330,13 @@ const AthleteProfile: React.FC = () => {
     setEditFormData(prev => ({ ...prev, birthDate: e.target.value }));
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const url = await processImageUpload(e.target.files[0]);
+          setEditFormData({ ...editFormData, photoUrl: url });
+      }
+  };
+
   // Calendar Logic
   const getDaysInMonth = (date: Date) => {
       const year = date.getFullYear();
@@ -360,24 +366,47 @@ const AthleteProfile: React.FC = () => {
       setCalendarMonth(newDate);
   };
 
-  // --- MODALS ---
-  const openTrainingModal = () => {
-    // Reset to defaults for fresh entry based on new structure
-    setNewStats({
+  // --- MODALS FUNCTIONS ---
+  
+  const resetStats = () => ({
         velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
         controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
         def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
         const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
         ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-    });
-    setNewHeatmapPoints([]);
-    setNewNotes('');
+  });
+
+  const openNewTrainingModal = () => {
+    setEditingEntryId(null);
+    setCurrentStats(resetStats());
+    setCurrentHeatmapPoints([]);
+    setCurrentNotes('');
+    setTrainingDate(new Date().toISOString().split('T')[0]);
     setShowTrainingModal(true);
   };
 
-  const handleQuickTraining = async () => {
+  const openEditTrainingModal = (entry: TrainingEntry, date: string) => {
+    setEditingEntryId(entry.id);
+    const defaults = resetStats();
+    // Merge entry data with current structure
+    setCurrentStats({ 
+        ...defaults, // Base defaults
+        ...entry.technical, 
+        ...entry.physical, 
+        ...entry.tactical 
+    });
+    setCurrentHeatmapPoints(entry.heatmapPoints || []);
+    setCurrentNotes(entry.notes || '');
+    setTrainingDate(date);
+    setShowTrainingModal(true);
+  };
+
+  const handleSaveTraining = async () => {
      if (!athlete || !trainingDate) return;
+     
      let sessionId = null;
+     
+     // Find or create session
      const existingSession = sessions.find(s => s.date === trainingDate && s.teamId === athlete.teamId && s.categoryId === athlete.categoryId);
      if (existingSession) {
          sessionId = existingSession.id;
@@ -388,91 +417,44 @@ const AthleteProfile: React.FC = () => {
              date: trainingDate,
              teamId: athlete.teamId,
              categoryId: athlete.categoryId,
-             description: 'Atuação Rápida (Via Perfil)'
+             description: 'Atuação (Perfil)'
          };
          await saveTrainingSession(newSession);
      }
 
+     const entryId = editingEntryId || uuidv4();
+
      const entry: TrainingEntry = {
-         id: uuidv4(),
+         id: entryId,
          sessionId: sessionId,
          athleteId: athlete.id,
          technical: {
-            controle_bola: newStats.controle_bola, conducao: newStats.conducao, passe: newStats.passe,
-            recepcao: newStats.recepcao, drible: newStats.drible, finalizacao: newStats.finalizacao,
-            cruzamento: newStats.cruzamento, desarme: newStats.desarme, interceptacao: newStats.interceptacao
+            controle_bola: currentStats.controle_bola, conducao: currentStats.conducao, passe: currentStats.passe,
+            recepcao: currentStats.recepcao, drible: currentStats.drible, finalizacao: currentStats.finalizacao,
+            cruzamento: currentStats.cruzamento, desarme: currentStats.desarme, interceptacao: currentStats.interceptacao
          },
          physical: {
-            velocidade: newStats.velocidade, agilidade: newStats.agilidade, resistencia: newStats.resistencia,
-            forca: newStats.forca, coordenacao: newStats.coordenacao, mobilidade: newStats.mobilidade, estabilidade: newStats.estabilidade
+            velocidade: currentStats.velocidade, agilidade: currentStats.agilidade, resistencia: currentStats.resistencia,
+            forca: currentStats.forca, coordenacao: currentStats.coordenacao, mobilidade: currentStats.mobilidade, estabilidade: currentStats.estabilidade
          },
          tactical: {
-            def_posicionamento: newStats.def_posicionamento, def_pressao: newStats.def_pressao, def_cobertura: newStats.def_cobertura,
-            def_fechamento: newStats.def_fechamento, def_temporizacao: newStats.def_temporizacao, def_desarme_tatico: newStats.def_desarme_tatico,
-            def_reacao: newStats.def_reacao,
-            const_qualidade_passe: newStats.const_qualidade_passe, const_visao: newStats.const_visao, const_apoios: newStats.const_apoios,
-            const_mobilidade: newStats.const_mobilidade, const_circulacao: newStats.const_circulacao, const_quebra_linhas: newStats.const_quebra_linhas,
-            const_tomada_decisao: newStats.const_tomada_decisao,
-            ult_movimentacao: newStats.ult_movimentacao, ult_ataque_espaco: newStats.ult_ataque_espaco, ult_1v1: newStats.ult_1v1,
-            ult_ultimo_passe: newStats.ult_ultimo_passe, ult_finalizacao_eficiente: newStats.ult_finalizacao_eficiente,
-            ult_ritmo: newStats.ult_ritmo, ult_bolas_paradas: newStats.ult_bolas_paradas
+            def_posicionamento: currentStats.def_posicionamento, def_pressao: currentStats.def_pressao, def_cobertura: currentStats.def_cobertura,
+            def_fechamento: currentStats.def_fechamento, def_temporizacao: currentStats.def_temporizacao, def_desarme_tatico: currentStats.def_desarme_tatico,
+            def_reacao: currentStats.def_reacao,
+            const_qualidade_passe: currentStats.const_qualidade_passe, const_visao: currentStats.const_visao, const_apoios: currentStats.const_apoios,
+            const_mobilidade: currentStats.const_mobilidade, const_circulacao: currentStats.const_circulacao, const_quebra_linhas: currentStats.const_quebra_linhas,
+            const_tomada_decisao: currentStats.const_tomada_decisao,
+            ult_movimentacao: currentStats.ult_movimentacao, ult_ataque_espaco: currentStats.ult_ataque_espaco, ult_1v1: currentStats.ult_1v1,
+            ult_ultimo_passe: currentStats.ult_ultimo_passe, ult_finalizacao_eficiente: currentStats.ult_finalizacao_eficiente,
+            ult_ritmo: currentStats.ult_ritmo, ult_bolas_paradas: currentStats.ult_bolas_paradas
          },
-         heatmapPoints: newHeatmapPoints,
-         notes: newNotes
+         heatmapPoints: currentHeatmapPoints,
+         notes: currentNotes
      };
+     
      await saveTrainingEntry(entry);
      setShowTrainingModal(false);
      setRefreshKey(prev => prev + 1);
-  };
-
-  const startEditingEntry = (entry: TrainingEntry) => {
-    setEditingEntryId(entry.id);
-    const defaults = {
-        def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-        const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-        ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-    };
-    setTempStats({ ...entry.technical, ...entry.physical, ...(entry.tactical || defaults) });
-    setTempHeatmap(entry.heatmapPoints || []);
-    setTempNotes(entry.notes || '');
-  };
-
-  const saveEditingEntry = async () => {
-     if(!editingEntryId || !tempStats) return;
-     const entry = entries.find(e => e.id === editingEntryId);
-     if(entry) {
-        const updated: TrainingEntry = {
-            ...entry,
-            technical: {
-                controle_bola: tempStats.controle_bola, conducao: tempStats.conducao, passe: tempStats.passe,
-                recepcao: tempStats.recepcao, drible: tempStats.drible, finalizacao: tempStats.finalizacao,
-                cruzamento: tempStats.cruzamento, desarme: tempStats.desarme, interceptacao: tempStats.interceptacao
-            },
-            physical: {
-                velocidade: tempStats.velocidade, agilidade: tempStats.agilidade, resistencia: tempStats.resistencia,
-                forca: tempStats.forca, coordenacao: tempStats.coordenacao, mobilidade: tempStats.mobilidade, estabilidade: tempStats.estabilidade
-            },
-            tactical: {
-                def_posicionamento: tempStats.def_posicionamento, def_pressao: tempStats.def_pressao, def_cobertura: tempStats.def_cobertura,
-                def_fechamento: tempStats.def_fechamento, def_temporizacao: tempStats.def_temporizacao, def_desarme_tatico: tempStats.def_desarme_tatico,
-                def_reacao: tempStats.def_reacao,
-                const_qualidade_passe: tempStats.const_qualidade_passe, const_visao: tempStats.const_visao, const_apoios: tempStats.const_apoios,
-                const_mobilidade: tempStats.const_mobilidade, const_circulacao: tempStats.const_circulacao, const_quebra_linhas: tempStats.const_quebra_linhas,
-                const_tomada_decisao: tempStats.const_tomada_decisao,
-                ult_movimentacao: tempStats.ult_movimentacao, ult_ataque_espaco: tempStats.ult_ataque_espaco, ult_1v1: tempStats.ult_1v1,
-                ult_ultimo_passe: tempStats.ult_ultimo_passe, ult_finalizacao_eficiente: tempStats.ult_finalizacao_eficiente,
-                ult_ritmo: tempStats.ult_ritmo, ult_bolas_paradas: tempStats.ult_bolas_paradas
-            },
-            heatmapPoints: tempHeatmap,
-            notes: tempNotes
-        };
-        await saveTrainingEntry(updated);
-        setEditingEntryId(null);
-        setTempStats(null);
-        setTempHeatmap([]);
-        setTempNotes('');
-        setRefreshKey(prev => prev + 1);
-     }
   };
 
   const formatBirthDate = (dateString: string) => {
@@ -484,12 +466,12 @@ const AthleteProfile: React.FC = () => {
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
-  const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded p-2 focus:outline-none focus:border-blue-500";
+  const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500";
   
   // Tactical Colors
-  const defColor = currentStats ? getTacticalColor(currentStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
-  const constColor = currentStats ? getTacticalColor(currentStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
-  const ultColor = currentStats ? getTacticalColor(currentStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
+  const defColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
+  const constColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
+  const ultColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
 
   return (
     <div className="space-y-6 pb-20">
@@ -560,7 +542,7 @@ const AthleteProfile: React.FC = () => {
                     <span className={`block text-5xl font-black ${overallScore >= 8 ? 'text-[#4ade80]' : overallScore >= 4 ? 'text-gray-500' : 'text-red-500'}`}>{overallScore > 0 ? overallScore.toFixed(1) : '--'}</span>
                  </div>
                  <div className="flex flex-col gap-2 w-full sm:w-auto">
-                    <button onClick={openTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
+                    <button onClick={openNewTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
                     <div className="flex gap-2 w-full">
                         <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Edit size={16} /> Editar</button>
                         <button onClick={handleDelete} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Trash2 size={16} /></button>
@@ -604,9 +586,9 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
               <div className="h-[250px]">
-                 {currentStats && currentStats.tactical_def ? (
+                 {currentRadarStats && currentRadarStats.tactical_def ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_def}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_def}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
@@ -621,9 +603,9 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
               <div className="h-[250px]">
-                 {currentStats && currentStats.tactical_const ? (
+                 {currentRadarStats && currentRadarStats.tactical_const ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_const}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_const}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
@@ -638,9 +620,9 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
               <div className="h-[250px]">
-                 {currentStats && currentStats.tactical_ult ? (
+                 {currentRadarStats && currentRadarStats.tactical_ult ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentStats.tactical_ult}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_ult}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
@@ -659,9 +641,9 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
               <div className="h-[300px]">
-                 {currentStats ? (
+                 {currentRadarStats ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.technical}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.technical}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} />
@@ -675,9 +657,9 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-orange-700 mb-4">Condição Física (Média)</h3>
                <div className="h-[300px]">
-                 {currentStats ? (
+                 {currentRadarStats ? (
                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentStats.physical}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.physical}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 10]} />
@@ -716,13 +698,6 @@ const AthleteProfile: React.FC = () => {
           <div className="divide-y divide-gray-100">
               {historyData.map((item) => (
                   <div key={item!.id} className={`p-4 hover:bg-gray-50 transition-colors ${editingEntryId === item!.id ? 'bg-gray-50' : ''}`}>
-                      {editingEntryId === item!.id ? (
-                          <div className="p-2 rounded-lg">
-                             {/* ... Edit Mode Form (Simplified - assume uses same modal fields logic, but inline) ... */}
-                             <h4 className="font-bold text-blue-600 mb-4">Edição Rápida indisponível aqui, use o modal de edição.</h4>
-                             <button onClick={() => setEditingEntryId(null)} className="bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-bold">Cancelar</button>
-                          </div>
-                      ) : (
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 cursor-pointer" onClick={() => setViewingEntry(item)}>
                             <div className="flex-1">
                                 <div className="flex items-center gap-3">
@@ -731,24 +706,228 @@ const AthleteProfile: React.FC = () => {
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); startEditingEntry(item!.entry); setShowTrainingModal(true); /* Reuse modal logic */ }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"><Edit size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"><Edit size={16} /></button>
                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteEntry(item!.entry.id); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full"><Trash2 size={16} /></button>
                                 <button onClick={(e) => { e.stopPropagation(); setViewingEntry(item); }} className="p-2 text-gray-400 hover:bg-gray-50 rounded-full"><Eye size={16} /></button>
                             </div>
                         </div>
-                      )}
                   </div>
               ))}
           </div>
       </div>
 
-      {/* Edit/View Modals (Keeping logic but updated content) */}
-      {/* ... (Reusing logic from AthleteProfile.tsx, omitted for brevity as they are visually identical) ... */}
-      {/* Quick Training Modal from public profile needs to exist to support the edit action if triggered, but typically public profile might be read-only. 
-          However, this component is named "AthleteProfile" but inside "pages/" directory there are two files: AthleteProfile.tsx (Private) and PublicAthleteProfile.tsx (Public).
-          I should check which one I am editing. I am editing AthleteProfile.tsx (the private one).
-      */}
-      {/* (The XML content above is for AthleteProfile.tsx - Private) */}
+      {/* --- MODALS --- */}
+
+      {/* 1. EDIT ATHLETE MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6 border-b pb-2">
+                <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800"><Edit className="text-blue-500"/> Editar Atleta</h3>
+                <button onClick={() => setShowEditModal(false)}><X size={24} className="text-gray-400 hover:text-red-500" /></button>
+              </div>
+              
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                 <div className="flex flex-col items-center mb-4">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
+                       {editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <User size={32} className="text-gray-400" />}
+                    </div>
+                    <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800">
+                       <Upload size={14} /> Alterar Foto
+                       <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
+                   <input required type="text" className={inputClass} value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Data Nasc.</label>
+                      <input type="date" className={inputClass} value={editFormData.birthDate || ''} onChange={handleEditDateChange} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
+                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                         <option value="">Selecione...</option>
+                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">Posição</label>
+                   <select className={inputClass} value={editFormData.position || ''} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
+                      {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                   </select>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-sm font-semibold text-gray-700 mb-1">Responsável</label>
+                     <input type="text" className={inputClass} value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-semibold text-gray-700 mb-1">Telefone</label>
+                     <input type="text" className={inputClass} value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
+                   </div>
+                 </div>
+
+                 <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-4 hover:bg-blue-700 transition-colors">
+                    Salvar Alterações
+                 </button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* 2. TRAINING MODAL */}
+      {showTrainingModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+           <div className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6 border-b pb-2 sticky top-0 bg-white z-10">
+                <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+                    <ClipboardList className="text-green-500"/> {editingEntryId ? 'Editar Atuação' : 'Nova Atuação'}
+                </h3>
+                <button onClick={() => setShowTrainingModal(false)}><X size={24} className="text-gray-400 hover:text-red-500" /></button>
+              </div>
+
+              <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Data da Atuação</label>
+                  <input type="date" className={inputClass} value={trainingDate} onChange={e => setTrainingDate(e.target.value)} />
+              </div>
+
+              {/* HEATMAP */}
+              <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                   <HeatmapField 
+                      points={currentHeatmapPoints} 
+                      onChange={setCurrentHeatmapPoints} 
+                      label="Mapa de Calor (Toque para marcar)" 
+                   />
+              </div>
+
+              <div className="space-y-8 mb-8">
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {/* Defendendo */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Defendendo</h4>
+                           <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
+                           <StatSlider label="Pressão na bola" value={currentStats.def_pressao} onChange={v => setCurrentStats({...currentStats, def_pressao: v})} />
+                           <StatSlider label="Cobertura" value={currentStats.def_cobertura} onChange={v => setCurrentStats({...currentStats, def_cobertura: v})} />
+                           <StatSlider label="Fechamento linhas" value={currentStats.def_fechamento} onChange={v => setCurrentStats({...currentStats, def_fechamento: v})} />
+                           <StatSlider label="Temporização" value={currentStats.def_temporizacao} onChange={v => setCurrentStats({...currentStats, def_temporizacao: v})} />
+                           <StatSlider label="Desarme tempo certo" value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
+                           <StatSlider label="Reação pós-perda" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
+                       </div>
+                       {/* Construindo */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Construindo</h4>
+                           <StatSlider label="Qualidade Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
+                           <StatSlider label="Visão de Jogo" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
+                           <StatSlider label="Apoios/Linhas" value={currentStats.const_apoios} onChange={v => setCurrentStats({...currentStats, const_apoios: v})} />
+                           <StatSlider label="Mobilidade receber" value={currentStats.const_mobilidade} onChange={v => setCurrentStats({...currentStats, const_mobilidade: v})} />
+                           <StatSlider label="Circulação bola" value={currentStats.const_circulacao} onChange={v => setCurrentStats({...currentStats, const_circulacao: v})} />
+                           <StatSlider label="Quebra de linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
+                           <StatSlider label="Decisão sob pressão" value={currentStats.const_tomada_decisao} onChange={v => setCurrentStats({...currentStats, const_tomada_decisao: v})} />
+                       </div>
+                       {/* Último Terço */}
+                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Último Terço</h4>
+                           <StatSlider label="Mov. sem bola" value={currentStats.ult_movimentacao} onChange={v => setCurrentStats({...currentStats, ult_movimentacao: v})} />
+                           <StatSlider label="Ataque ao espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
+                           <StatSlider label="Capacidade 1x1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
+                           <StatSlider label="Último passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
+                           <StatSlider label="Finalização efic." value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
+                           <StatSlider label="Ritmo decisão" value={currentStats.ult_ritmo} onChange={v => setCurrentStats({...currentStats, ult_ritmo: v})} />
+                           <StatSlider label="Bolas paradas" value={currentStats.ult_bolas_paradas} onChange={v => setCurrentStats({...currentStats, ult_bolas_paradas: v})} />
+                       </div>
+                   </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  {/* Fundamentos */}
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">Fundamentos</h4>
+                      <StatSlider label="Controle de bola" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
+                      <StatSlider label="Condução" value={currentStats.conducao} onChange={v => setCurrentStats({...currentStats, conducao: v})} />
+                      <StatSlider label="Passe" value={currentStats.passe} onChange={v => setCurrentStats({...currentStats, passe: v})} />
+                      <StatSlider label="Recepção orient." value={currentStats.recepcao} onChange={v => setCurrentStats({...currentStats, recepcao: v})} />
+                      <StatSlider label="Drible" value={currentStats.drible} onChange={v => setCurrentStats({...currentStats, drible: v})} />
+                      <StatSlider label="Finalização" value={currentStats.finalizacao} onChange={v => setCurrentStats({...currentStats, finalizacao: v})} />
+                      <StatSlider label="Cruzamento" value={currentStats.cruzamento} onChange={v => setCurrentStats({...currentStats, cruzamento: v})} />
+                      <StatSlider label="Desarme" value={currentStats.desarme} onChange={v => setCurrentStats({...currentStats, desarme: v})} />
+                      <StatSlider label="Interceptação" value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
+                  </div>
+                  {/* Physical */}
+                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                      <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">Condição Física</h4>
+                      <StatSlider label="Velocidade" value={currentStats.velocidade} onChange={v => setCurrentStats({...currentStats, velocidade: v})} />
+                      <StatSlider label="Agilidade" value={currentStats.agilidade} onChange={v => setCurrentStats({...currentStats, agilidade: v})} />
+                      <StatSlider label="Resistência" value={currentStats.resistencia} onChange={v => setCurrentStats({...currentStats, resistencia: v})} />
+                      <StatSlider label="Força/Potência" value={currentStats.forca} onChange={v => setCurrentStats({...currentStats, forca: v})} />
+                      <StatSlider label="Coordenação" value={currentStats.coordenacao} onChange={v => setCurrentStats({...currentStats, coordenacao: v})} />
+                      <StatSlider label="Mobilidade" value={currentStats.mobilidade} onChange={v => setCurrentStats({...currentStats, mobilidade: v})} />
+                      <StatSlider label="Estabilidade Core" value={currentStats.estabilidade} onChange={v => setCurrentStats({...currentStats, estabilidade: v})} />
+                  </div>
+              </div>
+
+              <div className="mt-8">
+                  <h4 className="text-sm uppercase font-bold text-gray-500 mb-2 flex items-center gap-2"><FileText size={16} /> Observações</h4>
+                  <textarea 
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-blue-500 h-24"
+                    value={currentNotes}
+                    onChange={(e) => setCurrentNotes(e.target.value)}
+                  ></textarea>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                  <button onClick={handleSaveTraining} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl shadow-lg transform active:scale-95 transition-all flex items-center gap-2 text-lg">
+                      <Save size={24} /> Salvar
+                  </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* 3. VIEW DETAILS MODAL */}
+      {viewingEntry && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto relative animate-fade-in">
+                    <button onClick={() => setViewingEntry(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">X</button>
+                    <div className="flex items-center gap-3 mb-6 border-b pb-4">
+                        <div>
+                            <h3 className="font-bold text-xl text-gray-800">Detalhes da Atuação</h3>
+                            <p className="text-sm text-gray-500">{viewingEntry.date}</p>
+                        </div>
+                    </div>
+                    {viewingEntry.heatmapPoints?.length > 0 && <div className="mb-6"><HeatmapField points={viewingEntry.heatmapPoints} readOnly={true} label="Posicionamento" /></div>}
+                    {viewingEntry.entry.notes && <div className="bg-yellow-50 p-4 mb-6 rounded"><p className="text-sm italic text-gray-700">{viewingEntry.entry.notes}</p></div>}
+                    
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                         <div>
+                             <h4 className="font-bold text-blue-500 mb-2 border-b">Fundamentos</h4>
+                             {Object.entries(viewingEntry.technical).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
+                         </div>
+                         <div>
+                             <h4 className="font-bold text-orange-500 mb-2 border-b">Físico</h4>
+                             {Object.entries(viewingEntry.physical).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
+                         </div>
+                    </div>
+                    {viewingEntry.tactical && (
+                      <div className="mt-4">
+                         <h4 className="font-bold text-purple-500 mb-2 border-b text-xs">Tático (Resumo)</h4>
+                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            {Object.entries(viewingEntry.tactical).slice(0,10).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace('def_','').replace('const_','').replace('ult_','').replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
+                            <div className="col-span-2 text-center text-gray-400 italic mt-2">...ver gráfico completo no perfil</div>
+                         </div>
+                      </div>
+                    )}
+                </div>
+            </div>
+      )}
+
     </div>
   );
 };
