@@ -31,6 +31,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       u.id.includes(search)
   );
 
+  const formatDate = (isoString?: string) => {
+      if (!isoString) return 'Data não disponível';
+      return new Date(isoString).toLocaleDateString('pt-BR', {
+          day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-900 text-white"><Loader2 className="animate-spin mr-2"/> Carregando Global...</div>;
 
   return (
@@ -90,7 +97,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                         <thead className="bg-gray-900/50 text-gray-400 text-xs uppercase font-bold">
                             <tr>
                                 <th className="px-6 py-4">Usuário / ID</th>
-                                <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Email / Cadastro</th>
                                 <th className="px-6 py-4">Função</th>
                                 <th className="px-6 py-4 text-right">Ações</th>
                             </tr>
@@ -114,8 +121,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-gray-300">
-                                        <div className="flex items-center gap-2">
-                                            <Mail size={14} className="text-gray-500" /> {user.email}
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <Mail size={14} className="text-gray-500" /> {user.email}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                <Calendar size={12} /> {formatDate(user.createdAt)}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
