@@ -39,16 +39,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               name,
               email,
               password,
-              role: email === GLOBAL_EMAIL ? UserRole.GLOBAL : UserRole.MASTER, // Auto-assign Global if email matches
+              role: email === GLOBAL_EMAIL ? UserRole.GLOBAL : UserRole.MASTER, 
               avatarUrl: '',
-              teamIds: [] // Explicitly initialize
+              teamIds: [] 
             };
             
             const { error: saveError } = await saveUser(newUser);
             
             if (saveError) {
                 console.error(saveError);
-                if (saveError.code === '23505') { // Unique violation
+                if (saveError.code === '23505') { 
                     setError('Este email já está cadastrado.');
                 } else {
                     setError('Erro ao criar conta. Tente novamente.');
@@ -63,7 +63,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               // Safety check for hardcoded global access
               if (found.email === GLOBAL_EMAIL && found.role !== UserRole.GLOBAL) {
                   found.role = UserRole.GLOBAL;
-                  await saveUser(found); // Update DB if needed
+                  await saveUser(found); 
               }
               onLogin(found);
             } else {
@@ -76,6 +76,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     } finally {
         setLoading(false);
     }
+  };
+
+  const togglePassword = (e: React.MouseEvent) => {
+      e.preventDefault(); // Prevent form submission
+      e.stopPropagation();
+      setShowPassword(!showPassword);
   };
 
   return (
@@ -124,24 +130,26 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                />
             </div>
 
-            <div className="relative">
+            <div>
                <label className="block text-sm font-bold text-gray-700 mb-1">Senha</label>
-               <input 
-                 type="password" 
-                 value={password}
-                 onChange={(e) => setPassword(e.target.value)}
-                 className="w-full bg-[#EEEDEC] border border-gray-300 rounded-lg p-3 text-gray-800 focus:outline-none focus:border-blue-500 pr-10"
-                 required
-                 placeholder="Sua senha"
-               />
-               <button 
-                 type="button"
-                 onClick={() => setShowPassword(!showPassword)}
-                 className="absolute right-3 top-[34px] text-gray-500 hover:text-gray-700"
-                 tabIndex={-1}
-               >
-                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-               </button>
+               <div className="relative">
+                   <input 
+                     type={showPassword ? 'text' : 'password'}
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     className="w-full bg-[#EEEDEC] border border-gray-300 rounded-lg p-3 text-gray-800 focus:outline-none focus:border-blue-500 pr-10"
+                     required
+                     placeholder="Sua senha"
+                   />
+                   <button 
+                     type="button" 
+                     onClick={togglePassword}
+                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 z-10 p-1 cursor-pointer focus:outline-none"
+                     tabIndex={-1}
+                   >
+                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                   </button>
+               </div>
             </div>
 
             {error && <div className="text-red-500 text-sm font-medium text-center bg-red-50 p-2 rounded border border-red-100">{error}</div>}
