@@ -10,7 +10,7 @@ import {
   ClipboardList,
   ShieldCheck
 } from 'lucide-react';
-import { Team, User, UserRole } from '../types';
+import { Team, User, UserRole, canEditData } from '../types';
 import { getTeams } from '../services/storageService';
 
 interface LayoutProps {
@@ -45,18 +45,21 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
     loadTeams();
   }, [user]);
 
+  // Base navigation
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Atletas', href: '/athletes', icon: Users },
-    { name: 'Atuações', href: '/training', icon: ClipboardList },
+    // 'Atuações' is added conditionally below
     { name: 'Admin', href: '/admin', icon: Settings },
   ];
   
-  // Restricted access to Admin page
-  const filteredNavigation = navigation.filter(item => {
-    if (item.name === 'Admin' && user.role === 'Massagista') return false; 
-    return true;
-  });
+  // Insert 'Atuações' only if user can edit data
+  if (canEditData(user.role)) {
+      navigation.splice(2, 0, { name: 'Atuações', href: '/training', icon: ClipboardList });
+  }
+  
+  // Update: Filtering Logic
+  const filteredNavigation = navigation; 
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -106,7 +109,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, selectedTeamI
               <span className="font-medium">{item.name}</span>
             </Link>
           ))}
-           {user.role === 'MASTER' && (
+           {user.role === UserRole.MASTER && (
              <Link
               to="/users"
               onClick={() => setIsMobileMenuOpen(false)}
