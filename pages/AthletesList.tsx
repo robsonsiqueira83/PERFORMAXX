@@ -16,6 +16,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [entries, setEntries] = useState<any[]>([]); // To calc scores
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [positionFilter, setPositionFilter] = useState('');
   const [sortBy, setSortBy] = useState('registration'); // registration, score, age, alpha
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,7 +66,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const filtered = athletesWithMeta.filter(a => {
     const matchesName = a.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter ? a.categoryId === categoryFilter : true;
-    return matchesName && matchesCategory;
+    const matchesPosition = positionFilter ? a.position === positionFilter : true;
+    return matchesName && matchesCategory && matchesPosition;
   });
 
   // 3. Sort
@@ -155,6 +157,19 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              >
                <option value="">Categoria (Todas)</option>
                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+             </select>
+          </div>
+
+          {/* Position Filter */}
+          <div className="relative w-full md:w-auto">
+             <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+             <select 
+               className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 w-full md:w-40 bg-gray-100 text-black appearance-none"
+               value={positionFilter}
+               onChange={(e) => setPositionFilter(e.target.value)}
+             >
+               <option value="">Posição (Todas)</option>
+               {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
              </select>
           </div>
 
