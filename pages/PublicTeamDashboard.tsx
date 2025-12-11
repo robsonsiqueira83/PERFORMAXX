@@ -104,7 +104,7 @@ const PublicTeamDashboard: React.FC = () => {
   }, [athletesWithScores, selectedCategory, selectedPosition]);
 
 
-  // --- Best XI Logic ---
+  // --- Best XI Logic (Matched with Dashboard.tsx) ---
   const bestXI = useMemo(() => {
     const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
        const pool = athletesWithScores.filter(a => 
@@ -116,29 +116,58 @@ const PublicTeamDashboard: React.FC = () => {
     };
 
     const selectedIds: string[] = [];
+    
+    // 1. Goleiro (1)
     const goleiro = getTopPlayers([Position.GOLEIRO], 1, selectedIds);
     selectedIds.push(...goleiro.map(a => a.id));
-    const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
-    selectedIds.push(...zagueiros.map(a => a.id));
+
+    // 2. Laterais (2)
     const laterais = getTopPlayers([Position.LATERAL], 2, selectedIds);
     selectedIds.push(...laterais.map(a => a.id));
-    const meioCampo = getTopPlayers([Position.VOLANTE, Position.MEIO_CAMPO], 3, selectedIds);
-    selectedIds.push(...meioCampo.map(a => a.id));
-    const ataque = getTopPlayers([Position.ATACANTE, Position.CENTROAVANTE], 3, selectedIds);
-    selectedIds.push(...ataque.map(a => a.id));
+
+    // 3. Zagueiros (2)
+    const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
+    selectedIds.push(...zagueiros.map(a => a.id));
+
+    // 4. Volante (1)
+    const volante = getTopPlayers([Position.VOLANTE], 1, selectedIds);
+    selectedIds.push(...volante.map(a => a.id));
+
+    // 5. Meio Campo (2)
+    const meios = getTopPlayers([Position.MEIO_CAMPO], 2, selectedIds);
+    selectedIds.push(...meios.map(a => a.id));
+
+    // 6. Atacantes (2)
+    const atacantes = getTopPlayers([Position.ATACANTE], 2, selectedIds);
+    selectedIds.push(...atacantes.map(a => a.id));
+
+    // 7. Centro Avante (1)
+    const centroavante = getTopPlayers([Position.CENTROAVANTE], 1, selectedIds);
+    selectedIds.push(...centroavante.map(a => a.id));
 
     return [
-        { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } },
-        { role: 'LE', player: laterais[0], style: { bottom: '22%', left: '15%' } },
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '16%', left: '38%' } },
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '16%', left: '62%' } },
-        { role: 'LD', player: laterais[1], style: { bottom: '22%', left: '85%' } },
-        { role: 'MC', player: meioCampo[0], style: { bottom: '48%', left: '25%' } },
-        { role: 'MC', player: meioCampo[1], style: { bottom: '48%', left: '50%' } },
-        { role: 'MC', player: meioCampo[2], style: { bottom: '48%', left: '75%' } },
-        { role: 'AT', player: ataque[0], style: { bottom: '65%', left: '20%' } },
-        { role: 'AT', player: ataque[1], style: { bottom: '75%', left: '50%' } },
-        { role: 'AT', player: ataque[2], style: { bottom: '65%', left: '80%' } },
+        // GK (Bottom 5% - Close to goal line)
+        { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } }, 
+        
+        // Defesa (Laterais + Zagueiros)
+        { role: 'LE', player: laterais[0], style: { bottom: '22%', left: '15%' } }, 
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '16%', left: '38%' } }, 
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '16%', left: '62%' } }, 
+        { role: 'LD', player: laterais[1], style: { bottom: '22%', left: '85%' } }, 
+        
+        // Volante (Central)
+        { role: 'VOL', player: volante[0], style: { bottom: '35%', left: '50%' } }, 
+        
+        // Meio Campo (Ahead of Volante)
+        { role: 'MC', player: meios[0], style: { bottom: '50%', left: '30%' } }, 
+        { role: 'MC', player: meios[1], style: { bottom: '50%', left: '70%' } }, 
+        
+        // Ataque (Wingers)
+        { role: 'AT', player: atacantes[0], style: { bottom: '65%', left: '20%' } }, 
+        { role: 'AT', player: atacantes[1], style: { bottom: '65%', left: '80%' } }, 
+        
+        // Centro Avante (Lowered to 75%)
+        { role: 'CA', player: centroavante[0], style: { bottom: '75%', left: '50%' } }, 
     ];
   }, [athletesWithScores, selectedCategory]);
 
@@ -238,19 +267,20 @@ const PublicTeamDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Column 2: Best XI Field */}
+            {/* Column 2: Best XI Field (Matched with Dashboard.tsx) */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2 mb-6">
-                    <Shirt className="text-green-600"/> Seleção do Momento
+                    <Shirt className="text-green-600"/> Seleção do Momento (4-3-3)
                 </h3>
 
-                <div className="relative w-full aspect-[2/3] sm:aspect-[3/4] lg:aspect-[3/4] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
+                {/* Field Container - Aspect Ratio Optimized */}
+                <div className="relative w-full aspect-[3/4] md:aspect-[16/9] lg:aspect-[2/1] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
                     {/* Field Markings */}
                     <div className="absolute inset-4 border-2 border-white/40 rounded-sm"></div>
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2"></div>
-                    <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
-                    <div className="absolute bottom-4 left-1/2 w-40 h-20 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
-                    <div className="absolute top-4 left-1/2 w-40 h-20 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
+                    <div className="absolute top-1/2 left-1/2 w-24 h-24 md:w-32 md:h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+                    <div className="absolute bottom-4 left-1/2 w-48 h-24 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
+                    <div className="absolute top-4 left-1/2 w-48 h-24 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
 
                     {/* Players */}
                     {bestXI.map((pos, idx) => (
@@ -277,6 +307,9 @@ const PublicTeamDashboard: React.FC = () => {
                                 <div className="mt-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white text-[10px] md:text-xs font-medium text-center truncate max-w-[80px]">
                                     {pos.player.name.split(' ')[0]}
                                 </div>
+                                <div className="text-[9px] text-white/90 bg-black/30 px-1 rounded mt-0.5">
+                                    {pos.player.position}
+                                </div>
                             </Link>
                         ) : (
                             <div className="opacity-50 flex flex-col items-center">
@@ -288,8 +321,6 @@ const PublicTeamDashboard: React.FC = () => {
                         </div>
                     ))}
                     
-                    <div className="absolute bottom-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Defesa</div>
-                    <div className="absolute top-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Ataque</div>
                 </div>
             </div>
         </div>
