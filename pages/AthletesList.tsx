@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getAthletes, getCategories, saveAthlete, getTrainingEntries, getTeams } from '../services/storageService';
+import { 
+  getAthletes, 
+  getCategories, 
+  saveAthlete, 
+  getTrainingEntries, 
+  getTeams, 
+  getTrainingSessions, 
+  saveTrainingSession, 
+  saveTrainingEntry, 
+  deleteTrainingEntry, 
+  saveCategory 
+} from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team } from '../types';
 import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy, ArrowRight, UserCheck, XCircle, ArrowRightLeft } from 'lucide-react';
@@ -27,6 +38,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   // Transfer Modal State
   const [transferModal, setTransferModal] = useState<{ isOpen: boolean; athlete: Athlete | null }>({ isOpen: false, athlete: null });
   const [targetTransferTeamId, setTargetTransferTeamId] = useState<string>('');
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // User State for Permissions
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -169,23 +181,105 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       const { athlete } = transferModal;
       if (!athlete || !targetTransferTeamId) return;
 
-      // 1. Move to selected teamId
-      // 2. Clear pending
-      // 3. Clear category (must be reassigned in new team)
-      // Note: Data linked by athleteId (entries) moves automatically because ID persists
-      const updatedAthlete = {
-          ...athlete,
-          teamId: targetTransferTeamId,
-          pendingTransferTeamId: undefined, // remove pending (service handles undefined as null update)
-          categoryId: '' // reset category
-      };
-      
-      // Explicit casting to ensure type compatibility
-      await saveAthlete(updatedAthlete as Athlete);
-      
-      setTransferModal({ isOpen: false, athlete: null });
-      setFeedback({ type: 'success', message: `${athlete.name} transferido e dados migrados com sucesso!` });
-      setRefreshKey(prev => prev + 1);
+      setIsMigrating(true);
+
+      try {
+          // --- 1. DATA MIGRATION LOGIC ---
+          // Fetch necessary data
+          const allEntries = await getTrainingEntries();
+          const allSessions = await getTrainingSessions();
+          const allCategories = await getCategories();
+
+          // Filter entries for this athlete
+          const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
+          
+          // Get Target Team Categories
+          const targetTeamCategories = allCategories.filter(c => c.teamId === targetTransferTeamId);
+          // Get Target Team Sessions
+          const targetTeamSessions = allSessions.filter(s => s.teamId === targetTransferTeamId);
+
+          for (const entry of athleteEntries) {
+              const oldSession = allSessions.find(s => s.id === entry.sessionId);
+              if (!oldSession) continue; // Skip if orphan
+
+              // A. Map Category
+              const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
+              let newCategoryId = '';
+
+              if (oldCategory) {
+                  // Try to find same category name in new team
+                  const matchingCat = targetTeamCategories.find(c => c.name === oldCategory.name);
+                  if (matchingCat) {
+                      newCategoryId = matchingCat.id;
+                  } else {
+                      // Create new category in target team
+                      newCategoryId = uuidv4();
+                      await saveCategory({
+                          id: newCategoryId,
+                          name: oldCategory.name,
+                          teamId: targetTransferTeamId
+                      });
+                      // Update local cache for next iteration
+                      targetTeamCategories.push({ id: newCategoryId, name: oldCategory.name, teamId: targetTransferTeamId });
+                  }
+              }
+
+              if (!newCategoryId) continue; // Safety skip
+
+              // B. Map Session (Find matching date/category in target team)
+              let targetSession = targetTeamSessions.find(s => 
+                  s.date === oldSession.date && 
+                  s.categoryId === newCategoryId
+              );
+
+              let targetSessionId = targetSession?.id;
+
+              if (!targetSessionId) {
+                  // Create new session in target team
+                  targetSessionId = uuidv4();
+                  const newSessionData = {
+                      id: targetSessionId,
+                      teamId: targetTransferTeamId,
+                      categoryId: newCategoryId,
+                      date: oldSession.date,
+                      description: (oldSession.description || 'Treino') + ' (Migrado)'
+                  };
+                  await saveTrainingSession(newSessionData);
+                  // Update local cache
+                  targetTeamSessions.push(newSessionData);
+              }
+
+              // C. Re-create Entry pointing to New Session
+              await saveTrainingEntry({
+                  ...entry,
+                  id: uuidv4(), // New ID for the entry
+                  sessionId: targetSessionId
+              });
+
+              // D. Delete Old Entry (Clean up from old team)
+              await deleteTrainingEntry(entry.id);
+          }
+
+          // --- 2. ATHLETE UPDATE ---
+          const updatedAthlete = {
+              ...athlete,
+              teamId: targetTransferTeamId,
+              pendingTransferTeamId: undefined, // remove pending
+              categoryId: '' // reset category (user must re-assign, though data is linked to history categories above)
+          };
+          
+          await saveAthlete(updatedAthlete as Athlete);
+          
+          setTransferModal({ isOpen: false, athlete: null });
+          setFeedback({ type: 'success', message: `${athlete.name} transferido e dados históricos migrados com sucesso!` });
+          setRefreshKey(prev => prev + 1);
+
+      } catch (err) {
+          console.error("Erro na migração", err);
+          setFeedback({ type: 'error', message: 'Erro ao migrar dados. Tente novamente.' });
+      } finally {
+          setIsMigrating(false);
+      }
   };
 
   const handleRejectTransfer = async (athlete: Athlete) => {
@@ -498,10 +592,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                      <button onClick={() => setTransferModal({isOpen: false, athlete: null})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
                      <button 
                         onClick={confirmTransfer} 
-                        disabled={!targetTransferTeamId}
-                        className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!targetTransferTeamId || isMigrating}
+                        className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                      >
-                         Confirmar
+                         {isMigrating ? <Loader2 className="animate-spin" size={16} /> : null}
+                         {isMigrating ? 'Migrando...' : 'Confirmar'}
                      </button>
                  </div>
              </div>
