@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAthletes, getCategories, saveAthlete, getTrainingEntries } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2 } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -26,6 +26,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     name: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: ''
   });
   const [previewUrl, setPreviewUrl] = useState<string>('');
+
+  // Feedback State
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -91,7 +94,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         const url = await processImageUpload(e.target.files[0]);
         setPreviewUrl(url);
       } catch (error) {
-        alert('Erro ao processar imagem');
+        setFeedback({ type: 'error', message: 'Erro ao processar imagem' });
       }
     }
   };
@@ -125,6 +128,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     setShowModal(false);
     setFormData({ name: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: '' });
     setPreviewUrl('');
+    setFeedback({ type: 'success', message: 'Atleta cadastrado com sucesso!' });
   };
 
   const copyPublicLink = (e: React.MouseEvent, athleteId: string) => {
@@ -132,7 +136,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       e.stopPropagation();
       const link = `https://performaxx.vercel.app/#/p/athlete/${athleteId}`;
       navigator.clipboard.writeText(link);
-      alert('Link público do atleta copiado!');
+      setFeedback({ type: 'success', message: 'Link público copiado!' });
   };
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 rounded p-2 text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
@@ -140,7 +144,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Users className="text-blue-600" /> Atletas
@@ -326,6 +330,24 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
            </div>
         </div>
       )}
+
+      {/* FEEDBACK MODAL (Toast style but centered/modal as requested) */}
+      {feedback && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
+                 <button onClick={() => setFeedback(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                    {feedback.type === 'success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">{feedback.type === 'success' ? 'Sucesso!' : 'Atenção'}</h3>
+                 <p className="text-gray-500 text-center mb-6">{feedback.message}</p>
+                 <button onClick={() => setFeedback(null)} className={`text-white font-bold py-2 px-6 rounded-lg transition-colors w-full ${feedback.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                     OK
+                 </button>
+             </div>
+         </div>
+      )}
+
     </div>
   );
 };

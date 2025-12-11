@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { Trash2, Edit, Save, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -12,6 +12,10 @@ const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Modal States
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null); // Stores ID to delete
 
   useEffect(() => {
     loadData();
@@ -59,7 +63,7 @@ const UserManagement: React.FC = () => {
 
         await loadData();
         setEditingUser(null);
-        alert("Usuário salvo com sucesso!");
+        setSuccessMessage("Usuário salvo com sucesso!");
 
     } catch (err: any) {
         console.error("Erro ao salvar usuário:", err);
@@ -73,10 +77,11 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Deletar usuário?')) {
-        await deleteUser(id);
+  const confirmDelete = async () => {
+    if (deleteConfirmation) {
+        await deleteUser(deleteConfirmation);
         await loadData();
+        setDeleteConfirmation(null);
     }
   };
 
@@ -102,7 +107,7 @@ const UserManagement: React.FC = () => {
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        <div className="flex justify-between items-center mb-6">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
@@ -232,11 +237,47 @@ const UserManagement: React.FC = () => {
                    </div>
                    <div className="flex gap-2">
                        <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
-                       {u.role !== UserRole.MASTER && <button onClick={() => handleDelete(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
+                       {u.role !== UserRole.MASTER && <button onClick={() => setDeleteConfirmation(u.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18} /></button>}
                    </div>
                </div>
            ))}
        </div>
+
+       {/* --- MODALS --- */}
+
+       {/* Success Modal */}
+       {successMessage && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
+               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle className="text-green-600" size={32} />
+               </div>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Sucesso!</h3>
+               <p className="text-gray-500 text-center mb-6">{successMessage}</p>
+               <button onClick={() => setSuccessMessage(null)} className="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors w-full">
+                   OK
+               </button>
+            </div>
+         </div>
+       )}
+
+       {/* Confirm Delete Modal */}
+       {deleteConfirmation && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Trash2 className="text-red-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir Usuário?</h3>
+                 <p className="text-gray-500 mb-6">Esta ação não pode ser desfeita. Tem certeza?</p>
+                 <div className="flex gap-3">
+                     <button onClick={() => setDeleteConfirmation(null)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                     <button onClick={confirmDelete} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
+                 </div>
+             </div>
+         </div>
+       )}
+
     </div>
   );
 };

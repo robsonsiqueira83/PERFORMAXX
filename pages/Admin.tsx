@@ -7,7 +7,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -15,7 +15,7 @@ interface AdminProps {
 }
 
 // Modal types
-type ModalType = 'none' | 'delete_confirm_simple' | 'delete_migrate_warn' | 'edit_team' | 'edit_category';
+type ModalType = 'none' | 'delete_confirm_simple' | 'delete_migrate_warn' | 'edit_team' | 'edit_category' | 'delete_category_confirm' | 'alert_error' | 'alert_success';
 
 const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   // Initialize tab from localStorage to persist state after reload
@@ -39,6 +39,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [modalType, setModalType] = useState<ModalType>('none');
   const [targetId, setTargetId] = useState<string | null>(null); // ID of item being acted upon
   const [targetName, setTargetName] = useState<string>(''); // Name for display
+  const [modalMessage, setModalMessage] = useState<string>(''); // For generic alerts
   
   // Migration State
   const [dependencyCounts, setDependencyCounts] = useState({ athletes: 0, users: 0, categories: 0, sessions: 0 });
@@ -74,6 +75,12 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     setMigrationDestTeamId('');
     setNewTeamName('');
     setIsMigrating(false);
+    setModalMessage('');
+  };
+
+  const showAlert = (type: 'alert_success' | 'alert_error', message: string) => {
+      setModalType(type);
+      setModalMessage(message);
   };
 
   // --- TEAM MANAGEMENT LOGIC ---
@@ -96,7 +103,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         const url = await processImageUpload(e.target.files[0]);
         setFormData({ ...formData, logoUrl: url });
       } catch (error) {
-        alert('Erro ao processar imagem');
+        showAlert('alert_error', 'Erro ao processar imagem');
       }
     }
   };
@@ -159,7 +166,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         }
 
         if (!destinationId) {
-            alert("Selecione um time de destino ou crie um novo.");
+            showAlert('alert_error', "Selecione um time de destino ou crie um novo.");
             setIsMigrating(false);
             return;
         }
@@ -205,7 +212,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
     } catch (error) {
         console.error("Migration failed", error);
-        alert("Erro ao migrar dados. Tente novamente.");
+        showAlert('alert_error', "Erro ao migrar dados. Tente novamente.");
     } finally {
         setIsMigrating(false);
     }
@@ -246,12 +253,16 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     window.location.reload();
   };
 
-  const handleDeleteCategory = async (id: string) => {
-      // Use standard confirm for category for now as it wasn't the main focus, 
-      // but ideally this would also be a custom modal. Keeping it simple per requirement focused on Teams.
-      if(confirm("Excluir categoria?")) {
-        await deleteCategory(id);
-        window.location.reload();
+  const handleDeleteCategoryClick = (id: string, name: string) => {
+      setTargetId(id);
+      setTargetName(name);
+      setModalType('delete_category_confirm');
+  };
+  
+  const confirmDeleteCategory = async () => {
+      if (targetId) {
+          await deleteCategory(targetId);
+          window.location.reload();
       }
   };
 
@@ -316,7 +327,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                                     <button 
                                         onClick={() => {
                                           navigator.clipboard.writeText(publicLink);
-                                          alert('Link copiado!'); // Could be a toast
+                                          showAlert('alert_success', 'Link copiado!');
                                         }}
                                         className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
                                         title="Copiar Link"
@@ -373,7 +384,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     <span className="font-medium text-gray-800">{cat.name}</span>
                     <div className="flex gap-2">
                        {canEdit && <button onClick={() => openEditCategoryModal(cat)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg"><Edit size={16}/></button>}
-                       {canDelete && <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>}
+                       {canDelete && <button onClick={() => handleDeleteCategoryClick(cat.id, cat.name)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>}
                     </div>
                  </div>
                ))}
@@ -467,7 +478,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         </div>
       )}
 
-      {/* 3. CONFIRM DELETE SIMPLE */}
+      {/* 3. CONFIRM DELETE TEAM SIMPLE */}
       {modalType === 'delete_confirm_simple' && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
@@ -574,6 +585,40 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                  </div>
              </div>
           </div>
+      )}
+
+      {/* 5. DELETE CATEGORY CONFIRM */}
+      {modalType === 'delete_category_confirm' && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Trash2 className="text-red-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir Categoria?</h3>
+                 <p className="text-gray-500 mb-6">Tem certeza que deseja excluir <strong>{targetName}</strong>?</p>
+                 <div className="flex gap-3">
+                     <button onClick={closeModal} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                     <button onClick={confirmDeleteCategory} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* 6. GENERIC ALERTS (Success/Error) */}
+      {(modalType === 'alert_success' || modalType === 'alert_error') && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
+                 <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${modalType === 'alert_success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                    {modalType === 'alert_success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">{modalType === 'alert_success' ? 'Sucesso!' : 'Atenção'}</h3>
+                 <p className="text-gray-500 text-center mb-6">{modalMessage}</p>
+                 <button onClick={closeModal} className={`text-white font-bold py-2 px-6 rounded-lg transition-colors w-full ${modalType === 'alert_success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                     OK
+                 </button>
+             </div>
+         </div>
       )}
 
     </div>
