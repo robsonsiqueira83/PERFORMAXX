@@ -257,18 +257,36 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               });
 
               // D. Delete Old Entry (Clean up from old team)
-              await deleteTrainingEntry(entry.id);
+              // NOTE: This might fail due to RLS if the new owner doesn't have permission on the old team.
+              // We wrap in try catch to allow the transfer to proceed even if cleanup fails
+              try {
+                await deleteTrainingEntry(entry.id);
+              } catch (e) {
+                console.warn("Could not delete old entry (likely RLS permission):", e);
+              }
           }
 
           // --- 2. ATHLETE UPDATE ---
+          // Explicitly nullify pendingTransferTeamId
           const updatedAthlete = {
               ...athlete,
               teamId: targetTransferTeamId,
-              pendingTransferTeamId: undefined, // remove pending
-              categoryId: '' // reset category (user must re-assign, though data is linked to history categories above)
+              pendingTransferTeamId: null, // explicit null
+              categoryId: '' // reset category
           };
           
-          await saveAthlete(updatedAthlete as Athlete);
+          // @ts-ignore - bypassing strict type check for null vs undefined, service handles it.
+          const { error } = await saveAthlete(updatedAthlete);
+          
+          if (error) {
+              console.error("Failed to update athlete team:", error);
+              setFeedback({ 
+                  type: 'error', 
+                  message: 'Erro ao transferir atleta. Verifique as permissões de SQL (RLS).' 
+              });
+              setIsMigrating(false);
+              return;
+          }
           
           setTransferModal({ isOpen: false, athlete: null });
           setFeedback({ type: 'success', message: `${athlete.name} transferido e dados históricos migrados com sucesso!` });
@@ -276,7 +294,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
       } catch (err) {
           console.error("Erro na migração", err);
-          setFeedback({ type: 'error', message: 'Erro ao migrar dados. Tente novamente.' });
+          setFeedback({ type: 'error', message: 'Erro crítico ao processar transferência.' });
       } finally {
           setIsMigrating(false);
       }
@@ -286,9 +304,17 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       // Just clear the pending field, athlete stays in old team
       const updatedAthlete = {
           ...athlete,
-          pendingTransferTeamId: undefined
+          pendingTransferTeamId: null // Force null to clear
       };
-      await saveAthlete(updatedAthlete as Athlete);
+      
+      // @ts-ignore
+      const { error } = await saveAthlete(updatedAthlete);
+
+      if (error) {
+           setFeedback({ type: 'error', message: 'Erro ao recusar (Permissão SQL).' });
+           return;
+      }
+
       setFeedback({ type: 'success', message: `Transferência de ${athlete.name} recusada.` });
       setRefreshKey(prev => prev + 1);
   };
