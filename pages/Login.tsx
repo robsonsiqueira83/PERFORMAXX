@@ -38,10 +38,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               email,
               password,
               role: UserRole.MASTER,
-              avatarUrl: ''
+              avatarUrl: '',
+              teamIds: [] // Explicitly initialize
             };
-            await saveUser(newUser);
-            onLogin(newUser);
+            
+            const { error: saveError } = await saveUser(newUser);
+            
+            if (saveError) {
+                console.error(saveError);
+                if (saveError.code === '23505') { // Unique violation
+                    setError('Este email já está cadastrado.');
+                } else {
+                    setError('Erro ao criar conta. Tente novamente.');
+                }
+            } else {
+                onLogin(newUser);
+            }
         } else {
             const users = await getUsers();
             const found = users.find(u => u.email === email && u.password === password);
@@ -52,6 +64,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             }
         }
     } catch (err) {
+        console.error(err);
         setError('Erro de conexão com servidor.');
     } finally {
         setLoading(false);
@@ -124,7 +137,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                </button>
             </div>
 
-            {error && <div className="text-red-500 text-sm font-medium text-center bg-red-50 p-2 rounded">{error}</div>}
+            {error && <div className="text-red-500 text-sm font-medium text-center bg-red-50 p-2 rounded border border-red-100">{error}</div>}
 
             <button 
               type="submit"
