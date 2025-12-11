@@ -140,6 +140,7 @@ export const saveAthlete = async (athlete: Athlete) => {
   };
   const { error } = await supabase.from('athletes').upsert(dbAthlete);
   if (error) console.error('Error saving athlete:', error);
+  return { error }; // RETURN ERROR FOR UI HANDLING
 };
 
 export const deleteAthlete = async (id: string) => {
