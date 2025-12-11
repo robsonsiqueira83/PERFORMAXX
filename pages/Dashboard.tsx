@@ -137,7 +137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     return filtered.slice(0, 3);
   }, [athletesWithScores, selectedCategory, selectedPosition]);
 
-  // --- Best XI Logic (Field Distribution) ---
+  // --- Best XI Logic (Field Distribution - 4-4-2) ---
   const bestXI = useMemo(() => {
     const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
        const pool = athletesWithScores.filter(a => 
@@ -150,34 +150,47 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
     const selectedIds: string[] = [];
     
-    // Formation 4-3-3 Logic
+    // Formation 4-4-2 Logic
+    
+    // 1. Goleiro
     const goleiro = getTopPlayers([Position.GOLEIRO], 1, selectedIds);
     selectedIds.push(...goleiro.map(a => a.id));
 
+    // 2. Defesa (2 Zagueiros, 2 Laterais)
     const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
     selectedIds.push(...zagueiros.map(a => a.id));
 
     const laterais = getTopPlayers([Position.LATERAL], 2, selectedIds);
     selectedIds.push(...laterais.map(a => a.id));
 
-    const meioCampo = getTopPlayers([Position.VOLANTE, Position.MEIO_CAMPO], 3, selectedIds);
+    // 3. Meio Campo (4 Jogadores - Volantes/Meias)
+    const meioCampo = getTopPlayers([Position.VOLANTE, Position.MEIO_CAMPO], 4, selectedIds);
     selectedIds.push(...meioCampo.map(a => a.id));
 
-    const ataque = getTopPlayers([Position.ATACANTE, Position.CENTROAVANTE], 3, selectedIds);
+    // 4. Ataque (2 Jogadores)
+    const ataque = getTopPlayers([Position.ATACANTE, Position.CENTROAVANTE], 2, selectedIds);
     selectedIds.push(...ataque.map(a => a.id));
 
+    // Coordinates adjusted for safety margin (approx 15% from edges)
     return [
-        { role: 'GK', player: goleiro[0], style: { bottom: '10%', left: '50%' } }, 
-        { role: 'LE', player: laterais[0], style: { bottom: '25%', left: '20%' } }, 
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '25%', left: '38%' } }, 
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '25%', left: '62%' } }, 
-        { role: 'LD', player: laterais[1], style: { bottom: '25%', left: '80%' } }, 
-        { role: 'MC', player: meioCampo[0], style: { bottom: '50%', left: '25%' } }, 
-        { role: 'MC', player: meioCampo[1], style: { bottom: '50%', left: '50%' } }, 
-        { role: 'MC', player: meioCampo[2], style: { bottom: '50%', left: '75%' } }, 
-        { role: 'AT', player: ataque[0], style: { bottom: '75%', left: '25%' } }, 
-        { role: 'AT', player: ataque[1], style: { bottom: '80%', left: '50%' } }, 
-        { role: 'AT', player: ataque[2], style: { bottom: '75%', left: '75%' } }, 
+        // GK
+        { role: 'GK', player: goleiro[0], style: { bottom: '12%', left: '50%' } }, 
+        
+        // Defense Line
+        { role: 'LE', player: laterais[0], style: { bottom: '30%', left: '15%' } }, 
+        { role: 'ZC', player: zagueiros[0], style: { bottom: '28%', left: '38%' } }, 
+        { role: 'ZC', player: zagueiros[1], style: { bottom: '28%', left: '62%' } }, 
+        { role: 'LD', player: laterais[1], style: { bottom: '30%', left: '85%' } }, 
+        
+        // Midfield Line
+        { role: 'ME', player: meioCampo[0], style: { bottom: '55%', left: '15%' } }, 
+        { role: 'MC', player: meioCampo[1], style: { bottom: '52%', left: '38%' } }, 
+        { role: 'MC', player: meioCampo[2], style: { bottom: '52%', left: '62%' } }, 
+        { role: 'MD', player: meioCampo[3], style: { bottom: '55%', left: '85%' } }, 
+        
+        // Attack Line
+        { role: 'AT', player: ataque[0], style: { bottom: '82%', left: '35%' } }, 
+        { role: 'AT', player: ataque[1], style: { bottom: '82%', left: '65%' } }, 
     ];
   }, [athletesWithScores, selectedCategory]);
 
@@ -424,7 +437,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
          <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
             <Shirt size={20} className="text-green-600"/>
-            Seleção do Momento (Top 11) {selectedCategory !== 'all' && `- ${categories.find(c => c.id === selectedCategory)?.name}`}
+            Seleção do Momento (4-4-2) {selectedCategory !== 'all' && `- ${categories.find(c => c.id === selectedCategory)?.name}`}
          </h3>
          
          {/* Field Container */}
