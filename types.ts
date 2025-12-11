@@ -51,43 +51,56 @@ export interface Athlete {
   responsiblePhone: string;
 }
 
-export interface TechnicalStats {
-  controle: number;
-  passe: number;
-  finalizacao: number;
+// Re-purposing 'TechnicalStats' as 'FundamentalsStats'
+export interface FundamentalsStats {
+  controle_bola: number;
+  conducao: number;
+  passe: number; // Curto, médio, longo
+  recepcao: number;
   drible: number;
-  cabeceio: number;
-  posicao: number;
+  finalizacao: number;
+  cruzamento: number;
+  desarme: number;
+  interceptacao: number;
 }
 
 export interface PhysicalStats {
-  velocidade: number;
-  agilidade: number;
-  forca: number;
-  resistencia: number;
-  coordenacao: number;
-  equilibrio: number;
+  velocidade: number; // Aceleração e máxima
+  agilidade: number; // Mudança de direção
+  resistencia: number; // Aeróbica e anaeróbica
+  forca: number; // Potência
+  coordenacao: number; // Equilíbrio
+  mobilidade: number; // Flexibilidade
+  estabilidade: number; // Core
 }
 
 export interface TacticalStats {
+  // Defendendo
+  def_posicionamento: number;
+  def_pressao: number;
+  def_cobertura: number;
+  def_fechamento: number; // Linhas de passe
+  def_temporizacao: number;
+  def_desarme_tatico: number; // Tempo certo
+  def_reacao: number; // Pós-perda
+
   // Construindo
-  const_passe: number;
-  const_jogo_costas: number;
-  const_dominio: number;
-  const_1v1_ofensivo: number;
-  const_movimentacao: number;
+  const_qualidade_passe: number;
+  const_visao: number;
+  const_apoios: number;
+  const_mobilidade: number;
+  const_circulacao: number;
+  const_quebra_linhas: number;
+  const_tomada_decisao: number; // Sob pressão
   
   // Último Terço
-  ult_finalizacao: number;
-  ult_desmarques: number;
-  ult_passes_ruptura: number;
-
-  // Defendendo
-  def_compactacao: number;
-  def_recomposicao: number;
-  def_salto_pressao: number;
-  def_1v1_defensivo: number;
-  def_duelos_aereos: number;
+  ult_movimentacao: number; // Sem bola
+  ult_ataque_espaco: number;
+  ult_1v1: number;
+  ult_ultimo_passe: number;
+  ult_finalizacao_eficiente: number;
+  ult_ritmo: number; // Tomada de decisão
+  ult_bolas_paradas: number;
 }
 
 export interface HeatmapPoint {
@@ -107,32 +120,33 @@ export interface TrainingEntry {
   id: string;
   sessionId: string;
   athleteId: string;
-  technical: TechnicalStats;
+  technical: FundamentalsStats; // Mapped to Fundamentals
   physical: PhysicalStats;
-  tactical?: TacticalStats;
-  heatmapPoints?: HeatmapPoint[]; // Array of coordinates
+  tactical: TacticalStats;
+  heatmapPoints?: HeatmapPoint[]; 
   notes?: string;
 }
 
 // Helper to calculate total score
-export const calculateTotalScore = (technical: TechnicalStats, physical: PhysicalStats, tactical?: TacticalStats): number => {
-  const techValues = Object.values(technical);
-  const physValues = Object.values(physical);
-  // Handle case where tactical might be undefined for old records
-  const tactValues = tactical ? Object.values(tactical) : [];
+export const calculateTotalScore = (fund: FundamentalsStats, phys: PhysicalStats, tact: TacticalStats): number => {
+  if (!fund || !phys || !tact) return 0;
+  
+  const fundValues = Object.values(fund);
+  const physValues = Object.values(phys);
+  const tactValues = Object.values(tact);
 
-  const total = [...techValues, ...physValues, ...tactValues].reduce((a, b) => a + b, 0);
-  const divisor = techValues.length + physValues.length + tactValues.length;
+  const total = [...fundValues, ...physValues, ...tactValues].reduce((a, b) => a + (Number(b) || 0), 0);
+  const divisor = fundValues.length + physValues.length + tactValues.length;
   
   return divisor > 0 ? total / divisor : 0;
 };
 
-// Helper to calculate score for a single category group
+// Helper to calculate category average
 export const calculateCategoryAverage = (stats: any): number => {
   if (!stats) return 0;
   const values = Object.values(stats) as number[];
   if (values.length === 0) return 0;
-  const sum = values.reduce((a, b) => a + b, 0);
+  const sum = values.reduce((a, b) => a + (Number(b) || 0), 0);
   return sum / values.length;
 };
 
@@ -141,8 +155,6 @@ export const getCalculatedCategory = (birthDateString: string): string => {
   if (!birthDateString) return '';
   
   let birthYear, birthMonth, birthDay;
-
-  // Normalize string to YYYY-MM-DD
   const dateOnly = birthDateString.split('T')[0];
   
   if (dateOnly.includes('-')) {
