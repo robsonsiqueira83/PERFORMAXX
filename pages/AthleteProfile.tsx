@@ -9,15 +9,16 @@ import {
   saveAthlete,
   saveTrainingSession,
   getCategories,
-  deleteTrainingEntry
+  deleteTrainingEntry,
+  getTeams
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData, Team } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,6 +39,7 @@ const AthleteProfile: React.FC = () => {
   const [entries, setEntries] = useState<TrainingEntry[]>([]);
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [allTeams, setAllTeams] = useState<Team[]>([]); // To validate transfers
 
   // Filtering State
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all'); // 'all', 'today', 'week', 'month', 'year', 'custom'
@@ -56,6 +58,10 @@ const AthleteProfile: React.FC = () => {
 
   // Edit Profile State
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
+  
+  // Transfer Logic State
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferTeamId, setTransferTeamId] = useState('');
 
   // Add/Edit Training State
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
@@ -87,20 +93,23 @@ const AthleteProfile: React.FC = () => {
 
      const load = async () => {
          setLoading(true);
-         const allAthletes = await getAthletes();
+         const [allAthletes, allEntries, allSessions, allCats, teams] = await Promise.all([
+             getAthletes(),
+             getTrainingEntries(),
+             getTrainingSessions(),
+             getCategories(),
+             getTeams()
+         ]);
+         
+         setAllTeams(teams);
+
          const foundAthlete = allAthletes.find(a => a.id === id);
          
          if (foundAthlete) {
              setAthlete(foundAthlete);
              setEditFormData({...foundAthlete});
-             
-             const allCats = await getCategories();
              setCategories(allCats.filter(c => c.teamId === foundAthlete.teamId));
-
-             const allEntries = await getTrainingEntries();
              setEntries(allEntries.filter(e => e.athleteId === id));
-
-             const allSessions = await getTrainingSessions();
              setSessions(allSessions);
          }
          setLoading(false);
@@ -328,9 +337,34 @@ const AthleteProfile: React.FC = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editFormData.name || !athlete) return;
-      await saveAthlete({ ...athlete, ...editFormData } as Athlete);
+      
+      let finalData = { ...editFormData };
+
+      // Handle Transfer Logic
+      if (isTransferring && transferTeamId) {
+          // Verify Team ID
+          const targetTeam = allTeams.find(t => t.id === transferTeamId);
+          if (targetTeam) {
+              finalData.teamId = transferTeamId;
+              finalData.categoryId = ''; // Reset category as it is team specific
+          } else {
+              alert('ID do time inválido. Verifique e tente novamente.');
+              return;
+          }
+      }
+
+      await saveAthlete({ ...athlete, ...finalData } as Athlete);
+      
       setShowEditModal(false);
-      setRefreshKey(prev => prev + 1);
+      setIsTransferring(false);
+      setTransferTeamId('');
+      
+      // If transferred, likely navigate back or reload fully
+      if (finalData.teamId !== athlete.teamId) {
+          navigate('/athletes'); // Go back to list as user might not have access to new team immediately context-wise
+      } else {
+          setRefreshKey(prev => prev + 1);
+      }
   };
 
   const handleEditDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -794,6 +828,52 @@ const AthleteProfile: React.FC = () => {
                     </label>
                  </div>
 
+                 {/* TRANSFER TEAM SECTION */}
+                 <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+                     <div className="flex items-center justify-between">
+                         <div>
+                             <p className="text-xs font-bold text-blue-600 uppercase">Vínculo com Time</p>
+                             <p className="font-bold text-gray-800">{allTeams.find(t => t.id === athlete?.teamId)?.name || 'Desconhecido'}</p>
+                         </div>
+                         {!isTransferring ? (
+                             <button 
+                                type="button"
+                                onClick={() => setIsTransferring(true)}
+                                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-colors flex items-center gap-1 font-bold"
+                             >
+                                 <ArrowRightLeft size={12} /> Transferir
+                             </button>
+                         ) : (
+                             <button 
+                                type="button"
+                                onClick={() => setIsTransferring(false)}
+                                className="text-xs text-gray-500 hover:text-gray-700"
+                             >
+                                 Cancelar
+                             </button>
+                         )}
+                     </div>
+
+                     {isTransferring && (
+                         <div className="mt-3 animate-fade-in">
+                             <label className="block text-xs font-bold text-gray-600 mb-1">ID do Novo Time de Destino</label>
+                             <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    className="flex-1 bg-white border border-blue-300 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="Cole o ID do time aqui..."
+                                    value={transferTeamId}
+                                    onChange={(e) => setTransferTeamId(e.target.value)}
+                                />
+                             </div>
+                             <p className="text-[10px] text-orange-600 mt-2 flex items-center gap-1">
+                                 <AlertTriangle size={10} />
+                                 Atenção: A transferência removerá a categoria atual.
+                             </p>
+                         </div>
+                     )}
+                 </div>
+
                  <div>
                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
                    <input required type="text" className={inputClass} value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
@@ -806,7 +886,7 @@ const AthleteProfile: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
-                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})} disabled={isTransferring}>
                          <option value="">Selecione...</option>
                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>

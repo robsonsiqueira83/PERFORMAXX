@@ -7,7 +7,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -326,7 +326,26 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                                 ) : (
                                     <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>
                                 )}
-                                <span className="font-bold text-gray-800 whitespace-nowrap text-lg">{team.name}</span>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-gray-800 whitespace-nowrap text-lg">{team.name}</span>
+                                    
+                                    {/* TEAM ID DISPLAY */}
+                                    <div className="flex items-center gap-2 mt-1">
+                                         <div className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-xs text-gray-500 font-mono" title="ID do Time">
+                                             <Hash size={10} /> {team.id}
+                                         </div>
+                                         <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(team.id);
+                                                showAlert('alert_success', 'ID do time copiado!');
+                                            }}
+                                            className="text-gray-400 hover:text-blue-600 p-0.5"
+                                            title="Copiar ID"
+                                         >
+                                             <Copy size={12} />
+                                         </button>
+                                    </div>
+                                </div>
                             </div>
                             
                             {/* Public Link Box */}
