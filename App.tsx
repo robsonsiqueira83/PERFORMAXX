@@ -22,73 +22,84 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-        const storedUserStr = localStorage.getItem('performax_current_user');
-        let currentUser: User | null = null;
-        
-        if (storedUserStr) {
-            try {
+        try {
+            const storedUserStr = localStorage.getItem('performax_current_user');
+            let currentUser: User | null = null;
+            
+            if (storedUserStr) {
                 const localUser = JSON.parse(storedUserStr);
-                const allUsers = await getUsers();
-                const freshUser = allUsers.find(u => u.id === localUser.id);
-                
-                if (freshUser) {
-                    currentUser = freshUser;
-                    setUser(freshUser);
-                    localStorage.setItem('performax_current_user', JSON.stringify(freshUser));
+                // Attempt to fetch fresh user data, but fallback gracefully if DB fails or user deleted
+                try {
+                    const allUsers = await getUsers();
+                    const freshUser = allUsers.find(u => u.id === localUser.id);
+                    if (freshUser) {
+                        currentUser = freshUser;
+                    }
+                } catch (err) {
+                    console.error("Could not refresh user from DB, using local cache", err);
+                    currentUser = localUser;
+                }
+
+                if (currentUser) {
+                    setUser(currentUser);
+                    localStorage.setItem('performax_current_user', JSON.stringify(currentUser));
                     
                     // Restore Context if previously set, otherwise default to self
                     const storedContext = localStorage.getItem('performax_context_id');
-                    if (storedContext && storedContext !== freshUser.id && freshUser.role === UserRole.GLOBAL) {
+                    if (storedContext && storedContext !== currentUser.id && currentUser.role === UserRole.GLOBAL) {
                          // Keep impersonation context if Global
                          setViewingAsMasterId(storedContext);
-                    } else if (storedContext && freshUser.role === UserRole.MASTER) {
+                    } else if (storedContext && currentUser.role === UserRole.MASTER) {
                          // Keep selected context for Masters (could be own or invited)
                          setViewingAsMasterId(storedContext);
                     } else {
-                        // Default to self or first owner in invited list
-                        // For now default to self, Layout will adjust if self is not available
-                        setViewingAsMasterId(freshUser.id);
+                        // Default to self
+                        setViewingAsMasterId(currentUser.id);
                     }
                 } else {
                     localStorage.removeItem('performax_current_user');
                 }
-            } catch (e) {
-                console.error("Error parsing user session", e);
-                localStorage.removeItem('performax_current_user');
             }
+            
+            // Initial Team Load based on Context
+            if (currentUser) {
+                await updateSelectedTeamForContext(viewingAsMasterId || currentUser.id, currentUser);
+            }
+        } catch (e) {
+            console.error("Critical error during app init", e);
+            localStorage.removeItem('performax_current_user');
+        } finally {
+            setLoading(false);
         }
-        
-        // Initial Team Load based on Context
-        if (currentUser) {
-            await updateSelectedTeamForContext(viewingAsMasterId || currentUser.id, currentUser);
-        }
-        
-        setLoading(false);
     };
     init();
   }, []);
 
   const updateSelectedTeamForContext = async (contextId: string, currentUser: User) => {
-      const allTeams = await getTeams();
-      // Filter teams belonging to this Context (Master)
-      // AND that the current user has access to
-      let contextTeams = allTeams.filter(t => t.ownerId === contextId);
-      
-      if (currentUser.role !== UserRole.GLOBAL && currentUser.role !== UserRole.MASTER) {
-          // Strict filter for non-admins
-          contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
-      } else if (currentUser.role === UserRole.MASTER && contextId !== currentUser.id) {
-          // Master viewing another panel they are invited to
-          contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
-      }
+      try {
+          const allTeams = await getTeams();
+          // Filter teams belonging to this Context (Master)
+          // AND that the current user has access to
+          let contextTeams = allTeams.filter(t => t.ownerId === contextId);
+          
+          if (currentUser.role !== UserRole.GLOBAL && currentUser.role !== UserRole.MASTER) {
+              // Strict filter for non-admins
+              contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
+          } else if (currentUser.role === UserRole.MASTER && contextId !== currentUser.id) {
+              // Master viewing another panel they are invited to
+              contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
+          }
 
-      if (contextTeams.length > 0) {
-          // If current selection is valid for this context, keep it. Else pick first.
-          setSelectedTeamId(prev => {
-              return contextTeams.find(t => t.id === prev) ? prev : contextTeams[0].id;
-          });
-      } else {
-          setSelectedTeamId('');
+          if (contextTeams.length > 0) {
+              // If current selection is valid for this context, keep it. Else pick first.
+              setSelectedTeamId(prev => {
+                  return contextTeams.find(t => t.id === prev) ? prev : contextTeams[0].id;
+              });
+          } else {
+              setSelectedTeamId('');
+          }
+      } catch (e) {
+          console.error("Error loading context teams", e);
       }
   };
 
