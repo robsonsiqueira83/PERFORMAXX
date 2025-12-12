@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { getUsers, saveUser, deleteUser, getTeams, saveTeam, deleteTeam } from '../services/storageService';
+import { 
+  getUsers, saveUser, deleteUser, 
+  getTeams, saveTeam, deleteTeam,
+  getCategories, saveCategory,
+  getAthletes, saveAthlete,
+  getTrainingSessions, saveTrainingSession
+} from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { User, UserRole, Team } from '../types';
-import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon, ArrowRightLeft, CheckCircle } from 'lucide-react';
+import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon, ArrowRightLeft, CheckCircle, Shirt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -29,7 +35,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   // Migration State
   const [userTeamsCount, setUserTeamsCount] = useState(0);
   const [wantToMigrate, setWantToMigrate] = useState(false);
-  const [targetMasterId, setTargetMasterId] = useState('');
+  const [targetTeamIdInput, setTargetTeamIdInput] = useState('');
   const [isProcessingDelete, setIsProcessingDelete] = useState(false);
 
   useEffect(() => {
@@ -117,7 +123,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       
       setUserTeamsCount(count);
       setWantToMigrate(false);
-      setTargetMasterId('');
+      setTargetTeamIdInput('');
       setDeleteConfirm({ isOpen: true, userId: user.id, userName: user.name });
   };
 
@@ -128,36 +134,59 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       try {
           const userIdToDelete = deleteConfirm.userId;
           const allTeams = await getTeams();
+          // Find teams owned by the user being deleted
           const userTeams = allTeams.filter(t => t.ownerId === userIdToDelete);
+          const userTeamIds = userTeams.map(t => t.id);
 
           if (userTeamsCount > 0) {
               if (wantToMigrate) {
                   // MIGRATION FLOW
-                  if (!targetMasterId) {
-                      alert("Por favor, insira o ID do Painel de Destino.");
+                  if (!targetTeamIdInput) {
+                      alert("Por favor, insira o ID do Time de Destino.");
                       setIsProcessingDelete(false);
                       return;
                   }
 
-                  // Verify Target
-                  const targetUser = users.find(u => u.id === targetMasterId);
-                  if (!targetUser) {
-                      alert("ID do Painel de Destino não encontrado ou inválido.");
+                  // Verify Target TEAM
+                  const targetTeam = allTeams.find(t => t.id === targetTeamIdInput);
+                  if (!targetTeam) {
+                      alert("Time de destino não encontrado. Verifique o ID.");
                       setIsProcessingDelete(false);
                       return;
                   }
 
-                  // Transfer Teams
-                  for (const team of userTeams) {
-                      await saveTeam({ ...team, ownerId: targetMasterId });
+                  // --- EXECUTE MIGRATION ---
+                  // We must move Categories, Athletes, and Sessions to the new Team ID
+                  const [allCats, allAthletes, allSessions] = await Promise.all([
+                      getCategories(),
+                      getAthletes(),
+                      getTrainingSessions()
+                  ]);
+
+                  // 1. Move Categories
+                  // Note: We move them even if names duplicate, to preserve data integrity.
+                  const catsToMove = allCats.filter(c => userTeamIds.includes(c.teamId));
+                  for (const item of catsToMove) {
+                      await saveCategory({ ...item, teamId: targetTeamIdInput });
                   }
-                  
-              } else {
-                  // CLEANUP FLOW (DELETE ALL DATA)
-                  for (const team of userTeams) {
-                      // Deleting the team should ideally cascade via DB or we rely on deleteTeam logic
-                      await deleteTeam(team.id);
+
+                  // 2. Move Athletes
+                  const athletesToMove = allAthletes.filter(a => userTeamIds.includes(a.teamId));
+                  for (const item of athletesToMove) {
+                      await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: null });
                   }
+
+                  // 3. Move History (Sessions)
+                  const sessionsToMove = allSessions.filter(s => userTeamIds.includes(s.teamId));
+                  for (const item of sessionsToMove) {
+                      await saveTrainingSession({ ...item, teamId: targetTeamIdInput });
+                  }
+              }
+              
+              // --- CLEANUP ---
+              // Delete the old teams (now empty of data if migrated, or deleting data if not)
+              for (const team of userTeams) {
+                  await deleteTeam(team.id);
               }
           }
 
@@ -455,22 +484,22 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                                     checked={wantToMigrate}
                                     onChange={(e) => setWantToMigrate(e.target.checked)}
                                  />
-                                 <span className="text-sm font-medium text-white">Deseja migrar dados para outro Painel?</span>
+                                 <span className="text-sm font-medium text-white">Migrar atletas para outro Time?</span>
                              </label>
 
                              {wantToMigrate && (
                                  <div className="mt-3 animate-fade-in">
-                                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">ID do Painel de Destino (Master ID)</label>
+                                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">ID do Time de Destino</label>
                                      <input 
                                         type="text" 
                                         className="w-full bg-gray-700 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm font-mono"
-                                        placeholder="Cole o ID aqui..."
-                                        value={targetMasterId}
-                                        onChange={(e) => setTargetMasterId(e.target.value)}
+                                        placeholder="Cole o ID do time aqui..."
+                                        value={targetTeamIdInput}
+                                        onChange={(e) => setTargetTeamIdInput(e.target.value)}
                                      />
                                      <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                                         <ArrowRightLeft size={10} />
-                                         Todos os times e atletas serão transferidos.
+                                         <Shirt size={10} />
+                                         Atletas, categorias e treinos serão movidos para este time.
                                      </p>
                                  </div>
                              )}
