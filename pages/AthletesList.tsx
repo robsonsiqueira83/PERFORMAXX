@@ -13,8 +13,8 @@ import {
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft } from 'lucide-react';
+import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName } from '../types';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Hash } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -40,12 +40,18 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [targetTransferTeamId, setTargetTransferTeamId] = useState<string>('');
   const [isMigrating, setIsMigrating] = useState(false);
 
+  // Pull Athlete Modal (Solicitação de Transferência por RG)
+  const [showPullModal, setShowPullModal] = useState(false);
+  const [pullRgInput, setPullRgInput] = useState('');
+  const [foundAthleteToPull, setFoundAthleteToPull] = useState<Athlete | null>(null);
+  const [pullSearchError, setPullSearchError] = useState('');
+
   // User State for Permissions
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Athlete>>({
-    name: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: ''
+    name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: ''
   });
   const [previewUrl, setPreviewUrl] = useState<string>('');
 
@@ -148,9 +154,13 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     // Use current date (YYYY-MM-DD) if none selected
     const dateToSave = formData.birthDate || new Date().toISOString().split('T')[0];
 
+    // Generate Temp RG if empty
+    const finalRg = formData.rg ? formData.rg : `PROV-${uuidv4().substring(0,6).toUpperCase()}`;
+
     const newAthlete: Athlete = {
       id: uuidv4(),
       teamId,
+      rg: finalRg,
       name: formData.name,
       categoryId: formData.categoryId,
       position: formData.position as Position,
@@ -162,12 +172,56 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     
     await saveAthlete(newAthlete);
     setShowModal(false);
-    setFormData({ name: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: '' });
+    setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: '' });
     setPreviewUrl('');
     setFeedback({ type: 'success', message: 'Atleta cadastrado com sucesso!' });
+    setRefreshKey(prev => prev + 1);
   };
 
-  // --- TRANSFER HANDLING ---
+  // --- PULL ATHLETE HANDLING (Solicitar Transferência por RG) ---
+  
+  const handleSearchAthleteByRg = async () => {
+    setPullSearchError('');
+    setFoundAthleteToPull(null);
+    if (!pullRgInput) return;
+
+    const allAthletes = await getAthletes();
+    // Find athlete by RG
+    const found = allAthletes.find(a => a.rg === pullRgInput);
+
+    if (found) {
+        if (found.teamId === teamId) {
+            setPullSearchError('Este atleta já está no seu time.');
+        } else {
+            setFoundAthleteToPull(found);
+        }
+    } else {
+        setPullSearchError('Nenhum atleta encontrado com este RG.');
+    }
+  };
+
+  const handleRequestPull = async () => {
+      if (!foundAthleteToPull) return;
+
+      // Update athlete to have pendingTransferTeamId = current teamId
+      // This will make them appear in the "Incoming Transfers" list on THIS page, 
+      // allowing the current user (Destination) to "Accept" and trigger the full migration logic.
+      const updatedAthlete = {
+          ...foundAthleteToPull,
+          pendingTransferTeamId: teamId
+      };
+      
+      // @ts-ignore
+      await saveAthlete(updatedAthlete);
+      
+      setShowPullModal(false);
+      setPullRgInput('');
+      setFoundAthleteToPull(null);
+      setFeedback({ type: 'success', message: 'Solicitação criada! Aceite a transferência na lista de pendências acima.' });
+      setRefreshKey(prev => prev + 1);
+  };
+
+  // --- TRANSFER HANDLING (Accepting/Rejecting/Migrating) ---
   
   const openTransferModal = (athlete: Athlete) => {
       setTargetTransferTeamId(teamId);
@@ -187,14 +241,16 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           const allCategories = await getCategories();
 
           // A. RESOLVE MAIN ATHLETE CATEGORY (Target Team)
-          // Determine what the athlete's category ID should be in the new team.
           let newMainCategoryId = '';
           
           if (athlete.categoryId) {
               const currentCatObj = allCategories.find(c => c.id === athlete.categoryId);
               if (currentCatObj) {
-                  // Check if target team has a category with this name
-                  const match = allCategories.find(c => c.teamId === targetTransferTeamId && c.name === currentCatObj.name);
+                  // Standardize Name
+                  const standardName = normalizeCategoryName(currentCatObj.name);
+                  
+                  // Check if target team has a category with this standardized name
+                  const match = allCategories.find(c => c.teamId === targetTransferTeamId && normalizeCategoryName(c.name) === standardName);
                   
                   if (match) {
                       newMainCategoryId = match.id;
@@ -203,7 +259,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       newMainCategoryId = uuidv4();
                       const newCat = { 
                           id: newMainCategoryId, 
-                          name: currentCatObj.name, 
+                          name: standardName, 
                           teamId: targetTransferTeamId 
                       };
                       await saveCategory(newCat);
@@ -223,22 +279,21 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                   const oldSession = allSessions.find(s => s.id === entry.sessionId);
                   if (!oldSession) continue;
 
-                  // Map Session Category (could be different from athlete's main category)
+                  // Map Session Category
                   const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
                   let sessionNewCategoryId = '';
 
                   if (oldCategory) {
-                      // We search in updated allCategories (which includes the one we might have just created above)
-                      const matchingCat = allCategories.find(c => c.teamId === targetTransferTeamId && c.name === oldCategory.name);
+                      const oldStandardName = normalizeCategoryName(oldCategory.name);
+                      const matchingCat = allCategories.find(c => c.teamId === targetTransferTeamId && normalizeCategoryName(c.name) === oldStandardName);
                       
                       if (matchingCat) {
                           sessionNewCategoryId = matchingCat.id;
                       } else {
-                          // Create if still missing (e.g., athlete was in Sub-15 but played a game in Sub-17)
                           sessionNewCategoryId = uuidv4();
                           const newCat = {
                               id: sessionNewCategoryId,
-                              name: oldCategory.name,
+                              name: oldStandardName,
                               teamId: targetTransferTeamId
                           };
                           await saveCategory(newCat);
@@ -248,7 +303,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
                   if (!sessionNewCategoryId) continue;
 
-                  // Map Session (Find existing by date/cat or create)
+                  // Map Session
                   let targetSession = targetTeamSessions.find(s => 
                       s.date === oldSession.date && 
                       s.categoryId === sessionNewCategoryId
@@ -373,8 +428,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                                   <div>
                                       <h4 className="font-bold text-gray-900">{athlete.name}</h4>
                                       <p className="text-xs text-gray-500 flex items-center gap-1">
-                                          Origem: <span className="font-bold">{originTeam?.name || 'Desconhecido'}</span>
+                                          Origem: <span className="font-bold">{originTeam?.name || 'Outro Time/Desconhecido'}</span>
                                       </p>
+                                      {athlete.rg && <span className="text-[10px] bg-gray-100 px-1 rounded text-gray-600">RG: {athlete.rg}</span>}
                                   </div>
                               </div>
                               <div className="flex gap-2">
@@ -460,12 +516,21 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </div>
 
           {currentUser && canEditData(currentUser.role) && (
-            <button 
-                onClick={() => setShowModal(true)}
-                className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 whitespace-nowrap w-full md:w-auto"
-            >
-                <Plus size={18} /> Novo Atleta
-            </button>
+            <div className="flex gap-2 w-full md:w-auto">
+                <button 
+                    onClick={() => setShowPullModal(true)}
+                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center transition-colors border border-blue-200"
+                    title="Solicitar Atleta de outro Time (via RG)"
+                >
+                    <Download size={18} />
+                </button>
+                <button 
+                    onClick={() => setShowModal(true)}
+                    className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 whitespace-nowrap flex-1 md:flex-none"
+                >
+                    <Plus size={18} /> Novo Atleta
+                </button>
+            </div>
           )}
         </div>
       </div>
@@ -502,10 +567,15 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                <h3 className="font-bold text-gray-800 text-center">{athlete.name}</h3>
                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 font-semibold">{athlete.position}</span>
                
-               <div className="flex gap-1 mt-2">
+               <div className="flex flex-col items-center gap-1 mt-2">
                    <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-bold border border-purple-100">
                        {getCalculatedCategory(athlete.birthDate)}
                    </span>
+                   {athlete.rg && (
+                       <span className="text-[10px] text-gray-400 font-mono">
+                           RG: {athlete.rg}
+                       </span>
+                   )}
                </div>
                
                {/* Pending Transfer Badge */}
@@ -523,8 +593,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
          )}
       </div>
 
+      {/* NEW ATHLETE MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fade-in">
            <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6 border-b pb-2">
                 <h3 className="text-xl font-bold flex items-center gap-2"><Plus className="text-green-500"/> Cadastrar Atleta</h3>
@@ -546,6 +617,20 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                  <div>
                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
                    <input required type="text" className={inputClass} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1 flex justify-between">
+                       RG / Identificador 
+                       <span className="text-[10px] text-gray-400 font-normal">Opcional (Gerado auto. se vazio)</span>
+                   </label>
+                   <input 
+                       type="text" 
+                       className={inputClass} 
+                       value={formData.rg} 
+                       onChange={e => setFormData({...formData, rg: e.target.value})} 
+                       placeholder="Ex: 12.345.678-9 ou deixe vazio"
+                   />
                  </div>
                  
                  <div className="grid grid-cols-2 gap-4">
@@ -593,6 +678,67 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               </form>
            </div>
         </div>
+      )}
+
+      {/* PULL ATHLETE MODAL (Solicitar por RG) */}
+      {showPullModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl relative">
+                 <button onClick={() => setShowPullModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                 
+                 <div className="text-center mb-6">
+                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                         <Download className="text-blue-600" size={32} />
+                     </div>
+                     <h3 className="text-xl font-bold text-gray-800">Solicitar Atleta</h3>
+                     <p className="text-sm text-gray-500 mt-1">Busque um atleta pelo RG para solicitar transferência para o seu time.</p>
+                 </div>
+
+                 <div className="mb-4">
+                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">RG do Atleta</label>
+                     <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            className="flex-1 bg-gray-100 border border-gray-300 rounded p-2 text-sm focus:outline-none focus:border-blue-500"
+                            placeholder="Digite o RG exato..."
+                            value={pullRgInput}
+                            onChange={(e) => setPullRgInput(e.target.value)}
+                        />
+                        <button 
+                            onClick={handleSearchAthleteByRg}
+                            className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 rounded font-bold"
+                        >
+                            <Search size={18} />
+                        </button>
+                     </div>
+                     {pullSearchError && <p className="text-xs text-red-500 mt-1 font-bold">{pullSearchError}</p>}
+                 </div>
+
+                 {foundAthleteToPull && (
+                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 flex items-center gap-3">
+                         {foundAthleteToPull.photoUrl ? (
+                             <img src={foundAthleteToPull.photoUrl} className="w-10 h-10 rounded-full object-cover" />
+                         ) : (
+                             <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 text-xs">{foundAthleteToPull.name.charAt(0)}</div>
+                         )}
+                         <div className="flex-1 min-w-0">
+                             <p className="font-bold text-gray-800 text-sm truncate">{foundAthleteToPull.name}</p>
+                             <p className="text-xs text-gray-500">
+                                 {teams.find(t => t.id === foundAthleteToPull.teamId)?.name || 'Time Desconhecido'}
+                             </p>
+                         </div>
+                     </div>
+                 )}
+
+                 <button 
+                    onClick={handleRequestPull}
+                    disabled={!foundAthleteToPull}
+                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                     Solicitar Transferência
+                 </button>
+             </div>
+          </div>
       )}
 
       {/* ACCEPT TRANSFER MODAL */}

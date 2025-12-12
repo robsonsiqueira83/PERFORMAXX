@@ -625,10 +625,15 @@ const AthleteProfile: React.FC = () => {
               )}
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">{athlete.name}</h1>
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2 items-center">
                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">{athlete.position}</span>
                    <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded font-bold">{getCalculatedCategory(athlete.birthDate)}</span>
                    <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded font-medium">Nasc: {formatBirthDate(athlete.birthDate)}</span>
+                   {athlete.rg && (
+                       <span className="text-[10px] bg-gray-50 text-gray-500 border border-gray-200 px-2 py-1 rounded font-mono">
+                           RG: {athlete.rg}
+                       </span>
+                   )}
                 </div>
               </div>
             </div>
@@ -914,6 +919,12 @@ const AthleteProfile: React.FC = () => {
                  <div>
                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
                    <input required type="text" className={inputClass} value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">RG / Identificador</label>
+                   <input type="text" className={inputClass} value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
+                   <p className="text-[10px] text-gray-500 mt-1">Identificador único do atleta. Se gerado automaticamente, atualize para o RG real.</p>
                  </div>
                  
                  <div className="grid grid-cols-2 gap-4">
