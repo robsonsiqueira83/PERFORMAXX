@@ -7,7 +7,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck, RefreshCw } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -261,16 +261,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         }
 
         // Move remaining athletes (without category or failed match)
-        // Re-fetch athletes to get updated state after loop? No, just filter carefully.
-        // Actually the loop above handles athletes IN categories.
-        // What about athletes NOT in categories (should be rare/impossible by type def)?
-        // Let's iterate all team athletes just in case to ensure teamId update.
-        // The previous loop only updated athletes in matching categories.
-        // It's safer to iterate all athletes of the old team.
         const freshAthletes = await getAthletes(); // Refresh to be safe
         const teamAthletes = freshAthletes.filter(a => a.teamId === targetId);
         for (const ath of teamAthletes) {
-             // If athlete wasn't moved in the category merge block (because category was just moved), update team
              if (ath.teamId === targetId) {
                  await saveAthlete({ ...ath, teamId: destinationId });
              }
@@ -405,6 +398,70 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       if (targetId) {
           await deleteCategory(targetId);
           window.location.reload();
+      }
+  };
+
+  // --- STANDARDIZE ALL CATEGORIES LOGIC ---
+  const handleStandardizeCategories = async () => {
+      if (!currentTeamId) return;
+      setLoading(true);
+      try {
+          const [allCats, allAthletes, allSessions] = await Promise.all([
+              getCategories(), getAthletes(), getTrainingSessions()
+          ]);
+          
+          const teamCats = allCats.filter(c => c.teamId === currentTeamId);
+          let changeCount = 0;
+
+          // We iterate through a copy to allow mutation of the source list for duplicates
+          // Actually, standardizing duplicates is tricky. 
+          // Strategy: First rename everything to standard. If collision, merge.
+          
+          for (const cat of teamCats) {
+              const newName = normalizeCategoryName(cat.name);
+              
+              if (cat.name !== newName) {
+                  // Check if the NEW name already exists in OTHER categories (collision)
+                  const collision = teamCats.find(c => c.teamId === currentTeamId && c.name === newName && c.id !== cat.id);
+                  
+                  if (collision) {
+                      // MERGE LOGIC: Move data from 'cat' to 'collision', then delete 'cat'
+                      
+                      // Move Athletes
+                      const relatedAthletes = allAthletes.filter(a => a.categoryId === cat.id);
+                      for (const ath of relatedAthletes) {
+                          await saveAthlete({ ...ath, categoryId: collision.id });
+                      }
+
+                      // Move Sessions
+                      const relatedSessions = allSessions.filter(s => s.categoryId === cat.id);
+                      for (const ses of relatedSessions) {
+                          await saveTrainingSession({ ...ses, categoryId: collision.id });
+                      }
+
+                      // Delete old
+                      await deleteCategory(cat.id);
+                      changeCount++;
+                  } else {
+                      // SIMPLE RENAME
+                      await saveCategory({ ...cat, name: newName });
+                      changeCount++;
+                  }
+              }
+          }
+          
+          if (changeCount > 0) {
+              showAlert('alert_success', `${changeCount} categoria(s) padronizada(s) com sucesso!`);
+              await refreshData(null);
+          } else {
+              showAlert('alert_success', 'Todas as categorias já estão no padrão.');
+          }
+
+      } catch (err) {
+          console.error(err);
+          showAlert('alert_error', 'Erro ao padronizar categorias.');
+      } finally {
+          setLoading(false);
       }
   };
 
@@ -613,14 +670,19 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         {/* Categories Tab */}
         {activeTab === 'categories' && (
            <div>
-             <div className="mb-6 flex justify-between items-center">
+             <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <h3 className="font-bold text-lg text-gray-800">
                    Categorias ({[...ownedTeams, ...activeGuestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
                </h3>
                {canEdit && (
-                   <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                       <Plus size={16}/> Nova Categoria
-                   </button>
+                   <div className="flex gap-2">
+                       <button onClick={handleStandardizeCategories} className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors border border-purple-200">
+                           <RefreshCw size={16}/> Padronizar Nomes
+                       </button>
+                       <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                           <Plus size={16}/> Nova Categoria
+                       </button>
+                   </div>
                )}
             </div>
 
