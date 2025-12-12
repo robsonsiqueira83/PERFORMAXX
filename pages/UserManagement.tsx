@@ -55,7 +55,7 @@ const UserManagement: React.FC = () => {
       setTeams(panelTeams);
       const panelTeamIds = panelTeams.map(t => t.id);
 
-      // 2. Filter Users: Strict Multi-tenancy Rules
+      // 2. Filter Users: Show anyone connected to this panel's teams (Active OR Pending)
       const filteredUsers = allUsers.filter(u => {
           // Rule A: Never show Global Users in a Master Panel list (unless viewing self)
           if (u.role === UserRole.GLOBAL) {
@@ -63,22 +63,13 @@ const UserManagement: React.FC = () => {
               return false;
           }
 
-          // Rule B: Show the Master of this panel
-          if (u.role === UserRole.MASTER && u.id === contextId) return true;
+          // Rule B: Always show the Master/Owner of this panel
+          if (u.id === contextId) return true;
 
-          // Rule C: GUEST MASTERS - Show Masters who are NOT the owner but have access to teams in this panel
-          if (u.role === UserRole.MASTER && u.id !== contextId) {
-              // FIX: Check ALL ids (normalized), ensuring pending invites also show up
-              const allUserTeamIds = (u.teamIds || []).map(id => id.replace('pending:', ''));
-              const hasAccessToPanelTeam = allUserTeamIds.some(tid => panelTeamIds.includes(tid));
-              if (hasAccessToPanelTeam) return true;
-              return false;
-          }
-
-          // Rule D: For Staff/Collaborators
-          // Show if they are assigned to at least one team in this panel (INCLUDING PENDING)
+          // Rule C: Show anyone else (Staff or Guest Masters) who has a link to this panel's teams
           if (u.teamIds && u.teamIds.length > 0) {
               const hasAccessOrInvite = u.teamIds.some(tid => {
+                  // Clean the ID (remove 'pending:') to check if it matches one of our teams
                   const cleanId = tid.replace('pending:', '');
                   return panelTeamIds.includes(cleanId);
               });
@@ -248,7 +239,7 @@ const UserManagement: React.FC = () => {
       setInviteModal({ isOpen: false, user: null, newTeams: [] });
       setSuccessMessage("Convite enviado com sucesso!");
       
-      // Refresh list to show pending
+      // FORCE Refresh list to show pending
       if (currentUser) await loadData(currentContextId, currentUser);
   };
 
@@ -312,17 +303,6 @@ const UserManagement: React.FC = () => {
       navigator.clipboard.writeText(text);
   };
 
-  const getPermissionDescription = (role: UserRole) => {
-    switch (role) {
-        case UserRole.GLOBAL: return { icon: <Globe className="text-purple-600" size={24} />, title: "Super Admin (Global)", desc: "Acesso irrestrito a TODOS os painéis Master.", color: "bg-purple-50 border-purple-200 text-purple-900" };
-        case UserRole.MASTER: return { icon: <ShieldCheck className="text-blue-600" size={24} />, title: "Dono do Painel (Master)", desc: "Controle total do seu próprio painel.", color: "bg-blue-50 border-blue-200 text-blue-900" };
-        case UserRole.TECNICO:
-        case UserRole.AUXILIAR:
-        case UserRole.SCOUT: return { icon: <Database className="text-green-600" size={24} />, title: "Gestão de Dados", desc: "Pode cadastrar e editar dados nos times selecionados.", color: "bg-green-50 border-green-200 text-green-900" };
-        default: return { icon: <Eye className="text-orange-600" size={24} />, title: "Apenas Visualização", desc: "Acesso somente leitura.", color: "bg-orange-50 border-orange-200 text-orange-900" };
-    }
-  };
-
   const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -330,10 +310,12 @@ const UserManagement: React.FC = () => {
   // Helper to check if a user is in Pending state for ALL teams in this panel
   const isUserPending = (u: User) => {
       const panelTeamIds = teams.map(t => t.id);
+      // Get all User IDs that relate to this panel (stripping 'pending:')
       const userPanelIds = (u.teamIds || []).filter(tid => panelTeamIds.includes(tid.replace('pending:', '')));
       
       if (userPanelIds.length === 0) return false;
-      // Return true if ALL relevant IDs are pending
+      
+      // If ALL IDs related to this panel start with 'pending:', then the user is fully pending for this panel.
       return userPanelIds.every(tid => tid.startsWith('pending:'));
   };
 
@@ -467,7 +449,7 @@ const UserManagement: React.FC = () => {
        </div>
 
        {/* --- PENDING INVITES LIST (THIRD) --- */}
-       {pendingInvites.length > 0 && (
+       {pendingInvites.length > 0 ? (
            <div className="mb-4 animate-fade-in">
                <h3 className="font-bold text-yellow-700 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-yellow-200">
                    <Mail size={16}/> Convites Enviados (Pendentes)
@@ -506,6 +488,8 @@ const UserManagement: React.FC = () => {
                    })}
                </div>
            </div>
+       ) : (
+           <p className="text-gray-400 italic text-sm">Nenhum convite pendente.</p>
        )}
 
        {/* --- EDIT USER FORM --- */}
