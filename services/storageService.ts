@@ -22,6 +22,24 @@ export const getUsers = async (): Promise<User[]> => {
   }));
 };
 
+export const getUserById = async (id: string): Promise<User | null> => {
+  const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+  if (error || !data) {
+    // console.error('Error fetching user by id:', error); // Optional logging
+    return null;
+  }
+  return {
+    id: data.id,
+    name: data.name,
+    email: data.email,
+    role: data.role as UserRole,
+    avatarUrl: data.avatar_url,
+    password: data.password,
+    teamIds: data.team_ids || [],
+    createdAt: data.created_at
+  };
+};
+
 export const saveUser = async (user: User) => {
   const dbUser: any = {
     id: user.id,
