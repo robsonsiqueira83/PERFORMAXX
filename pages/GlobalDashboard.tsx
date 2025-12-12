@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { 
   getUsers, saveUser, deleteUser, 
   getTeams, saveTeam, deleteTeam,
-  getCategories, saveCategory,
+  getCategories, saveCategory, deleteCategory,
   getAthletes, saveAthlete,
   getTrainingSessions, saveTrainingSession
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { User, UserRole, Team } from '../types';
+import { User, UserRole, Team, normalizeCategoryName } from '../types';
 import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon, ArrowRightLeft, CheckCircle, Shirt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -156,30 +156,64 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                   }
 
                   // --- EXECUTE MIGRATION ---
-                  // We must move Categories, Athletes, and Sessions to the new Team ID
                   const [allCats, allAthletes, allSessions] = await Promise.all([
                       getCategories(),
                       getAthletes(),
                       getTrainingSessions()
                   ]);
 
-                  // 1. Move Categories
-                  // Note: We move them even if names duplicate, to preserve data integrity.
+                  // Fetch current categories of destination team to prevent duplicates
+                  const destCategories = allCats.filter(c => c.teamId === targetTeamIdInput);
+
+                  // 1. Move Categories (With Duplicate Check)
                   const catsToMove = allCats.filter(c => userTeamIds.includes(c.teamId));
-                  for (const item of catsToMove) {
-                      await saveCategory({ ...item, teamId: targetTeamIdInput });
+                  
+                  for (const cat of catsToMove) {
+                      const normalizedOld = normalizeCategoryName(cat.name);
+                      // Check if destination already has this category
+                      const existingDestCat = destCategories.find(dc => normalizeCategoryName(dc.name) === normalizedOld);
+
+                      if (existingDestCat) {
+                          // TARGET EXISTS: Move children (Athletes/Sessions) to existing ID, then delete old category
+                          
+                          // Update Athletes in this category
+                          const relatedAthletes = allAthletes.filter(a => a.categoryId === cat.id);
+                          for (const ath of relatedAthletes) {
+                              await saveAthlete({ ...ath, categoryId: existingDestCat.id, teamId: targetTeamIdInput, pendingTransferTeamId: null });
+                          }
+
+                          // Update Sessions in this category
+                          const relatedSessions = allSessions.filter(s => s.categoryId === cat.id);
+                          for (const ses of relatedSessions) {
+                              await saveTrainingSession({ ...ses, categoryId: existingDestCat.id, teamId: targetTeamIdInput });
+                          }
+
+                          // Delete the old category row since we merged it
+                          await deleteCategory(cat.id);
+
+                      } else {
+                          // TARGET DOES NOT EXIST: Just update teamId and name (normalized)
+                          await saveCategory({ ...cat, name: normalizedOld, teamId: targetTeamIdInput });
+                      }
                   }
 
-                  // 2. Move Athletes
+                  // 2. Move Athletes (Remaining or general update)
+                  // We re-query or filter to ensure we catch anyone not covered by category loop (though unlikely)
+                  // It's safer to ensure all athletes from old teams are moved to new teamId regardless of category
                   const athletesToMove = allAthletes.filter(a => userTeamIds.includes(a.teamId));
                   for (const item of athletesToMove) {
-                      await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: null });
+                      // Only update if teamId wasn't already updated in category loop above (check against old ids)
+                      if (userTeamIds.includes(item.teamId)) {
+                          await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: null });
+                      }
                   }
 
                   // 3. Move History (Sessions)
                   const sessionsToMove = allSessions.filter(s => userTeamIds.includes(s.teamId));
                   for (const item of sessionsToMove) {
-                      await saveTrainingSession({ ...item, teamId: targetTeamIdInput });
+                      if (userTeamIds.includes(item.teamId)) {
+                          await saveTrainingSession({ ...item, teamId: targetTeamIdInput });
+                      }
                   }
               }
               

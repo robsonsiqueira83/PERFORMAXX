@@ -5,9 +5,9 @@ import {
   getAthletes, getUsers, saveAthlete, saveUser, getTrainingSessions, saveTrainingSession
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData } from '../types';
+import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck, RefreshCw } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -227,19 +227,53 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             getAthletes(), getUsers(), getCategories(), getTrainingSessions()
         ]);
 
+        // Category Migration Logic (Updated to merge by normalized name)
         const teamCategories = allCategories.filter(c => c.teamId === targetId);
+        const destinationCategories = allCategories.filter(c => c.teamId === destinationId);
+
         for (const cat of teamCategories) {
-            await saveCategory({ ...cat, teamId: destinationId });
+            // Check if destination already has this category (using normalized check)
+            const normalizedOld = normalizeCategoryName(cat.name);
+            const existingCat = destinationCategories.find(dc => normalizeCategoryName(dc.name) === normalizedOld);
+
+            if (existingCat) {
+                // If exists, we need to move children (athletes/sessions) to the EXISTING category, then delete old
+                
+                // Move athletes
+                const catAthletes = allAthletes.filter(a => a.categoryId === cat.id);
+                for (const ath of catAthletes) {
+                    await saveAthlete({ ...ath, categoryId: existingCat.id, teamId: destinationId });
+                }
+
+                // Move sessions
+                const catSessions = allSessions.filter(s => s.categoryId === cat.id);
+                for (const ses of catSessions) {
+                    await saveTrainingSession({ ...ses, categoryId: existingCat.id, teamId: destinationId });
+                }
+
+                // Delete old category since we merged
+                await deleteCategory(cat.id);
+
+            } else {
+                // If not exists, just move the category
+                await saveCategory({ ...cat, name: normalizedOld, teamId: destinationId });
+            }
         }
 
-        const teamAthletes = allAthletes.filter(a => a.teamId === targetId);
+        // Move remaining athletes (without category or failed match)
+        const freshAthletes = await getAthletes(); // Refresh to be safe
+        const teamAthletes = freshAthletes.filter(a => a.teamId === targetId);
         for (const ath of teamAthletes) {
-            await saveAthlete({ ...ath, teamId: destinationId });
+             if (ath.teamId === targetId) {
+                 await saveAthlete({ ...ath, teamId: destinationId });
+             }
         }
 
         const teamSessions = allSessions.filter(s => s.teamId === targetId);
         for (const ses of teamSessions) {
-            await saveTrainingSession({ ...ses, teamId: destinationId });
+             if (ses.teamId === targetId) {
+                 await saveTrainingSession({ ...ses, teamId: destinationId });
+             }
         }
 
         const teamUsers = allUsers.filter(u => u.teamIds?.includes(targetId));
@@ -332,9 +366,22 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   const handleSaveCategory = async () => {
     if (!formData.name) return;
+    
+    // Normalize Category Name
+    const standardizedName = normalizeCategoryName(formData.name);
+    
+    // Check if this normalized name already exists in this team (to prevent duplicates like "Sub-15" and "sub 15")
+    // We filter by teamId (currentTeamId) and exclude current item if editing
+    const exists = categories.find(c => c.name === standardizedName && c.id !== targetId);
+    
+    if (exists) {
+        showAlert('alert_error', `A categoria "${standardizedName}" já existe neste time.`);
+        return;
+    }
+
     await saveCategory({ 
         id: targetId || uuidv4(), 
-        name: formData.name, 
+        name: standardizedName, // Save strict format
         teamId: currentTeamId 
     });
     closeModal();
@@ -351,6 +398,70 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       if (targetId) {
           await deleteCategory(targetId);
           window.location.reload();
+      }
+  };
+
+  // --- STANDARDIZE ALL CATEGORIES LOGIC ---
+  const handleStandardizeCategories = async () => {
+      if (!currentTeamId) return;
+      setLoading(true);
+      try {
+          const [allCats, allAthletes, allSessions] = await Promise.all([
+              getCategories(), getAthletes(), getTrainingSessions()
+          ]);
+          
+          const teamCats = allCats.filter(c => c.teamId === currentTeamId);
+          let changeCount = 0;
+
+          // We iterate through a copy to allow mutation of the source list for duplicates
+          // Actually, standardizing duplicates is tricky. 
+          // Strategy: First rename everything to standard. If collision, merge.
+          
+          for (const cat of teamCats) {
+              const newName = normalizeCategoryName(cat.name);
+              
+              if (cat.name !== newName) {
+                  // Check if the NEW name already exists in OTHER categories (collision)
+                  const collision = teamCats.find(c => c.teamId === currentTeamId && c.name === newName && c.id !== cat.id);
+                  
+                  if (collision) {
+                      // MERGE LOGIC: Move data from 'cat' to 'collision', then delete 'cat'
+                      
+                      // Move Athletes
+                      const relatedAthletes = allAthletes.filter(a => a.categoryId === cat.id);
+                      for (const ath of relatedAthletes) {
+                          await saveAthlete({ ...ath, categoryId: collision.id });
+                      }
+
+                      // Move Sessions
+                      const relatedSessions = allSessions.filter(s => s.categoryId === cat.id);
+                      for (const ses of relatedSessions) {
+                          await saveTrainingSession({ ...ses, categoryId: collision.id });
+                      }
+
+                      // Delete old
+                      await deleteCategory(cat.id);
+                      changeCount++;
+                  } else {
+                      // SIMPLE RENAME
+                      await saveCategory({ ...cat, name: newName });
+                      changeCount++;
+                  }
+              }
+          }
+          
+          if (changeCount > 0) {
+              showAlert('alert_success', `${changeCount} categoria(s) padronizada(s) com sucesso!`);
+              await refreshData(null);
+          } else {
+              showAlert('alert_success', 'Todas as categorias já estão no padrão.');
+          }
+
+      } catch (err) {
+          console.error(err);
+          showAlert('alert_error', 'Erro ao padronizar categorias.');
+      } finally {
+          setLoading(false);
       }
   };
 
@@ -559,14 +670,19 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         {/* Categories Tab */}
         {activeTab === 'categories' && (
            <div>
-             <div className="mb-6 flex justify-between items-center">
+             <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <h3 className="font-bold text-lg text-gray-800">
                    Categorias ({[...ownedTeams, ...activeGuestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
                </h3>
                {canEdit && (
-                   <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                       <Plus size={16}/> Nova Categoria
-                   </button>
+                   <div className="flex gap-2">
+                       <button onClick={handleStandardizeCategories} className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors border border-purple-200">
+                           <RefreshCw size={16}/> Padronizar Nomes
+                       </button>
+                       <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                           <Plus size={16}/> Nova Categoria
+                       </button>
+                   </div>
                )}
             </div>
 
@@ -662,6 +778,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                         onChange={e => setFormData({...formData, name: e.target.value})} 
                         placeholder="Ex: Sub-15"
                       />
+                      <p className="text-[10px] text-gray-500 mt-1">
+                          Será padronizado automaticamente para: Sub-XX ou Profissional.
+                      </p>
                   </div>
                   <button onClick={handleSaveCategory} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors flex justify-center items-center gap-2 mt-2">
                       <Save size={18} /> Salvar
