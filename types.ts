@@ -171,6 +171,30 @@ export const calculateCategoryAverage = (stats: any): number => {
   return sum / values.length;
 };
 
+// --- CATEGORY NORMALIZATION HELPER ---
+export const normalizeCategoryName = (input: string): string => {
+  if (!input) return '';
+  const clean = input.trim().toLowerCase();
+  
+  // Check for Professional variations
+  if (clean.includes('prof') || clean === 'principal' || clean === 'adulto' || clean === 'time a') {
+      return 'Profissional';
+  }
+
+  // Extract number for "Sub-XX"
+  // This matches "sub 15", "u15", "under-15", "15", etc.
+  const numMatch = clean.match(/(\d+)/);
+  if (numMatch) {
+      const num = parseInt(numMatch[0], 10);
+      // Validate common range if necessary, or just format
+      // Ensure padding with 0 (Sub-07)
+      return `Sub-${num.toString().padStart(2, '0')}`;
+  }
+
+  // Fallback for custom names not matching patterns (keep as Title Case)
+  return input.charAt(0).toUpperCase() + input.slice(1);
+};
+
 // Helper to calculate category based on age (Display only)
 export const getCalculatedCategory = (birthDateString: string): string => {
   if (!birthDateString) return '';
@@ -199,11 +223,18 @@ export const getCalculatedCategory = (birthDateString: string): string => {
   }
 
   if (age <= 7) return 'Sub-07';
+  if (age <= 8) return 'Sub-08';
   if (age <= 9) return 'Sub-09';
+  if (age <= 10) return 'Sub-10';
   if (age <= 11) return 'Sub-11';
+  if (age <= 12) return 'Sub-12';
   if (age <= 13) return 'Sub-13';
+  if (age <= 14) return 'Sub-14';
   if (age <= 15) return 'Sub-15';
+  if (age <= 16) return 'Sub-16';
   if (age <= 17) return 'Sub-17';
+  if (age <= 18) return 'Sub-18';
+  if (age <= 19) return 'Sub-19';
   if (age <= 20) return 'Sub-20';
   return 'Profissional';
 };
