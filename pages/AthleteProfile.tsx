@@ -19,7 +19,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock, Copy, CheckCircle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,6 +63,9 @@ const AthleteProfile: React.FC = () => {
   // Transfer Logic State
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferTeamId, setTransferTeamId] = useState('');
+
+  // UI Feedback
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   // Add/Edit Training State
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
@@ -381,6 +384,14 @@ const AthleteProfile: React.FC = () => {
       }
   };
 
+  const handleCopyRg = () => {
+      if (athlete?.rg) {
+          navigator.clipboard.writeText(athlete.rg);
+          setCopyFeedback(true);
+          setTimeout(() => setCopyFeedback(false), 2000);
+      }
+  };
+
   // Calendar Logic
   const getDaysInMonth = (date: Date) => {
       const year = date.getFullYear();
@@ -630,8 +641,15 @@ const AthleteProfile: React.FC = () => {
                    <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded font-bold">{getCalculatedCategory(athlete.birthDate)}</span>
                    <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded font-medium">Nasc: {formatBirthDate(athlete.birthDate)}</span>
                    {athlete.rg && (
-                       <span className="text-[10px] bg-gray-50 text-gray-500 border border-gray-200 px-2 py-1 rounded font-mono">
+                       <span className="text-[10px] bg-gray-50 text-gray-500 border border-gray-200 px-2 py-1 rounded font-mono flex items-center gap-1">
                            RG: {athlete.rg}
+                           <button 
+                             onClick={handleCopyRg} 
+                             className="ml-1 p-0.5 hover:text-blue-600 transition-colors"
+                             title="Copiar RG"
+                           >
+                               {copyFeedback ? <CheckCircle size={10} className="text-green-600" /> : <Copy size={10} />}
+                           </button>
                        </span>
                    )}
                 </div>

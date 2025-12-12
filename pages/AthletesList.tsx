@@ -10,12 +10,12 @@ import {
   saveTrainingSession, 
   saveTrainingEntry, 
   saveCategory,
-  saveTeam, // Added saveTeam
+  saveTeam, 
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName, UserRole } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Rocket, PlayCircle } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Rocket, PlayCircle, LogOut } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -23,22 +23,24 @@ interface AthletesListProps {
 }
 
 const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
-  const [incomingTransfers, setIncomingTransfers] = useState<Athlete[]>([]); // New state for transfers
-  const [teams, setTeams] = useState<Team[]>([]); // For displaying origin team name and selection
+  const [athletes, setAthletes] = useState<Athlete[]>([]); // Current team athletes
+  const [allSystemAthletes, setAllSystemAthletes] = useState<Athlete[]>([]); // For outgoing requests check
   
+  const [transferRequestsReceived, setTransferRequestsReceived] = useState<Athlete[]>([]); // Requests to take MY players
+  const [transferRequestsSent, setTransferRequestsSent] = useState<Athlete[]>([]); // Requests I sent to others
+
+  const [teams, setTeams] = useState<Team[]>([]); 
   const [categories, setCategories] = useState<Category[]>([]);
   const [entries, setEntries] = useState<any[]>([]); // To calc scores
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [positionFilter, setPositionFilter] = useState('');
-  const [sortBy, setSortBy] = useState('registration'); // registration, score, age, alpha
+  const [sortBy, setSortBy] = useState('registration'); 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Transfer Modal State
+  // Transfer Modal State (For Approval/Release)
   const [transferModal, setTransferModal] = useState<{ isOpen: boolean; athlete: Athlete | null }>({ isOpen: false, athlete: null });
-  const [targetTransferTeamId, setTargetTransferTeamId] = useState<string>('');
   const [isMigrating, setIsMigrating] = useState(false);
 
   // Pull Athlete Modal (Solicitação de Transferência por RG)
@@ -47,7 +49,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [foundAthleteToPull, setFoundAthleteToPull] = useState<Athlete | null>(null);
   const [pullSearchError, setPullSearchError] = useState('');
 
-  // Quick Setup Modal State (First Run Experience)
+  // Quick Setup Modal State
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [setupStep, setSetupStep] = useState<'team_and_category' | 'category_only'>('team_and_category');
   const [setupData, setSetupData] = useState({ teamName: '', categoryName: 'Sub-15' });
@@ -69,7 +71,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    // Get current user for permission check
     const storedUser = localStorage.getItem('performax_current_user');
     if (storedUser) setCurrentUser(JSON.parse(storedUser));
 
@@ -82,11 +83,19 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
             getTeams()
         ]);
         
-        // 1. Regular Athletes
-        setAthletes(a.filter(item => item.teamId === teamId));
+        setAllSystemAthletes(a);
+
+        // 1. My Athletes
+        const myAthletes = a.filter(item => item.teamId === teamId);
+        setAthletes(myAthletes);
         
-        // 2. Incoming Transfers (Targeting this team)
-        setIncomingTransfers(a.filter(item => item.pendingTransferTeamId === teamId));
+        // 2. Incoming Requests (Someone wants MY player)
+        // Logic: Athlete is in my team (teamId == teamId), but pendingTransferTeamId is set to someone else.
+        setTransferRequestsReceived(myAthletes.filter(item => item.pendingTransferTeamId && item.pendingTransferTeamId !== teamId));
+
+        // 3. Outgoing Requests (I want someone else's player)
+        // Logic: Athlete is NOT in my team, but pendingTransferTeamId IS my teamId.
+        setTransferRequestsSent(a.filter(item => item.teamId !== teamId && item.pendingTransferTeamId === teamId));
 
         setCategories(c.filter(item => item.teamId === teamId));
         setEntries(e);
@@ -150,18 +159,13 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
-    // Update state synchronously to allow typing
     setFormData(prev => ({ ...prev, birthDate: newDate }));
   };
 
   // --- QUICK SETUP CHECK LOGIC ---
   const handleActionClick = (action: 'create' | 'import') => {
-      // 1. Check if user has any team (owned or part of)
-      // Since 'teams' state contains ALL teams, we need to filter by what the user can see/own
-      // However, we rely on 'teamId' prop. If it's empty, it likely means no teams exist or none selected.
-      
       const myTeams = currentUser?.role === UserRole.GLOBAL 
-          ? teams // Simplified for global
+          ? teams 
           : teams.filter(t => t.ownerId === currentUser?.id || currentUser?.teamIds?.includes(t.id));
 
       const hasTeam = myTeams.length > 0;
@@ -176,7 +180,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           setPendingAction(action);
           setShowSetupModal(true);
       } else {
-          // Proceed normal
           if (action === 'create') setShowModal(true);
           if (action === 'import') setShowPullModal(true);
       }
@@ -190,7 +193,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       try {
           let newTeamId = teamId;
 
-          // 1. Create Team if needed
           if (setupStep === 'team_and_category' && currentUser) {
               newTeamId = uuidv4();
               await saveTeam({
@@ -200,7 +202,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               });
           }
 
-          // 2. Create Category
           const newCatId = uuidv4();
           await saveCategory({
               id: newCatId,
@@ -212,15 +213,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           setSetupData({ teamName: '', categoryName: '' });
 
           if (setupStep === 'team_and_category') {
-              // Critical: Reload to update App/Layout state (Header selector)
-              // This ensures the new team is selected automatically
               window.location.reload();
           } else {
-              // Just refresh local data and open the intended modal
               setRefreshKey(prev => prev + 1);
               setFeedback({ type: 'success', message: 'Configuração concluída! Agora você pode prosseguir.' });
-              
-              // Small delay to allow state refresh
               setTimeout(() => {
                   if (pendingAction === 'create') setShowModal(true);
                   if (pendingAction === 'import') setShowPullModal(true);
@@ -238,10 +234,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     e.preventDefault();
     if (!formData.name || !formData.categoryId) return;
 
-    // Use current date (YYYY-MM-DD) if none selected
     const dateToSave = formData.birthDate || new Date().toISOString().split('T')[0];
-
-    // Generate Temp RG if empty
     const finalRg = formData.rg ? formData.rg : `PROV-${uuidv4().substring(0,6).toUpperCase()}`;
 
     const newAthlete: Athlete = {
@@ -265,8 +258,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     setRefreshKey(prev => prev + 1);
   };
 
-  // --- PULL ATHLETE HANDLING (Solicitar Transferência por RG) ---
-  // ... (No changes to logic here) ...
+  // --- PULL ATHLETE HANDLING ---
   const handleSearchAthleteByRg = async () => {
     setPullSearchError('');
     setFoundAthleteToPull(null);
@@ -297,24 +289,31 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       setShowPullModal(false);
       setPullRgInput('');
       setFoundAthleteToPull(null);
-      setFeedback({ type: 'success', message: 'Solicitação criada! Aceite a transferência na lista de pendências acima.' });
+      setFeedback({ type: 'success', message: 'Solicitação enviada! O time atual deve aprovar a liberação.' });
       setRefreshKey(prev => prev + 1);
   };
 
-  // --- TRANSFER HANDLING (Accepting/Rejecting/Migrating) ---
-  const openTransferModal = (athlete: Athlete) => {
-      setTargetTransferTeamId(teamId);
+  const handleCancelRequest = async (athlete: Athlete) => {
+      const updatedAthlete = { ...athlete, pendingTransferTeamId: null };
+      // @ts-ignore
+      await saveAthlete(updatedAthlete);
+      setFeedback({ type: 'success', message: 'Solicitação cancelada.' });
+      setRefreshKey(prev => prev + 1);
+  };
+
+  // --- APPROVAL / RELEASE HANDLING (Owner Logic) ---
+  const openApprovalModal = (athlete: Athlete) => {
       setTransferModal({ isOpen: true, athlete });
   };
 
-  const confirmTransfer = async () => {
+  const confirmRelease = async () => {
       const { athlete } = transferModal;
-      if (!athlete || !targetTransferTeamId) return;
+      if (!athlete || !athlete.pendingTransferTeamId) return;
 
+      const targetTeamId = athlete.pendingTransferTeamId; // Pre-set by requester
       setIsMigrating(true);
 
       try {
-          // --- 1. PREPARE DATA ---
           const allEntries = await getTrainingEntries();
           const allSessions = await getTrainingSessions();
           const allCategories = await getCategories();
@@ -326,7 +325,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               const currentCatObj = allCategories.find(c => c.id === athlete.categoryId);
               if (currentCatObj) {
                   const standardName = normalizeCategoryName(currentCatObj.name);
-                  const match = allCategories.find(c => c.teamId === targetTransferTeamId && normalizeCategoryName(c.name) === standardName);
+                  const match = allCategories.find(c => c.teamId === targetTeamId && normalizeCategoryName(c.name) === standardName);
                   
                   if (match) {
                       newMainCategoryId = match.id;
@@ -335,7 +334,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       const newCat = { 
                           id: newMainCategoryId, 
                           name: standardName, 
-                          teamId: targetTransferTeamId 
+                          teamId: targetTeamId 
                       };
                       await saveCategory(newCat);
                       allCategories.push(newCat); 
@@ -343,11 +342,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               }
           }
 
-          // --- 2. DATA MIGRATION LOGIC (History) ---
+          // B. DATA MIGRATION LOGIC (History)
           const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
           
           if (athleteEntries.length > 0) {
-              const targetTeamSessions = allSessions.filter(s => s.teamId === targetTransferTeamId);
+              const targetTeamSessions = allSessions.filter(s => s.teamId === targetTeamId);
 
               for (const entry of athleteEntries) {
                   const oldSession = allSessions.find(s => s.id === entry.sessionId);
@@ -358,7 +357,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
                   if (oldCategory) {
                       const oldStandardName = normalizeCategoryName(oldCategory.name);
-                      const matchingCat = allCategories.find(c => c.teamId === targetTransferTeamId && normalizeCategoryName(c.name) === oldStandardName);
+                      const matchingCat = allCategories.find(c => c.teamId === targetTeamId && normalizeCategoryName(c.name) === oldStandardName);
                       
                       if (matchingCat) {
                           sessionNewCategoryId = matchingCat.id;
@@ -367,7 +366,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                           const newCat = {
                               id: sessionNewCategoryId,
                               name: oldStandardName,
-                              teamId: targetTransferTeamId
+                              teamId: targetTeamId
                           };
                           await saveCategory(newCat);
                           allCategories.push(newCat);
@@ -387,7 +386,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       targetSessionId = uuidv4();
                       const newSessionData = {
                           id: targetSessionId,
-                          teamId: targetTransferTeamId,
+                          teamId: targetTeamId,
                           categoryId: sessionNewCategoryId,
                           date: oldSession.date,
                           description: (oldSession.description || 'Treino') + ' (Migrado)'
@@ -404,10 +403,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               }
           }
 
-          // --- 3. ATHLETE UPDATE (Critical Step) ---
+          // C. ATHLETE UPDATE (Move to new team, clear pending)
           const updatedAthlete = {
               ...athlete,
-              teamId: targetTransferTeamId,
+              teamId: targetTeamId,
               pendingTransferTeamId: null, 
               categoryId: newMainCategoryId || '' 
           };
@@ -416,25 +415,24 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           const { error } = await saveAthlete(updatedAthlete);
           
           if (error) {
-              console.error("Transfer failed full:", error);
-              setFeedback({ type: 'error', message: `Erro RLS: ${error.message}` });
+              setFeedback({ type: 'error', message: `Erro na transferência: ${error.message}` });
               setIsMigrating(false);
               return;
           }
           
           setTransferModal({ isOpen: false, athlete: null });
-          setFeedback({ type: 'success', message: `Transferência de ${athlete.name} concluída com sucesso!` });
+          setFeedback({ type: 'success', message: `Atleta ${athlete.name} liberado com sucesso!` });
           setRefreshKey(prev => prev + 1);
 
       } catch (err: any) {
           console.error("Erro na migração", err);
-          setFeedback({ type: 'error', message: `Erro crítico: ${err.message || 'Falha desconhecida'}` });
+          setFeedback({ type: 'error', message: `Erro crítico: ${err.message}` });
       } finally {
           setIsMigrating(false);
       }
   };
 
-  const handleRejectTransfer = async (athlete: Athlete) => {
+  const handleRejectRelease = async (athlete: Athlete) => {
       const updatedAthlete = { ...athlete, pendingTransferTeamId: null };
       // @ts-ignore
       const { error } = await saveAthlete(updatedAthlete);
@@ -442,7 +440,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
            setFeedback({ type: 'error', message: 'Erro ao recusar.' });
            return;
       }
-      setFeedback({ type: 'success', message: `Transferência recusada.` });
+      setFeedback({ type: 'success', message: `Solicitação recusada.` });
       setRefreshKey(prev => prev + 1);
   };
 
@@ -456,27 +454,22 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 rounded p-2 text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
-  const myAvailableTeams = useMemo(() => {
-      if (!currentUser) return [];
-      return teams.filter(t => t.ownerId === currentUser.id || currentUser.teamIds?.includes(t.id));
-  }, [teams, currentUser]);
-
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6 relative">
       
-      {/* INCOMING TRANSFERS SECTION */}
-      {incomingTransfers.length > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6 shadow-sm animate-fade-in">
-              <h3 className="text-lg font-bold text-yellow-800 flex items-center gap-2 mb-4">
-                  <ArrowRight className="text-yellow-600" /> Solicitações de Transferência ({incomingTransfers.length})
+      {/* 1. REQUESTS RECEIVED (OWNER PANEL - APPROVAL FLOW) */}
+      {transferRequestsReceived.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 mb-6 shadow-sm animate-fade-in">
+              <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2 mb-4">
+                  <LogOut className="text-orange-600" /> Solicitações de Liberação ({transferRequestsReceived.length})
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {incomingTransfers.map(athlete => {
-                      const originTeam = teams.find(t => t.id === athlete.teamId);
+                  {transferRequestsReceived.map(athlete => {
+                      const destTeam = teams.find(t => t.id === athlete.pendingTransferTeamId);
                       return (
-                          <div key={athlete.id} className="bg-white p-4 rounded-lg shadow-sm border border-yellow-100 flex items-center justify-between gap-4">
+                          <div key={athlete.id} className="bg-white p-4 rounded-lg shadow-sm border border-orange-100 flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3">
                                   {athlete.photoUrl ? (
                                       <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover" />
@@ -486,21 +479,20 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                                   <div>
                                       <h4 className="font-bold text-gray-900">{athlete.name}</h4>
                                       <p className="text-xs text-gray-500 flex items-center gap-1">
-                                          Origem: <span className="font-bold">{originTeam?.name || 'Outro Time/Desconhecido'}</span>
+                                          Destino: <span className="font-bold">{destTeam?.name || 'ID: ' + athlete.pendingTransferTeamId}</span>
                                       </p>
-                                      {athlete.rg && <span className="text-[10px] bg-gray-100 px-1 rounded text-gray-600">RG: {athlete.rg}</span>}
                                   </div>
                               </div>
                               <div className="flex gap-2">
                                   <button 
-                                    onClick={() => openTransferModal(athlete)}
+                                    onClick={() => openApprovalModal(athlete)}
                                     className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 text-sm font-bold"
-                                    title="Aceitar"
+                                    title="Aprovar Liberação"
                                   >
-                                      <UserCheck size={18} /> <span className="hidden sm:inline">Aceitar</span>
+                                      <UserCheck size={18} /> <span className="hidden sm:inline">Liberar</span>
                                   </button>
                                   <button 
-                                    onClick={() => handleRejectTransfer(athlete)}
+                                    onClick={() => handleRejectRelease(athlete)}
                                     className="bg-red-100 text-red-700 p-2 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1 text-sm font-bold"
                                     title="Recusar"
                                   >
@@ -514,6 +506,46 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </div>
       )}
 
+      {/* 2. REQUESTS SENT (REQUESTER PANEL - PENDING STATUS) */}
+      {transferRequestsSent.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 shadow-sm animate-fade-in">
+              <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2 mb-4">
+                  <ArrowRightLeft className="text-blue-600" /> Minhas Solicitações Enviadas ({transferRequestsSent.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {transferRequestsSent.map(athlete => {
+                      const currentOwnerTeam = teams.find(t => t.id === athlete.teamId);
+                      return (
+                          <div key={athlete.id} className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                  {athlete.photoUrl ? (
+                                      <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover grayscale opacity-70" />
+                                  ) : (
+                                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
+                                  )}
+                                  <div>
+                                      <h4 className="font-bold text-gray-900">{athlete.name}</h4>
+                                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                                          Origem: <span className="font-bold">{currentOwnerTeam?.name || 'Outro Time'}</span>
+                                      </p>
+                                      <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-bold">Aguardando Aprovação</span>
+                                  </div>
+                              </div>
+                              <button 
+                                onClick={() => handleCancelRequest(athlete)}
+                                className="text-gray-400 hover:text-red-500 p-2 rounded-lg transition-colors"
+                                title="Cancelar Solicitação"
+                              >
+                                  <XCircle size={18} />
+                              </button>
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      )}
+
+      {/* 3. MAIN LIST */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Users className="text-blue-600" /> Atletas
@@ -636,10 +668,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    )}
                </div>
                
-               {/* Pending Transfer Badge */}
+               {/* Pending Transfer Badge (If requesting my own player - weird but possible if glitch) */}
                {athlete.pendingTransferTeamId && (
-                   <div className="mt-2 text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded border border-yellow-200 font-bold">
-                       Transferência Solicitada
+                   <div className="mt-2 text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200 font-bold">
+                       Solicitação de Saída Pendente
                    </div>
                )}
            </Link>
@@ -853,51 +885,36 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </div>
       )}
 
-      {/* ACCEPT TRANSFER MODAL */}
+      {/* APPROVAL MODAL (OWNER) */}
       {transferModal.isOpen && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-                 <div className="flex justify-between items-center mb-6">
-                     <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                         <ArrowRightLeft className="text-blue-600" /> Aceitar Transferência
-                     </h3>
-                     <button onClick={() => setTransferModal({isOpen: false, athlete: null})}><X size={20} className="text-gray-400 hover:text-gray-600"/></button>
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <CheckCircle className="text-green-600" size={32} />
                  </div>
-                 
-                 <p className="text-sm text-gray-600 mb-6">
-                     Selecione o time de destino para o atleta <strong>{transferModal.athlete?.name}</strong>. Todos os dados históricos serão migrados automaticamente.
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Liberar Atleta?</h3>
+                 <p className="text-gray-600 text-sm mb-6">
+                     Você confirma a transferência de <strong>{transferModal.athlete?.name}</strong> para o time solicitante? 
+                     <br/><br/>
+                     <span className="text-xs text-gray-500 italic">O histórico de treinos será migrado junto com o atleta.</span>
                  </p>
-
-                 <div className="mb-6">
-                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Time de Destino</label>
-                     <select 
-                        className={inputClass}
-                        value={targetTransferTeamId}
-                        onChange={(e) => setTargetTransferTeamId(e.target.value)}
-                     >
-                         <option value="">Selecione um time...</option>
-                         {myAvailableTeams.map(t => (
-                             <option key={t.id} value={t.id}>{t.name}</option>
-                         ))}
-                     </select>
-                 </div>
 
                  <div className="flex gap-3">
                      <button onClick={() => setTransferModal({isOpen: false, athlete: null})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
                      <button 
-                        onClick={confirmTransfer} 
-                        disabled={!targetTransferTeamId || isMigrating}
-                        className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        onClick={confirmRelease} 
+                        disabled={isMigrating}
+                        className="flex-1 bg-green-600 text-white font-bold py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                      >
                          {isMigrating ? <Loader2 className="animate-spin" size={16} /> : null}
-                         {isMigrating ? 'Migrando...' : 'Confirmar'}
+                         {isMigrating ? 'Processando...' : 'Confirmar'}
                      </button>
                  </div>
              </div>
          </div>
       )}
 
-      {/* FEEDBACK MODAL (Toast style but centered/modal as requested) */}
+      {/* FEEDBACK MODAL */}
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
