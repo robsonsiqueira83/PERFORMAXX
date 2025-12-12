@@ -83,19 +83,50 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
             getTeams()
         ]);
         
-        setAllSystemAthletes(a);
+        // --- 1. BACKFILL CHECK: Verify if any athlete is missing an ID and fix it ---
+        const athletesMissingRg = a.filter(ath => !ath.rg || ath.rg.trim() === '');
+        let updatedAllAthletes = [...a];
+
+        if (athletesMissingRg.length > 0) {
+            // Create a Set of existing RGs for fast lookup during generation
+            const existingRgs = new Set(a.map(ath => ath.rg).filter(Boolean) as string[]);
+            
+            for (const ath of athletesMissingRg) {
+                let newId = '';
+                let isUnique = false;
+                
+                // Generate Unique ID Loop
+                while (!isUnique) {
+                    newId = `PROV-${uuidv4().substring(0, 6).toUpperCase()}`;
+                    if (!existingRgs.has(newId)) {
+                        isUnique = true;
+                        existingRgs.add(newId);
+                    }
+                }
+                
+                // Save update
+                await saveAthlete({ ...ath, rg: newId });
+                
+                // Update local array to reflect change immediately without re-fetch
+                const index = updatedAllAthletes.findIndex(u => u.id === ath.id);
+                if (index !== -1) {
+                    updatedAllAthletes[index] = { ...updatedAllAthletes[index], rg: newId };
+                }
+            }
+        }
+        // --------------------------------------------------------------------------
+
+        setAllSystemAthletes(updatedAllAthletes);
 
         // 1. My Athletes
-        const myAthletes = a.filter(item => item.teamId === teamId);
+        const myAthletes = updatedAllAthletes.filter(item => item.teamId === teamId);
         setAthletes(myAthletes);
         
         // 2. Incoming Requests (Someone wants MY player)
-        // Logic: Athlete is in my team (teamId == teamId), but pendingTransferTeamId is set to someone else.
         setTransferRequestsReceived(myAthletes.filter(item => item.pendingTransferTeamId && item.pendingTransferTeamId !== teamId));
 
         // 3. Outgoing Requests (I want someone else's player)
-        // Logic: Athlete is NOT in my team, but pendingTransferTeamId IS my teamId.
-        setTransferRequestsSent(a.filter(item => item.teamId !== teamId && item.pendingTransferTeamId === teamId));
+        setTransferRequestsSent(updatedAllAthletes.filter(item => item.teamId !== teamId && item.pendingTransferTeamId === teamId));
 
         setCategories(c.filter(item => item.teamId === teamId));
         setEntries(e);
@@ -235,7 +266,34 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     if (!formData.name || !formData.categoryId) return;
 
     const dateToSave = formData.birthDate || new Date().toISOString().split('T')[0];
-    const finalRg = formData.rg ? formData.rg : `PROV-${uuidv4().substring(0,6).toUpperCase()}`;
+    let finalRg = formData.rg ? formData.rg.trim() : '';
+
+    // --- RG VALIDATION & UNIQUENESS CHECK ---
+    if (finalRg) {
+        // 1. Validate Format
+        // Allow numbers, dots, dashes, and X/x. Length between 5 and 20.
+        const rgRegex = /^[0-9xX.-]{5,20}$/;
+        if (!rgRegex.test(finalRg)) {
+             setFeedback({ type: 'error', message: 'RG inválido. Insira apenas números, pontos e traços (mínimo 5 caracteres).' });
+             return;
+        }
+
+        // 2. Check Uniqueness (Manual Entry)
+        const exists = allSystemAthletes.some(a => a.rg === finalRg);
+        if (exists) {
+             setFeedback({ type: 'error', message: 'Este RG/Identificador já está em uso no sistema.' });
+             return;
+        }
+    } else {
+        // 3. Generate Unique ID (Auto)
+        let isUnique = false;
+        while (!isUnique) {
+            finalRg = `PROV-${uuidv4().substring(0, 6).toUpperCase()}`;
+            // Check against ALL athletes in system to ensure global uniqueness
+            const exists = allSystemAthletes.some(a => a.rg === finalRg);
+            if (!exists) isUnique = true;
+        }
+    }
 
     const newAthlete: Athlete = {
       id: uuidv4(),
