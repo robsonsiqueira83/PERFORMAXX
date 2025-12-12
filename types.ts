@@ -44,7 +44,7 @@ export interface Category {
 
 export interface Athlete {
   id: string;
-  rg?: string; // New RG field
+  rg?: string; // New RG/ID field
   name: string;
   photoUrl?: string;
   teamId: string;
