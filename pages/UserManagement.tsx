@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -22,11 +22,13 @@ const UserManagement: React.FC = () => {
   
   // Invite Modal State
   const [inviteModal, setInviteModal] = useState<{ isOpen: boolean, user: User | null, newTeams: string[] }>({ isOpen: false, user: null, newTeams: [] });
+  // Invite By ID State
+  const [inviteByIdModal, setInviteByIdModal] = useState(false);
+  const [guestIdInput, setGuestIdInput] = useState('');
+  const [guestIdError, setGuestIdError] = useState('');
+
   // Selected Role for Invite
   const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.TECNICO);
-
-  // Pending Invites (For the logged in user to see, handled in Admin, but we keep state here if needed for list)
-  const [pendingInvites, setPendingInvites] = useState<{team: Team, inviterId: string}[]>([]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('performax_current_user');
@@ -108,25 +110,8 @@ const UserManagement: React.FC = () => {
         const existingUser = allSystemUsers.find(u => u.email === editingUser.email && u.id !== editingUser.id);
         
         if (existingUser) {
-             // INVITE FLOW
-             if (editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL) {
-                 // Calculate which teams are new to this user
-                 const selectedTeams = editingUser.teamIds || [];
-                 // Filter out teams the user already has
-                 const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
-                 
-                 if (newTeamsToInvite.length > 0) {
-                     setInviteRole(editingUser.role as UserRole); // Set intended role
-                     setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
-                     return; // Stop standard save
-                 } else {
-                     setError("Este usuário já possui acesso ou convite pendente para os times selecionados.");
-                     return;
-                 }
-             } else {
-                 setError("Este email já está cadastrado como usuário do sistema.");
-                 return;
-             }
+             processExistingUserInvite(existingUser);
+             return;
         }
 
         // Security Check: Non-MASTER/GLOBAL users MUST have at least one team
@@ -165,32 +150,122 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // Helper to handle existing user logic (used by Email check and ID check)
+  const processExistingUserInvite = (existingUser: User) => {
+     // INVITE FLOW
+     if (editingUser?.role && editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL) {
+         // Calculate which teams are new to this user
+         const selectedTeams = editingUser.teamIds || [];
+         // Filter out teams the user already has
+         const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
+         
+         if (newTeamsToInvite.length > 0 || selectedTeams.length === 0) { // If manual ID add, might not have teams selected yet
+             setInviteRole(editingUser.role as UserRole); // Set intended role
+             setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
+             setEditingUser(null); // Close the create/edit modal
+         } else {
+             setError("Este usuário já possui acesso ou convite pendente para os times selecionados.");
+         }
+     } else {
+         setError("Este email/ID já pertence a um usuário do sistema.");
+     }
+  };
+
+  const handleSearchGuestById = () => {
+      setGuestIdError('');
+      if (!guestIdInput) return;
+
+      const foundUser = allSystemUsers.find(u => u.id === guestIdInput);
+      if (foundUser) {
+          // Found! Prepare to invite
+          // We set editingUser temporarily to pass the role logic if needed, or default
+          setEditingUser({ role: UserRole.TECNICO, teamIds: [] }); 
+          setInviteByIdModal(false);
+          setGuestIdInput('');
+          processExistingUserInvite(foundUser);
+      } else {
+          setGuestIdError('Usuário não encontrado com este ID.');
+      }
+  };
+
   const confirmInvite = async () => {
       if (!inviteModal.user) return;
       
       const userToUpdate = { ...inviteModal.user };
       const currentTeamIds = userToUpdate.teamIds || [];
       
-      // Add "pending:" prefix to new teams
-      const pendingTeamIds = inviteModal.newTeams.map(id => `pending:${id}`);
+      // Determine teams to invite (if any selected in edit modal, or if we need to show team selector here)
+      // Since the invite modal logic in 'render' doesn't show a team selector (it assumes they were selected in the previous screen),
+      // we need to be careful. 
+      // If triggered via "Invite by ID", newTeams might be empty initially.
+      // BUT, for simplicity in this flow, if triggered by ID, we should probably allow selecting teams OR 
+      // assume the user goes to the edit modal first.
       
+      // FIX: If coming from "Invite By ID", we need to open the team selection part. 
+      // However, to keep it simple and reuse existing logic:
+      // The `inviteModal` in the original code just confirms sending the invite for `newTeams` passed to it.
+      // We will modify the invite modal to allow team selection if `newTeams` is empty.
+      
+      let teamsToInvite = inviteModal.newTeams;
+      
+      // If user came from ID search and hasn't picked teams, we can't save yet unless we pick.
+      // Current implementation of `inviteModal` below is just a confirmation dialog. 
+      // Let's assume for now the user MUST pick teams.
+      
+      // ... logic continues ...
+      
+      const pendingTeamIds = teamsToInvite.map(id => `pending:${id}`);
       userToUpdate.teamIds = [...currentTeamIds, ...pendingTeamIds];
       
-      // Update role if permitted (Only if not a Master/Global, to prevent accidental downgrades)
       if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
           userToUpdate.role = inviteRole; 
       }
       
       await saveUser(userToUpdate);
       setInviteModal({ isOpen: false, user: null, newTeams: [] });
-      setEditingUser(null);
       setSuccessMessage("Convite enviado com sucesso! O usuário deverá aceitar o acesso.");
+      if (currentUser) await loadData(currentContextId, currentUser);
   };
 
+  // Improved Invite Modal confirmation logic to handle the team selection inside it if needed
+  const [inviteSelectedTeams, setInviteSelectedTeams] = useState<string[]>([]);
+
+  useEffect(() => {
+      if (inviteModal.isOpen) {
+          setInviteSelectedTeams(inviteModal.newTeams);
+      }
+  }, [inviteModal.isOpen]);
+
+  const handleInviteConfirmWithSelection = async () => {
+      if (!inviteModal.user) return;
+      
+      if (inviteSelectedTeams.length === 0) {
+          alert("Selecione ao menos um time para convidar.");
+          return;
+      }
+
+      const userToUpdate = { ...inviteModal.user };
+      const currentTeamIds = userToUpdate.teamIds || [];
+      const pendingTeamIds = inviteSelectedTeams.map(id => `pending:${id}`);
+      
+      // Filter out duplicates just in case
+      const uniqueNew = pendingTeamIds.filter(pid => !currentTeamIds.includes(pid));
+      
+      userToUpdate.teamIds = [...currentTeamIds, ...uniqueNew];
+      
+      // Only update role if it's not a Master/Global (preserve hierarchy)
+      if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
+          userToUpdate.role = inviteRole; 
+      }
+
+      await saveUser(userToUpdate);
+      setInviteModal({ isOpen: false, user: null, newTeams: [] });
+      setSuccessMessage("Convite enviado com sucesso!");
+      if (currentUser) await loadData(currentContextId, currentUser);
+  };
+
+
   const requestDelete = (user: User) => {
-      // If the user is a MASTER but NOT the owner of this panel, it's a Guest Master
-      // OR if it's a regular user created outside but invited here (External Collaborator)
-      // Logic: If user ID != currentContextID, and we are in that context, treating as guest removal from THIS context.
       const isGuestMaster = user.id !== currentContextId;
       setDeleteConfirmation({ id: user.id, isGuestMaster });
   };
@@ -199,23 +274,17 @@ const UserManagement: React.FC = () => {
     if (!deleteConfirmation || !currentUser) return;
 
     if (deleteConfirmation.isGuestMaster) {
-        // REVOKE ACCESS ONLY (Remove from teams of this panel)
-        // Find the user to revoke
         const targetUser = users.find(u => u.id === deleteConfirmation.id);
         if (targetUser) {
-            // Get IDs of teams owned by CURRENT CONTEXT
             const panelTeamIds = teams.map(t => t.id);
-            // Remove these teams from the target user (both active and pending)
             const newTeamIds = (targetUser.teamIds || []).filter(tid => {
                 const cleanId = tid.replace('pending:', '');
                 return !panelTeamIds.includes(cleanId);
             });
-            
             await saveUser({ ...targetUser, teamIds: newTeamIds });
             setSuccessMessage("Colaborador removido deste painel com sucesso!");
         }
     } else {
-        // DELETE USER (Regular Staff created in this panel and owned by it - currently assuming full delete)
         await deleteUser(deleteConfirmation.id);
     }
 
@@ -240,6 +309,19 @@ const UserManagement: React.FC = () => {
       }
   };
 
+  const toggleInviteTeamSelection = (teamId: string) => {
+      if (inviteSelectedTeams.includes(teamId)) {
+          setInviteSelectedTeams(prev => prev.filter(id => id !== teamId));
+      } else {
+          setInviteSelectedTeams(prev => [...prev, teamId]);
+      }
+  };
+
+  const copyToClipboard = (text: string) => {
+      navigator.clipboard.writeText(text);
+      // Small feedback handled by UI icon change usually, but keeping simple here
+  };
+
   const getPermissionDescription = (role: UserRole) => {
     switch (role) {
         case UserRole.GLOBAL: return { icon: <Globe className="text-purple-600" size={24} />, title: "Super Admin (Global)", desc: "Acesso irrestrito a TODOS os painéis Master.", color: "bg-purple-50 border-purple-200 text-purple-900" };
@@ -255,22 +337,24 @@ const UserManagement: React.FC = () => {
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
-  // Split users for display
-  // 1. External Collaborators (Accepted)
   const externalCollaborators = users.filter(u => u.id !== currentContextId);
-  // 2. Internal Users (Created here/Owner) - Usually just the owner in this strict view unless we allow creating "internal" non-master users which we do
   const internalUsers = users.filter(u => u.id === currentContextId);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        
-       <div className="flex justify-between items-center mb-6">
+       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
            </h2>
-           <button onClick={() => setEditingUser({role: UserRole.TECNICO, teamIds: []})} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-sm transition-colors">
-               <Plus size={20} /> Novo Usuário
-           </button>
+           <div className="flex gap-2 w-full md:w-auto">
+               <button onClick={() => setInviteByIdModal(true)} className="flex-1 md:flex-none bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors border border-blue-200 text-sm">
+                   <UserCheck size={18} /> Convidar pelo ID
+               </button>
+               <button onClick={() => setEditingUser({role: UserRole.TECNICO, teamIds: []})} className="flex-1 md:flex-none bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors text-sm">
+                   <Plus size={18} /> Novo Usuário
+               </button>
+           </div>
        </div>
        
        {teams.length === 0 && (
@@ -283,136 +367,60 @@ const UserManagement: React.FC = () => {
            </div>
        )}
 
-       {editingUser && (
-           <div className="bg-white p-6 rounded-xl mb-8 border-2 border-blue-100 shadow-lg animate-fade-in relative">
-               <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 rounded-t-xl"></div>
-               <h3 className="font-bold mb-6 text-xl text-gray-800 pb-2 flex justify-between items-center">
-                   {editingUser.id ? 'Editar Usuário' : 'Novo Usuário'}
-                   <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-red-500"><X size={24} /></button>
-               </h3>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <div className="md:col-span-2 flex items-center gap-4 mb-2 p-4 bg-gray-50 rounded-lg">
-                        {editingUser.avatarUrl ? (
-                            <img src={editingUser.avatarUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm" />
-                        ) : <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-400">?</div>}
-                        <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors shadow-sm">
-                            Alterar Foto
-                            <input type="file" onChange={handleAvatarUpload} className="hidden" />
-                        </label>
-                   </div>
-                   
-                   <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Nome</label>
-                       <input 
-                          className={inputClass}
-                          value={editingUser.name || ''} 
-                          onChange={e => setEditingUser({...editingUser, name: e.target.value})}
-                       />
-                   </div>
-                   
-                   <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
-                       <input 
-                          className={inputClass}
-                          value={editingUser.email || ''} 
-                          onChange={e => setEditingUser({...editingUser, email: e.target.value})}
-                       />
-                   </div>
-                   
-                   <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Função</label>
-                       <select 
-                          className={`${inputClass} font-semibold`}
-                          value={editingUser.role} 
-                          onChange={e => handleRoleChange(e.target.value as UserRole)}
-                       >
-                           {Object.values(UserRole).map(role => (
-                               (role === UserRole.GLOBAL && currentUser?.role !== UserRole.GLOBAL) ? null :
-                               (role === UserRole.MASTER && currentUser?.role !== UserRole.GLOBAL) ? null :
-                               <option key={role} value={role}>{role}</option>
-                           ))}
-                       </select>
-                   </div>
-                   
-                   <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-1">Senha {editingUser.id && '(Deixe em branco para manter)'}</label>
-                       <input 
-                          type="password"
-                          placeholder="******" 
-                          className={inputClass}
-                          value={editingUser.password || ''} 
-                          onChange={e => setEditingUser({...editingUser, password: e.target.value})}
-                       />
-                   </div>
-               </div>
-
-               {editingUser.role && (() => {
-                   const info = getPermissionDescription(editingUser.role);
-                   return (
-                       <div className={`mt-6 p-4 rounded-xl border flex items-start gap-4 ${info.color}`}>
-                           <div className="mt-1">{info.icon}</div>
-                           <div>
-                               <h4 className="font-bold">{info.title}</h4>
-                               <p className="text-sm opacity-90 leading-relaxed">{info.desc}</p>
+       {/* --- INTERNAL USERS LIST (FIRST) --- */}
+       <div className="mb-8">
+           <h3 className="font-bold text-blue-800 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-blue-100">
+               <Building size={16}/> Usuários do Painel
+           </h3>
+           {internalUsers.length > 0 ? (
+               <div className="grid grid-cols-1 gap-3">
+                   {internalUsers.map(u => {
+                       const perm = getPermissionDescription(u.role);
+                       return (
+                       <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 bg-white">
+                           <div className="flex items-center gap-4 w-full">
+                               {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
+                               <div className="flex-1 min-w-0">
+                                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                       <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
+                                   </div>
+                                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                       <p className="text-sm text-gray-500">{u.email}</p>
+                                       <span className="hidden sm:inline text-gray-300">•</span>
+                                       <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+                                   </div>
+                                   <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                       <span className="font-mono bg-gray-100 px-1 rounded border select-all">{u.id}</span>
+                                       <button onClick={() => copyToClipboard(u.id)} className="hover:text-blue-600" title="Copiar ID"><Copy size={12}/></button>
+                                   </div>
+                               </div>
+                           </div>
+                           <div className="flex gap-2 self-end md:self-center">
+                               <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
+                               {u.id !== currentUser?.id && (
+                                   <button 
+                                       onClick={() => requestDelete(u)} 
+                                       className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                                       title="Excluir Usuário"
+                                   >
+                                       <Trash2 size={18} />
+                                   </button>
+                               )}
                            </div>
                        </div>
-                   );
-               })()}
-
-               {editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (
-                   <div className="mt-6 border-t border-gray-100 pt-4">
-                      <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                          <Lock size={16} className="text-gray-500"/> Selecionar Times Permitidos
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                          {teams.map(team => {
-                              const isSelected = editingUser.teamIds?.includes(team.id);
-                              return (
-                                  <div key={team.id} 
-                                       onClick={() => toggleTeamSelection(team.id)}
-                                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-200'}`}
-                                  >
-                                      {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} className="text-gray-300" />}
-                                      <span className={`text-sm ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
-                                  </div>
-                              );
-                          })}
-                      </div>
-                      {(!editingUser.teamIds || editingUser.teamIds.length === 0) && (
-                          <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
-                              <AlertCircle size={12}/> É necessário selecionar pelo menos um time.
-                          </p>
-                      )}
-                      {teams.length === 0 && (
-                          <p className="text-sm text-gray-500 italic mt-2">Nenhum time disponível. Crie times antes de atribuir permissões.</p>
-                      )}
-                   </div>
-               )}
-
-               {error && (
-                   <div className="mt-4 bg-red-100 text-red-700 p-3 rounded-lg flex items-center gap-2 text-sm font-bold animate-pulse">
-                       <AlertCircle size={18} /> {error}
-                   </div>
-               )}
-
-               <div className="flex gap-3 mt-8 pt-4 border-t border-gray-200">
-                   <button onClick={() => setEditingUser(null)} disabled={saving} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
-                   <button onClick={handleSave} disabled={saving} className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
-                       {saving && <Loader2 className="animate-spin" size={18} />}
-                       Salvar Usuário
-                   </button>
+                   )})}
                </div>
-           </div>
-       )}
+           ) : <p className="text-gray-400 italic text-sm">Nenhum usuário interno.</p>}
+       </div>
 
-       {/* EXTERNAL COLLABORATORS LIST */}
-       {externalCollaborators.length > 0 && (
-           <div className="mb-8">
-               <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3">Colaboradores Externos (Aceitaram o Convite)</h3>
+       {/* --- EXTERNAL COLLABORATORS LIST (SECOND) --- */}
+       <div className="mb-4">
+           <h3 className="font-bold text-purple-800 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-purple-100">
+               <Briefcase size={16}/> Colaboradores Externos
+           </h3>
+           {externalCollaborators.length > 0 ? (
                <div className="grid grid-cols-1 gap-3">
                    {externalCollaborators.map(u => {
-                       const perm = getPermissionDescription(u.role);
                        return (
                            <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-purple-200 rounded-xl bg-purple-50 shadow-sm gap-4">
                                <div className="flex items-center gap-4 w-full">
@@ -429,6 +437,10 @@ const UserManagement: React.FC = () => {
                                            <span className="hidden sm:inline text-gray-300">•</span>
                                            <span className="text-xs font-bold px-2 py-0.5 rounded uppercase bg-gray-100 text-gray-700">{u.role}</span>
                                        </div>
+                                       <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                           <span className="font-mono bg-white/50 px-1 rounded border border-purple-200 select-all">{u.id}</span>
+                                           <button onClick={() => copyToClipboard(u.id)} className="hover:text-purple-600" title="Copiar ID"><Copy size={12}/></button>
+                                       </div>
                                    </div>
                                </div>
                                <div className="flex gap-2 self-end md:self-center">
@@ -444,68 +456,179 @@ const UserManagement: React.FC = () => {
                        );
                    })}
                </div>
-           </div>
-       )}
-
-       {/* INTERNAL USERS LIST */}
-       <div className="mb-4">
-           {internalUsers.length > 0 && <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3">Usuários do Painel</h3>}
-           <div className="grid grid-cols-1 gap-3">
-               {internalUsers.map(u => {
-                   const perm = getPermissionDescription(u.role);
-                   return (
-                   <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 bg-white">
-                       <div className="flex items-center gap-4 w-full">
-                           {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-gray-200" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg">{u.name.charAt(0)}</div>}
-                           <div className="flex-1 min-w-0">
-                               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                   <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
-                               </div>
-                               <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                   <p className="text-sm text-gray-500">{u.email}</p>
-                                   <span className="hidden sm:inline text-gray-300">•</span>
-                                   <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${u.role === UserRole.GLOBAL ? 'bg-purple-100 text-purple-800' : u.role === UserRole.MASTER ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
-                               </div>
-                               <div className="text-xs text-gray-400 mt-1">{perm.title}</div>
-                           </div>
-                       </div>
-                       <div className="flex gap-2 self-end md:self-center">
-                           <button onClick={() => setEditingUser(u)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={18} /></button>
-                           {u.id !== currentUser?.id && (
-                               <button 
-                                   onClick={() => requestDelete(u)} 
-                                   className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
-                                   title="Excluir Usuário"
-                               >
-                                   <Trash2 size={18} />
-                               </button>
-                           )}
-                       </div>
-                   </div>
-               )})}
-           </div>
+           ) : <p className="text-gray-400 italic text-sm">Nenhum colaborador externo convidado.</p>}
        </div>
 
-       {users.length === 0 && (
-           <div className="p-8 text-center text-gray-500 italic border border-dashed border-gray-200 rounded-xl">
-               Nenhum usuário adicional encontrado neste painel.
+       {/* --- EDIT USER FORM --- */}
+       {editingUser && (
+           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+               <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl relative my-8">
+                   <h3 className="font-bold mb-6 text-xl text-gray-800 pb-2 flex justify-between items-center border-b border-gray-100">
+                       {editingUser.id ? 'Editar Usuário' : 'Novo Usuário'}
+                       <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-red-500"><X size={24} /></button>
+                   </h3>
+                   
+                   <div className="grid grid-cols-1 gap-4">
+                       {/* Form Fields ... */}
+                       <div className="flex items-center gap-4 mb-2 p-4 bg-gray-50 rounded-lg">
+                            {editingUser.avatarUrl ? (
+                                <img src={editingUser.avatarUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm" />
+                            ) : <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-400">?</div>}
+                            <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors shadow-sm">
+                                Alterar Foto
+                                <input type="file" onChange={handleAvatarUpload} className="hidden" />
+                            </label>
+                       </div>
+                       
+                       <div>
+                           <label className="block text-sm font-bold text-gray-700 mb-1">Nome</label>
+                           <input 
+                              className={inputClass}
+                              value={editingUser.name || ''} 
+                              onChange={e => setEditingUser({...editingUser, name: e.target.value})}
+                           />
+                       </div>
+                       
+                       <div>
+                           <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
+                           <input 
+                              className={inputClass}
+                              value={editingUser.email || ''} 
+                              onChange={e => setEditingUser({...editingUser, email: e.target.value})}
+                           />
+                       </div>
+                       
+                       <div>
+                           <label className="block text-sm font-bold text-gray-700 mb-1">Função</label>
+                           <select 
+                              className={`${inputClass} font-semibold`}
+                              value={editingUser.role} 
+                              onChange={e => handleRoleChange(e.target.value as UserRole)}
+                           >
+                               {Object.values(UserRole).map(role => (
+                                   (role === UserRole.GLOBAL && currentUser?.role !== UserRole.GLOBAL) ? null :
+                                   (role === UserRole.MASTER && currentUser?.role !== UserRole.GLOBAL) ? null :
+                                   <option key={role} value={role}>{role}</option>
+                               ))}
+                           </select>
+                       </div>
+                       
+                       <div>
+                           <label className="block text-sm font-bold text-gray-700 mb-1">Senha {editingUser.id && '(Deixe em branco para manter)'}</label>
+                           <input 
+                              type="password"
+                              placeholder="******" 
+                              className={inputClass}
+                              value={editingUser.password || ''} 
+                              onChange={e => setEditingUser({...editingUser, password: e.target.value})}
+                           />
+                       </div>
+                   </div>
+
+                   {/* Permissions Section */}
+                   {editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (
+                       <div className="mt-6 border-t border-gray-100 pt-4">
+                          <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                              <Lock size={16} className="text-gray-500"/> Selecionar Times Permitidos
+                          </label>
+                          <div className="grid grid-cols-2 gap-3 max-h-40 overflow-y-auto">
+                              {teams.map(team => {
+                                  const isSelected = editingUser.teamIds?.includes(team.id);
+                                  return (
+                                      <div key={team.id} 
+                                           onClick={() => toggleTeamSelection(team.id)}
+                                           className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50 border-gray-200'}`}
+                                      >
+                                          {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} className="text-gray-300" />}
+                                          <span className={`text-xs ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                       </div>
+                   )}
+
+                   {error && <div className="mt-4 bg-red-100 text-red-700 p-3 rounded-lg flex items-center gap-2 text-sm font-bold animate-pulse"><AlertCircle size={18} /> {error}</div>}
+
+                   <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+                       <button onClick={() => setEditingUser(null)} disabled={saving} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
+                       <button onClick={handleSave} disabled={saving} className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
+                           {saving && <Loader2 className="animate-spin" size={18} />}
+                           Salvar Usuário
+                       </button>
+                   </div>
+               </div>
            </div>
        )}
 
-       {/* --- MODALS --- */}
+       {/* --- INVITE BY ID MODAL --- */}
+       {inviteByIdModal && (
+           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold text-gray-800">Convidar por ID</h3>
+                        <button onClick={() => setInviteByIdModal(false)}><X size={20} className="text-gray-400 hover:text-gray-600"/></button>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Insira o ID do usuário que deseja convidar para colaborar em seus times.
+                    </p>
+                    
+                    <div className="mb-4">
+                        <div className="relative">
+                            <input 
+                                type="text" 
+                                className={`w-full border rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 ${guestIdError ? 'border-red-500' : 'border-gray-300'}`}
+                                placeholder="Cole o ID aqui..."
+                                value={guestIdInput}
+                                onChange={(e) => setGuestIdInput(e.target.value)}
+                            />
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                        </div>
+                        {guestIdError && <p className="text-xs text-red-500 mt-1 font-bold">{guestIdError}</p>}
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button onClick={() => setInviteByIdModal(false)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                        <button onClick={handleSearchGuestById} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Buscar & Convidar</button>
+                    </div>
+                </div>
+           </div>
+       )}
+
+       {/* --- CONFIRM INVITE MODAL (TEAM SELECTION) --- */}
        {inviteModal.isOpen && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                      <Mail className="text-blue-600" size={32} />
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Enviar Convite?</h3>
-                 <p className="text-gray-500 mb-4">
-                     O email <strong>{inviteModal.user?.email}</strong> já possui cadastro no PerformaXX.
-                 </p>
-                 <p className="text-sm text-blue-700 bg-blue-50 p-3 rounded-lg mb-6">
-                     Deseja enviar um convite para colaborar nos times selecionados? O usuário verá um pedido de aprovação ao logar.
-                 </p>
+                 <h3 className="text-xl font-bold text-gray-800 mb-1">Confirmar Convite</h3>
+                 <p className="text-gray-600 text-sm mb-4 font-bold">{inviteModal.user?.name}</p>
+                 
+                 <div className="text-left mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                     <label className="block text-xs font-bold text-gray-700 mb-2">Selecione os Times para Acesso:</label>
+                     <div className="max-h-40 overflow-y-auto space-y-2">
+                         {teams.map(team => {
+                             // Check if user already has this team (active or pending)
+                             const alreadyHas = inviteModal.user?.teamIds?.some(tid => tid === team.id || tid === `pending:${team.id}`);
+                             if (alreadyHas) return null; // Don't show teams they already have
+
+                             const isSelected = inviteSelectedTeams.includes(team.id);
+                             return (
+                                 <div key={team.id} 
+                                      onClick={() => toggleInviteTeamSelection(team.id)}
+                                      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-gray-200 hover:border-blue-200'}`}
+                                 >
+                                     {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} className="text-gray-300" />}
+                                     <span className={`text-xs ${isSelected ? 'font-bold text-blue-900' : 'text-gray-600'}`}>{team.name}</span>
+                                 </div>
+                             );
+                         })}
+                         {teams.every(t => inviteModal.user?.teamIds?.some(tid => tid === t.id || tid === `pending:${t.id}`)) && (
+                             <p className="text-xs text-gray-400 italic">Usuário já possui acesso a todos os times.</p>
+                         )}
+                     </div>
+                 </div>
                  
                  <div className="mb-6 text-left">
                      <label className="block text-xs font-bold text-gray-700 mb-1">Selecione a Função no Painel</label>
@@ -524,7 +647,7 @@ const UserManagement: React.FC = () => {
 
                  <div className="flex gap-3">
                      <button onClick={() => setInviteModal({isOpen: false, user: null, newTeams: []})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                     <button onClick={confirmInvite} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Enviar Convite</button>
+                     <button onClick={handleInviteConfirmWithSelection} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Enviar Convite</button>
                  </div>
              </div>
          </div>

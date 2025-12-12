@@ -365,15 +365,32 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       return (
         <div key={team.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-5 border rounded-xl hover:bg-gray-50 transition-all gap-4 bg-white shadow-sm group">
             <div className="flex flex-col gap-3 w-full">
-                {/* 1. Header: Logo + Name */}
+                {/* 1. Header: Logo + Name + ACTIONS (Moved here) */}
                 <div className="flex items-center gap-3 mb-1">
                     {team.logoUrl ? (
                         <img src={team.logoUrl} className="w-10 h-10 object-contain rounded bg-gray-100 p-1" />
                     ) : (
                         <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>
                     )}
-                    <span className="font-bold text-gray-800 text-lg">{team.name}</span>
-                    {isGuest && <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200 uppercase">Convidado</span>}
+                    <span className="font-bold text-gray-800 text-lg mr-2">{team.name}</span>
+                    
+                    {/* ACTION BUTTONS ADJACENT TO NAME */}
+                    {!isGuest ? (
+                        <div className="flex gap-1">
+                            {canEdit && (
+                                <button onClick={() => openEditTeamModal(team)} className="text-blue-600 hover:bg-blue-100 p-1.5 rounded-lg transition-colors" title="Editar Time">
+                                    <Edit size={16}/>
+                                </button>
+                            )}
+                            {canDelete && (
+                                <button onClick={() => handleDeleteTeamClick(team)} className="text-red-600 hover:bg-red-100 p-1.5 rounded-lg transition-colors" title="Excluir Time">
+                                    <Trash2 size={16}/>
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200 uppercase">Convidado</span>
+                    )}
                 </div>
 
                 {/* 2. Public Link Field */}
@@ -436,22 +453,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                 </div>
             </div>
 
-            {/* Actions Column */}
+            {/* Actions Column - Only Leave button for guests now */}
             <div className="flex gap-2 w-full md:w-auto md:flex-col justify-end h-full">
-                {!isGuest ? (
-                    <>
-                        {canEdit && (
-                            <button onClick={() => openEditTeamModal(team)} className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 py-2 px-4 hover:bg-blue-100 rounded-lg transition-colors text-sm font-bold w-full">
-                                <Edit size={16}/> <span className="md:hidden">Editar</span>
-                            </button>
-                        )}
-                        {canDelete && (
-                            <button onClick={() => handleDeleteTeamClick(team)} className="flex items-center justify-center gap-2 text-red-600 bg-red-50 py-2 px-4 hover:bg-red-100 rounded-lg transition-colors text-sm font-bold w-full">
-                                <Trash2 size={16}/> <span className="md:hidden">Excluir</span>
-                            </button>
-                        )}
-                    </>
-                ) : (
+                {isGuest && (
                     <button onClick={() => handleLeaveTeamClick(team)} className="flex items-center justify-center gap-2 text-orange-600 bg-orange-50 py-2 px-4 hover:bg-orange-100 rounded-lg transition-colors text-sm font-bold w-full md:w-32 whitespace-nowrap" title="Deixar de trabalhar neste time">
                         <LogOut size={16}/> Sair do Time
                     </button>
