@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { getUsers, saveUser, deleteUser } from '../services/storageService';
+import { getUsers, saveUser, deleteUser, getTeams, saveTeam, deleteTeam } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { User, UserRole } from '../types';
-import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon } from 'lucide-react';
+import { User, UserRole, Team } from '../types';
+import { Loader2, ShieldCheck, Search, ExternalLink, Calendar, Mail, LayoutDashboard, UserPlus, Trash2, X, Globe, Save, Edit, AlertTriangle, Upload, User as UserIcon, ArrowRightLeft, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -25,6 +25,12 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
   // Delete Confirmation State
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, userId: string | null, userName: string }>({ isOpen: false, userId: null, userName: '' });
+  
+  // Migration State
+  const [userTeamsCount, setUserTeamsCount] = useState(0);
+  const [wantToMigrate, setWantToMigrate] = useState(false);
+  const [targetMasterId, setTargetMasterId] = useState('');
+  const [isProcessingDelete, setIsProcessingDelete] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -104,15 +110,68 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       }
   };
 
-  const requestDelete = (user: User) => {
+  const requestDelete = async (user: User) => {
+      // Check for owned data
+      const allTeams = await getTeams();
+      const count = allTeams.filter(t => t.ownerId === user.id).length;
+      
+      setUserTeamsCount(count);
+      setWantToMigrate(false);
+      setTargetMasterId('');
       setDeleteConfirm({ isOpen: true, userId: user.id, userName: user.name });
   };
 
-  const confirmDelete = async () => {
-      if (deleteConfirm.userId) {
-          await deleteUser(deleteConfirm.userId);
+  const handleMigrationAndCleanup = async () => {
+      if (!deleteConfirm.userId) return;
+      setIsProcessingDelete(true);
+
+      try {
+          const userIdToDelete = deleteConfirm.userId;
+          const allTeams = await getTeams();
+          const userTeams = allTeams.filter(t => t.ownerId === userIdToDelete);
+
+          if (userTeamsCount > 0) {
+              if (wantToMigrate) {
+                  // MIGRATION FLOW
+                  if (!targetMasterId) {
+                      alert("Por favor, insira o ID do Painel de Destino.");
+                      setIsProcessingDelete(false);
+                      return;
+                  }
+
+                  // Verify Target
+                  const targetUser = users.find(u => u.id === targetMasterId);
+                  if (!targetUser) {
+                      alert("ID do Painel de Destino não encontrado ou inválido.");
+                      setIsProcessingDelete(false);
+                      return;
+                  }
+
+                  // Transfer Teams
+                  for (const team of userTeams) {
+                      await saveTeam({ ...team, ownerId: targetMasterId });
+                  }
+                  
+              } else {
+                  // CLEANUP FLOW (DELETE ALL DATA)
+                  for (const team of userTeams) {
+                      // Deleting the team should ideally cascade via DB or we rely on deleteTeam logic
+                      await deleteTeam(team.id);
+                  }
+              }
+          }
+
+          // Finally delete the user
+          await deleteUser(userIdToDelete);
+          
           setDeleteConfirm({ isOpen: false, userId: null, userName: '' });
           loadData();
+
+      } catch (error) {
+          console.error("Erro ao processar exclusão/migração", error);
+          alert("Ocorreu um erro durante o processo.");
+      } finally {
+          setIsProcessingDelete(false);
       }
   };
 
@@ -367,22 +426,80 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
              </div>
         )}
 
-        {/* 2. DELETE CONFIRMATION MODAL */}
+        {/* 2. DELETE CONFIRMATION & MIGRATION MODAL */}
         {deleteConfirm.isOpen && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-gray-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center border border-red-900/50">
+                <div className="bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-center border border-red-900/50">
                      <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-800">
                          <AlertTriangle className="text-red-500" size={32} />
                      </div>
-                     <h3 className="text-xl font-bold text-white mb-2">Atenção!</h3>
-                     <p className="text-gray-400 mb-6">
-                        Você está prestes a excluir o usuário <strong>{deleteConfirm.userName}</strong>. 
-                        <br/><br/>
-                        <span className="text-red-400 font-bold">Esta ação é irreversível e pode remover acesso a times vinculados.</span>
+                     <h3 className="text-xl font-bold text-white mb-2">Excluir Painel Master?</h3>
+                     <p className="text-gray-400 mb-4">
+                        Você está prestes a excluir o usuário <strong>{deleteConfirm.userName}</strong>.
                      </p>
+
+                     {userTeamsCount > 0 && (
+                         <div className="text-left bg-gray-900/50 p-4 rounded-lg border border-gray-700 mb-6">
+                             <div className="flex items-center gap-2 text-yellow-500 font-bold mb-2">
+                                 <ShieldCheck size={16} />
+                                 <span>Dados Vinculados Encontrados</span>
+                             </div>
+                             <p className="text-sm text-gray-400 mb-3">
+                                 Este usuário possui <strong>{userTeamsCount} times</strong> com atletas e dados vinculados.
+                             </p>
+                             
+                             <label className="flex items-center gap-3 cursor-pointer bg-gray-800 p-3 rounded border border-gray-600 hover:border-gray-500 transition">
+                                 <input 
+                                    type="checkbox" 
+                                    className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 bg-gray-700 border-gray-500"
+                                    checked={wantToMigrate}
+                                    onChange={(e) => setWantToMigrate(e.target.checked)}
+                                 />
+                                 <span className="text-sm font-medium text-white">Deseja migrar dados para outro Painel?</span>
+                             </label>
+
+                             {wantToMigrate && (
+                                 <div className="mt-3 animate-fade-in">
+                                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">ID do Painel de Destino (Master ID)</label>
+                                     <input 
+                                        type="text" 
+                                        className="w-full bg-gray-700 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm font-mono"
+                                        placeholder="Cole o ID aqui..."
+                                        value={targetMasterId}
+                                        onChange={(e) => setTargetMasterId(e.target.value)}
+                                     />
+                                     <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                                         <ArrowRightLeft size={10} />
+                                         Todos os times e atletas serão transferidos.
+                                     </p>
+                                 </div>
+                             )}
+
+                             {!wantToMigrate && (
+                                 <p className="text-xs text-red-400 mt-3 flex items-center gap-1 font-bold">
+                                     <Trash2 size={12} />
+                                     Atenção: Se não migrar, todos os dados serão apagados permanentemente.
+                                 </p>
+                             )}
+                         </div>
+                     )}
+
                      <div className="flex gap-3">
-                         <button onClick={() => setDeleteConfirm({isOpen: false, userId: null, userName: ''})} className="flex-1 bg-gray-700 text-white font-bold py-2 rounded-lg hover:bg-gray-600">Cancelar</button>
-                         <button onClick={confirmDelete} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Confirmar Exclusão</button>
+                         <button 
+                            onClick={() => setDeleteConfirm({isOpen: false, userId: null, userName: ''})} 
+                            className="flex-1 bg-gray-700 text-white font-bold py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                            disabled={isProcessingDelete}
+                         >
+                             Cancelar
+                         </button>
+                         <button 
+                            onClick={handleMigrationAndCleanup} 
+                            className={`flex-1 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 ${wantToMigrate ? 'bg-purple-600 hover:bg-purple-700' : 'bg-red-600 hover:bg-red-700'} disabled:opacity-50`}
+                            disabled={isProcessingDelete}
+                         >
+                             {isProcessingDelete ? <Loader2 className="animate-spin" size={18} /> : (wantToMigrate ? <ArrowRightLeft size={18}/> : <Trash2 size={18}/>)}
+                             {wantToMigrate ? 'Migrar & Excluir' : 'Excluir Tudo'}
+                         </button>
                      </div>
                 </div>
             </div>
