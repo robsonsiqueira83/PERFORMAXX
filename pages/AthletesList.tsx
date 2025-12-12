@@ -10,11 +10,12 @@ import {
   saveTrainingSession, 
   saveTrainingEntry, 
   saveCategory,
+  saveTeam, // Added saveTeam
   deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Hash } from 'lucide-react';
+import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName, UserRole } from '../types';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Rocket, PlayCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -45,6 +46,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [pullRgInput, setPullRgInput] = useState('');
   const [foundAthleteToPull, setFoundAthleteToPull] = useState<Athlete | null>(null);
   const [pullSearchError, setPullSearchError] = useState('');
+
+  // Quick Setup Modal State (First Run Experience)
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupStep, setSetupStep] = useState<'team_and_category' | 'category_only'>('team_and_category');
+  const [setupData, setSetupData] = useState({ teamName: '', categoryName: 'Sub-15' });
+  const [pendingAction, setPendingAction] = useState<'create' | 'import' | null>(null);
 
   // User State for Permissions
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -147,6 +154,86 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     setFormData(prev => ({ ...prev, birthDate: newDate }));
   };
 
+  // --- QUICK SETUP CHECK LOGIC ---
+  const handleActionClick = (action: 'create' | 'import') => {
+      // 1. Check if user has any team (owned or part of)
+      // Since 'teams' state contains ALL teams, we need to filter by what the user can see/own
+      // However, we rely on 'teamId' prop. If it's empty, it likely means no teams exist or none selected.
+      
+      const myTeams = currentUser?.role === UserRole.GLOBAL 
+          ? teams // Simplified for global
+          : teams.filter(t => t.ownerId === currentUser?.id || currentUser?.teamIds?.includes(t.id));
+
+      const hasTeam = myTeams.length > 0;
+      const hasCategory = categories.length > 0;
+
+      if (!hasTeam) {
+          setSetupStep('team_and_category');
+          setPendingAction(action);
+          setShowSetupModal(true);
+      } else if (!hasCategory) {
+          setSetupStep('category_only');
+          setPendingAction(action);
+          setShowSetupModal(true);
+      } else {
+          // Proceed normal
+          if (action === 'create') setShowModal(true);
+          if (action === 'import') setShowPullModal(true);
+      }
+  };
+
+  const handleQuickSetupSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!setupData.teamName && setupStep === 'team_and_category') return;
+      if (!setupData.categoryName) return;
+
+      try {
+          let newTeamId = teamId;
+
+          // 1. Create Team if needed
+          if (setupStep === 'team_and_category' && currentUser) {
+              newTeamId = uuidv4();
+              await saveTeam({
+                  id: newTeamId,
+                  name: setupData.teamName,
+                  ownerId: currentUser.id
+              });
+          }
+
+          // 2. Create Category
+          const newCatId = uuidv4();
+          await saveCategory({
+              id: newCatId,
+              name: normalizeCategoryName(setupData.categoryName),
+              teamId: newTeamId
+          });
+
+          setShowSetupModal(false);
+          setSetupData({ teamName: '', categoryName: '' });
+
+          if (setupStep === 'team_and_category') {
+              // Critical: Reload to update App/Layout state (Header selector)
+              // This ensures the new team is selected automatically
+              window.location.reload();
+          } else {
+              // Just refresh local data and open the intended modal
+              setRefreshKey(prev => prev + 1);
+              setFeedback({ type: 'success', message: 'Configuração concluída! Agora você pode prosseguir.' });
+              
+              // Small delay to allow state refresh
+              setTimeout(() => {
+                  if (pendingAction === 'create') setShowModal(true);
+                  if (pendingAction === 'import') setShowPullModal(true);
+                  setPendingAction(null);
+              }, 500);
+          }
+
+      } catch (error) {
+          console.error("Setup error", error);
+          setFeedback({ type: 'error', message: 'Erro ao configurar ambiente inicial.' });
+      }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.categoryId) return;
@@ -179,14 +266,13 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   };
 
   // --- PULL ATHLETE HANDLING (Solicitar Transferência por RG) ---
-  
+  // ... (No changes to logic here) ...
   const handleSearchAthleteByRg = async () => {
     setPullSearchError('');
     setFoundAthleteToPull(null);
     if (!pullRgInput) return;
 
     const allAthletes = await getAthletes();
-    // Find athlete by RG
     const found = allAthletes.find(a => a.rg === pullRgInput);
 
     if (found) {
@@ -202,18 +288,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   const handleRequestPull = async () => {
       if (!foundAthleteToPull) return;
-
-      // Update athlete to have pendingTransferTeamId = current teamId
-      // This will make them appear in the "Incoming Transfers" list on THIS page, 
-      // allowing the current user (Destination) to "Accept" and trigger the full migration logic.
       const updatedAthlete = {
           ...foundAthleteToPull,
           pendingTransferTeamId: teamId
       };
-      
       // @ts-ignore
       await saveAthlete(updatedAthlete);
-      
       setShowPullModal(false);
       setPullRgInput('');
       setFoundAthleteToPull(null);
@@ -222,7 +302,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   };
 
   // --- TRANSFER HANDLING (Accepting/Rejecting/Migrating) ---
-  
   const openTransferModal = (athlete: Athlete) => {
       setTargetTransferTeamId(teamId);
       setTransferModal({ isOpen: true, athlete });
@@ -246,16 +325,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           if (athlete.categoryId) {
               const currentCatObj = allCategories.find(c => c.id === athlete.categoryId);
               if (currentCatObj) {
-                  // Standardize Name
                   const standardName = normalizeCategoryName(currentCatObj.name);
-                  
-                  // Check if target team has a category with this standardized name
                   const match = allCategories.find(c => c.teamId === targetTransferTeamId && normalizeCategoryName(c.name) === standardName);
                   
                   if (match) {
                       newMainCategoryId = match.id;
                   } else {
-                      // Create new category in target team
                       newMainCategoryId = uuidv4();
                       const newCat = { 
                           id: newMainCategoryId, 
@@ -263,7 +338,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                           teamId: targetTransferTeamId 
                       };
                       await saveCategory(newCat);
-                      // Add to local list so history migration loop below can find it if needed
                       allCategories.push(newCat); 
                   }
               }
@@ -279,7 +353,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                   const oldSession = allSessions.find(s => s.id === entry.sessionId);
                   if (!oldSession) continue;
 
-                  // Map Session Category
                   const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
                   let sessionNewCategoryId = '';
 
@@ -303,7 +376,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
                   if (!sessionNewCategoryId) continue;
 
-                  // Map Session
                   let targetSession = targetTeamSessions.find(s => 
                       s.date === oldSession.date && 
                       s.categoryId === sessionNewCategoryId
@@ -324,7 +396,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       targetTeamSessions.push(newSessionData);
                   }
 
-                  // Create New Entry (Copy)
                   await saveTrainingEntry({
                       ...entry,
                       id: uuidv4(), 
@@ -337,8 +408,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           const updatedAthlete = {
               ...athlete,
               teamId: targetTransferTeamId,
-              pendingTransferTeamId: null, // explicit null
-              categoryId: newMainCategoryId || '' // Use the resolved category ID from Step 1
+              pendingTransferTeamId: null, 
+              categoryId: newMainCategoryId || '' 
           };
           
           // @ts-ignore
@@ -346,10 +417,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           
           if (error) {
               console.error("Transfer failed full:", error);
-              setFeedback({ 
-                  type: 'error', 
-                  message: `Erro RLS: ${error.message} (${error.details || 'Sem detalhes'})` 
-              });
+              setFeedback({ type: 'error', message: `Erro RLS: ${error.message}` });
               setIsMigrating(false);
               return;
           }
@@ -367,20 +435,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   };
 
   const handleRejectTransfer = async (athlete: Athlete) => {
-      const updatedAthlete = {
-          ...athlete,
-          pendingTransferTeamId: null
-      };
-      
+      const updatedAthlete = { ...athlete, pendingTransferTeamId: null };
       // @ts-ignore
       const { error } = await saveAthlete(updatedAthlete);
-
       if (error) {
-           setFeedback({ type: 'error', message: 'Erro ao recusar. Verifique permissões.' });
+           setFeedback({ type: 'error', message: 'Erro ao recusar.' });
            return;
       }
-
-      setFeedback({ type: 'success', message: `Transferência de ${athlete.name} recusada.` });
+      setFeedback({ type: 'success', message: `Transferência recusada.` });
       setRefreshKey(prev => prev + 1);
   };
 
@@ -394,13 +456,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   const inputClass = "w-full bg-gray-100 border border-gray-300 rounded p-2 text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
-  // Filter teams available for the current user to transfer INTO
   const myAvailableTeams = useMemo(() => {
       if (!currentUser) return [];
-      return teams.filter(t => 
-          t.ownerId === currentUser.id || // Owned
-          currentUser.teamIds?.includes(t.id) // Member
-      );
+      return teams.filter(t => t.ownerId === currentUser.id || currentUser.teamIds?.includes(t.id));
   }, [teams, currentUser]);
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -518,14 +576,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           {currentUser && canEditData(currentUser.role) && (
             <div className="flex gap-2 w-full md:w-auto">
                 <button 
-                    onClick={() => setShowPullModal(true)}
+                    onClick={() => handleActionClick('import')}
                     className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center transition-colors border border-blue-200"
                     title="Solicitar Atleta de outro Time (via RG)"
                 >
                     <Download size={18} />
                 </button>
                 <button 
-                    onClick={() => setShowModal(true)}
+                    onClick={() => handleActionClick('create')}
                     className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 whitespace-nowrap flex-1 md:flex-none"
                 >
                     <Plus size={18} /> Novo Atleta
@@ -592,6 +650,60 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              </div>
          )}
       </div>
+
+      {/* QUICK SETUP MODAL (For First Time Users) */}
+      {showSetupModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md p-8 shadow-2xl relative text-center">
+                  <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Rocket className="text-blue-600" size={40} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Vamos começar!</h2>
+                  <p className="text-gray-500 mb-6">
+                      Para cadastrar atletas, você precisa configurar seu ambiente inicial.
+                  </p>
+
+                  <form onSubmit={handleQuickSetupSubmit} className="text-left space-y-4">
+                      {setupStep === 'team_and_category' && (
+                          <div>
+                              <label className="block text-sm font-bold text-gray-700 mb-1">Nome do seu Time</label>
+                              <input 
+                                  autoFocus
+                                  type="text" 
+                                  className={inputClass}
+                                  placeholder="Ex: Escolinha Craque do Futuro"
+                                  value={setupData.teamName}
+                                  onChange={(e) => setSetupData({...setupData, teamName: e.target.value})}
+                                  required
+                              />
+                          </div>
+                      )}
+                      
+                      <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1">Primeira Categoria</label>
+                          <input 
+                              type="text" 
+                              className={inputClass}
+                              placeholder="Ex: Sub-15"
+                              value={setupData.categoryName}
+                              onChange={(e) => setSetupData({...setupData, categoryName: e.target.value})}
+                              required
+                          />
+                          <p className="text-xs text-gray-400 mt-1">Você poderá adicionar mais categorias depois.</p>
+                      </div>
+
+                      <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mt-4 shadow-lg">
+                          <PlayCircle size={20} />
+                          {setupStep === 'team_and_category' ? 'Criar Time e Começar' : 'Criar Categoria e Prosseguir'}
+                      </button>
+                  </form>
+                  
+                  <button onClick={() => setShowSetupModal(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline">
+                      Cancelar e voltar
+                  </button>
+              </div>
+          </div>
+      )}
 
       {/* NEW ATHLETE MODAL */}
       {showModal && (
