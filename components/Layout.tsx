@@ -141,15 +141,32 @@ const Layout: React.FC<LayoutProps> = ({
   const showPanelSelector = user.role === UserRole.GLOBAL || (availableContexts.length > 1);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row relative">
+      
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-xl flex flex-col
-        md:relative md:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-72 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col
+        md:relative md:w-64 md:translate-x-0 md:shadow-xl
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
+        {/* Mobile Close Button */}
+        <button 
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="absolute top-4 right-4 text-blue-300 hover:text-white md:hidden p-2 bg-blue-900/50 rounded-full"
+        >
+            <X size={20} />
+        </button>
+
         {/* Logo Area */}
-        <div className="p-6 flex flex-col items-center justify-center border-b border-blue-800 relative">
+        <div className="p-6 flex flex-col items-center justify-center border-b border-blue-800 relative mt-8 md:mt-0">
            <img 
              src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
              alt="PERFORMAXX" 
@@ -176,7 +193,7 @@ const Layout: React.FC<LayoutProps> = ({
            )}
         </div>
 
-        <nav className="mt-6 px-4 space-y-2 flex-1">
+        <nav className="mt-6 px-4 space-y-2 flex-1 overflow-y-auto">
           {navigation.map((item) => (
             <Link
               key={item.name}
@@ -224,80 +241,85 @@ const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
-        <header className="bg-white shadow-sm z-30 px-6 py-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                
-                {/* Welcome & Team Selection Group */}
-                <div className="flex flex-col gap-2 w-full md:w-auto flex-1">
+        <header className="bg-white shadow-sm z-30 px-4 py-3 md:px-6 md:py-4">
+            <div className="flex flex-col gap-3">
+                {/* Row 1: Mobile Toggle + Greetings + Context Info */}
+                <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                         <h2 className="text-lg text-gray-800 font-medium">
-                            Olá, <span className="font-bold text-blue-900">{user.name}</span>. <span className="text-gray-500">Em qual time deseja trabalhar?</span>
+                         {/* Mobile Hamburger */}
+                         <button 
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="md:hidden text-gray-700 hover:text-blue-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                         >
+                            <Menu size={24} />
+                         </button>
+                         <h2 className="text-sm md:text-lg text-gray-800 font-medium leading-tight">
+                            Olá, <span className="font-bold text-blue-900">{user.name}</span>
+                            <span className="hidden md:inline text-gray-500">. Selecione o ambiente:</span>
                          </h2>
                          {/* Return to Global Dashboard Button in Header */}
                          {user.role === UserRole.GLOBAL && (
                              <button
                                  onClick={onReturnToGlobal}
-                                 className="flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200"
+                                 className="hidden sm:flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200 whitespace-nowrap"
                              >
                                  <Globe size={12} />
-                                 Voltar ao Painel Global
+                                 Global
                              </button>
                          )}
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row gap-3">
-                         {/* TEAM SELECTOR */}
-                         <div className="relative">
-                            <select 
-                                value={selectedTeamId}
-                                onChange={(e) => onTeamChange(e.target.value)}
-                                className="appearance-none bg-blue-50 text-blue-900 pl-4 pr-10 py-2 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 cursor-pointer"
-                            >
-                                {availableTeams.length > 0 ? (
-                                    availableTeams.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))
-                                ) : (
-                                    <option value="">Nenhum time disponível</option>
-                                )}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
-                         </div>
-
-                         {/* CONTEXT/PANEL SELECTOR (Conditional) */}
-                         {showPanelSelector && (
-                             <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Briefcase size={14} className="text-gray-500" />
-                                </div>
-                                <select 
-                                    value={viewingAsMasterId}
-                                    onChange={(e) => onContextChange(e.target.value)}
-                                    className="appearance-none bg-gray-100 text-gray-700 pl-9 pr-10 py-2 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 w-full sm:w-auto cursor-pointer"
-                                    disabled={isGlobalImpersonating} // Global users usually switch via Dashboard, but listing here for reference
-                                >
-                                    {availableContexts.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-                             </div>
-                         )}
+                    {/* Desktop Page Title (Right side) */}
+                    <div className="hidden md:block text-right">
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 uppercase font-bold">{user.role}</span>
                     </div>
                 </div>
+                
+                {/* Row 2: Selectors */}
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                     {/* TEAM SELECTOR */}
+                     <div className="relative flex-1">
+                        <select 
+                            value={selectedTeamId}
+                            onChange={(e) => onTeamChange(e.target.value)}
+                            className="appearance-none w-full bg-blue-50 text-blue-900 pl-4 pr-10 py-2.5 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm md:text-base"
+                        >
+                            {availableTeams.length > 0 ? (
+                                availableTeams.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))
+                            ) : (
+                                <option value="">Nenhum time disponível</option>
+                            )}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
+                     </div>
 
-                {/* Page Title / Info (Hidden on small mobile to save space) */}
-                <div className="hidden md:block text-right">
-                    <h1 className="text-xl font-bold text-gray-800">
-                       {navigation.find(n => n.href === location.pathname)?.name || (location.pathname === '/users' ? 'Gestão de Usuários' : 'Painel')}
-                    </h1>
-                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 uppercase">{user.role}</span>
+                     {/* CONTEXT/PANEL SELECTOR (Conditional) */}
+                     {showPanelSelector && (
+                         <div className="relative flex-1 md:flex-none md:w-64">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Briefcase size={14} className="text-gray-500" />
+                            </div>
+                            <select 
+                                value={viewingAsMasterId}
+                                onChange={(e) => onContextChange(e.target.value)}
+                                className="appearance-none w-full bg-gray-100 text-gray-700 pl-9 pr-10 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
+                                disabled={isGlobalImpersonating} // Global users usually switch via Dashboard, but listing here for reference
+                            >
+                                {availableContexts.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                         </div>
+                     )}
                 </div>
             </div>
         </header>
 
         {/* Scrollable Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
+        <main className="flex-1 overflow-y-auto p-3 md:p-6 bg-gray-50">
           <div className="max-w-7xl mx-auto w-full">
              {children}
           </div>
