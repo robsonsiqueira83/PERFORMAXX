@@ -181,47 +181,77 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       setIsMigrating(true);
 
       try {
-          // --- 1. DATA MIGRATION LOGIC ---
-          // Fetch data to try and copy history
+          // --- 1. PREPARE DATA ---
           const allEntries = await getTrainingEntries();
           const allSessions = await getTrainingSessions();
           const allCategories = await getCategories();
 
+          // A. RESOLVE MAIN ATHLETE CATEGORY (Target Team)
+          // Determine what the athlete's category ID should be in the new team.
+          let newMainCategoryId = '';
+          
+          if (athlete.categoryId) {
+              const currentCatObj = allCategories.find(c => c.id === athlete.categoryId);
+              if (currentCatObj) {
+                  // Check if target team has a category with this name
+                  const match = allCategories.find(c => c.teamId === targetTransferTeamId && c.name === currentCatObj.name);
+                  
+                  if (match) {
+                      newMainCategoryId = match.id;
+                  } else {
+                      // Create new category in target team
+                      newMainCategoryId = uuidv4();
+                      const newCat = { 
+                          id: newMainCategoryId, 
+                          name: currentCatObj.name, 
+                          teamId: targetTransferTeamId 
+                      };
+                      await saveCategory(newCat);
+                      // Add to local list so history migration loop below can find it if needed
+                      allCategories.push(newCat); 
+                  }
+              }
+          }
+
+          // --- 2. DATA MIGRATION LOGIC (History) ---
           const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
           
           if (athleteEntries.length > 0) {
-              const targetTeamCategories = allCategories.filter(c => c.teamId === targetTransferTeamId);
               const targetTeamSessions = allSessions.filter(s => s.teamId === targetTransferTeamId);
 
               for (const entry of athleteEntries) {
                   const oldSession = allSessions.find(s => s.id === entry.sessionId);
                   if (!oldSession) continue;
 
-                  // A. Map Category
+                  // Map Session Category (could be different from athlete's main category)
                   const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
-                  let newCategoryId = '';
+                  let sessionNewCategoryId = '';
 
                   if (oldCategory) {
-                      const matchingCat = targetTeamCategories.find(c => c.name === oldCategory.name);
+                      // We search in updated allCategories (which includes the one we might have just created above)
+                      const matchingCat = allCategories.find(c => c.teamId === targetTransferTeamId && c.name === oldCategory.name);
+                      
                       if (matchingCat) {
-                          newCategoryId = matchingCat.id;
+                          sessionNewCategoryId = matchingCat.id;
                       } else {
-                          newCategoryId = uuidv4();
-                          await saveCategory({
-                              id: newCategoryId,
+                          // Create if still missing (e.g., athlete was in Sub-15 but played a game in Sub-17)
+                          sessionNewCategoryId = uuidv4();
+                          const newCat = {
+                              id: sessionNewCategoryId,
                               name: oldCategory.name,
                               teamId: targetTransferTeamId
-                          });
-                          targetTeamCategories.push({ id: newCategoryId, name: oldCategory.name, teamId: targetTransferTeamId });
+                          };
+                          await saveCategory(newCat);
+                          allCategories.push(newCat);
                       }
                   }
 
-                  if (!newCategoryId) continue;
+                  if (!sessionNewCategoryId) continue;
 
-                  // B. Map Session
+                  // Map Session (Find existing by date/cat or create)
                   let targetSession = targetTeamSessions.find(s => 
                       s.date === oldSession.date && 
-                      s.categoryId === newCategoryId
+                      s.categoryId === sessionNewCategoryId
                   );
 
                   let targetSessionId = targetSession?.id;
@@ -231,7 +261,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       const newSessionData = {
                           id: targetSessionId,
                           teamId: targetTransferTeamId,
-                          categoryId: newCategoryId,
+                          categoryId: sessionNewCategoryId,
                           date: oldSession.date,
                           description: (oldSession.description || 'Treino') + ' (Migrado)'
                       };
@@ -239,7 +269,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       targetTeamSessions.push(newSessionData);
                   }
 
-                  // C. Create New Entry (Copy)
+                  // Create New Entry (Copy)
                   await saveTrainingEntry({
                       ...entry,
                       id: uuidv4(), 
@@ -248,12 +278,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               }
           }
 
-          // --- 2. ATHLETE UPDATE (Critical Step) ---
+          // --- 3. ATHLETE UPDATE (Critical Step) ---
           const updatedAthlete = {
               ...athlete,
               teamId: targetTransferTeamId,
               pendingTransferTeamId: null, // explicit null
-              categoryId: '' // Service will convert this empty string to null to prevent UUID errors
+              categoryId: newMainCategoryId || '' // Use the resolved category ID from Step 1
           };
           
           // @ts-ignore
