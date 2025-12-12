@@ -242,8 +242,8 @@ const Layout: React.FC<LayoutProps> = ({
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
         <header className="bg-white shadow-sm z-30 px-4 py-3 md:px-6 md:py-4">
-            <div className="flex flex-col gap-3">
-                {/* Row 1: Mobile Toggle + Greetings + Context Info */}
+            <div className="flex flex-col gap-4">
+                {/* Row 1: Mobile Toggle + Greeting + Global Link */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                          {/* Mobile Hamburger */}
@@ -253,67 +253,74 @@ const Layout: React.FC<LayoutProps> = ({
                          >
                             <Menu size={24} />
                          </button>
-                         <h2 className="text-sm md:text-lg text-gray-800 font-medium leading-tight">
-                            Olá, <span className="font-bold text-blue-900">{user.name}</span>
-                            <span className="hidden md:inline text-gray-500">. Selecione o ambiente:</span>
-                         </h2>
-                         {/* Return to Global Dashboard Button in Header */}
-                         {user.role === UserRole.GLOBAL && (
-                             <button
-                                 onClick={onReturnToGlobal}
-                                 className="hidden sm:flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200 whitespace-nowrap"
-                             >
-                                 <Globe size={12} />
-                                 Global
-                             </button>
-                         )}
+                         
+                         <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
+                             <h2 className="text-sm md:text-lg text-gray-800 font-medium leading-tight">
+                                Olá, <span className="font-bold text-blue-900">{user.name}</span>.
+                             </h2>
+                             
+                             {/* Return to Global Dashboard Button in Header (Visible on Mobile) */}
+                             {user.role === UserRole.GLOBAL && (
+                                 <button
+                                     onClick={onReturnToGlobal}
+                                     className="flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-0.5 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200 w-fit"
+                                 >
+                                     <Globe size={12} />
+                                     Voltar ao Painel Global
+                                 </button>
+                             )}
+                         </div>
                     </div>
                     
-                    {/* Desktop Page Title (Right side) */}
+                    {/* Desktop Role Badge (Right side) */}
                     <div className="hidden md:block text-right">
                         <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 uppercase font-bold">{user.role}</span>
                     </div>
                 </div>
                 
-                {/* Row 2: Selectors */}
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                     {/* TEAM SELECTOR */}
-                     <div className="relative flex-1">
-                        <select 
-                            value={selectedTeamId}
-                            onChange={(e) => onTeamChange(e.target.value)}
-                            className="appearance-none w-full bg-blue-50 text-blue-900 pl-4 pr-10 py-2.5 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm md:text-base"
-                        >
-                            {availableTeams.length > 0 ? (
-                                availableTeams.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                ))
-                            ) : (
-                                <option value="">Nenhum time disponível</option>
-                            )}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
-                     </div>
+                {/* Row 2: Selectors Label + Inputs */}
+                <div className="flex flex-col gap-1">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selecione o ambiente:</p>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3 w-full">
+                         {/* 1. CONTEXT/PANEL SELECTOR (First) */}
+                         {showPanelSelector && (
+                             <div className="relative flex-1">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Briefcase size={14} className="text-gray-500" />
+                                </div>
+                                <select 
+                                    value={viewingAsMasterId}
+                                    onChange={(e) => onContextChange(e.target.value)}
+                                    className="appearance-none w-full bg-gray-100 text-gray-700 pl-9 pr-10 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
+                                    disabled={isGlobalImpersonating} 
+                                >
+                                    {availableContexts.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                             </div>
+                         )}
 
-                     {/* CONTEXT/PANEL SELECTOR (Conditional) */}
-                     {showPanelSelector && (
-                         <div className="relative flex-1 md:flex-none md:w-64">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <Briefcase size={14} className="text-gray-500" />
-                            </div>
+                         {/* 2. TEAM SELECTOR (Second) */}
+                         <div className="relative flex-1">
                             <select 
-                                value={viewingAsMasterId}
-                                onChange={(e) => onContextChange(e.target.value)}
-                                className="appearance-none w-full bg-gray-100 text-gray-700 pl-9 pr-10 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
-                                disabled={isGlobalImpersonating} // Global users usually switch via Dashboard, but listing here for reference
+                                value={selectedTeamId}
+                                onChange={(e) => onTeamChange(e.target.value)}
+                                className="appearance-none w-full bg-blue-50 text-blue-900 pl-4 pr-10 py-2.5 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm md:text-base"
                             >
-                                {availableContexts.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
+                                {availableTeams.length > 0 ? (
+                                    availableTeams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))
+                                ) : (
+                                    <option value="">Nenhum time disponível</option>
+                                )}
                             </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
                          </div>
-                     )}
+                    </div>
                 </div>
             </div>
         </header>
