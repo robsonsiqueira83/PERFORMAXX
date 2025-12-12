@@ -113,6 +113,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
   }
   return data.map((a: any) => ({
       id: a.id,
+      rg: a.rg, // New RG field
       name: a.name,
       photoUrl: a.photo_url,
       teamId: a.team_id,
@@ -128,6 +129,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
 export const saveAthlete = async (athlete: Athlete) => {
   const dbAthlete = {
       id: athlete.id,
+      rg: athlete.rg, // New RG field
       name: athlete.name,
       photo_url: athlete.photoUrl,
       team_id: athlete.teamId,
