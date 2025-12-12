@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, getUserById, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building, Clock } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building, Clock, RefreshCw } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -68,15 +68,15 @@ const UserManagement: React.FC = () => {
 
           // Rule C: GUEST MASTERS - Show Masters who are NOT the owner but have access to teams in this panel
           if (u.role === UserRole.MASTER && u.id !== contextId) {
-              const activeTeamIds = (u.teamIds || []).filter(id => !id.startsWith('pending:'));
-              const hasAccessToPanelTeam = activeTeamIds.some(tid => panelTeamIds.includes(tid));
+              // FIX: Check ALL ids (normalized), ensuring pending invites also show up
+              const allUserTeamIds = (u.teamIds || []).map(id => id.replace('pending:', ''));
+              const hasAccessToPanelTeam = allUserTeamIds.some(tid => panelTeamIds.includes(tid));
               if (hasAccessToPanelTeam) return true;
               return false;
           }
 
           // Rule D: For Staff/Collaborators
           // Show if they are assigned to at least one team in this panel (INCLUDING PENDING)
-          // This ensures newly invited users appear in the list immediately
           if (u.teamIds && u.teamIds.length > 0) {
               const hasAccessOrInvite = u.teamIds.some(tid => {
                   const cleanId = tid.replace('pending:', '');
@@ -90,6 +90,10 @@ const UserManagement: React.FC = () => {
 
       setUsers(filteredUsers);
       setLoading(false);
+  };
+
+  const handleManualRefresh = () => {
+      if (currentUser) loadData(currentContextId, currentUser);
   };
 
   const handleRoleChange = (newRole: UserRole) => {
@@ -226,6 +230,7 @@ const UserManagement: React.FC = () => {
 
       const userToUpdate = { ...inviteModal.user };
       const currentTeamIds = userToUpdate.teamIds || [];
+      // Always add as pending for existing external users
       const pendingTeamIds = inviteSelectedTeams.map(id => `pending:${id}`);
       
       // Filter out duplicates and existing
@@ -322,9 +327,6 @@ const UserManagement: React.FC = () => {
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
-  const externalCollaborators = users.filter(u => u.id !== currentContextId);
-  const internalUsers = users.filter(u => u.id === currentContextId);
-
   // Helper to check if a user is in Pending state for ALL teams in this panel
   const isUserPending = (u: User) => {
       const panelTeamIds = teams.map(t => t.id);
@@ -335,6 +337,14 @@ const UserManagement: React.FC = () => {
       return userPanelIds.every(tid => tid.startsWith('pending:'));
   };
 
+  // Organize Lists
+  const internalUsers = users.filter(u => u.id === currentContextId);
+  const externalCollaborators = users.filter(u => u.id !== currentContextId);
+  
+  // Split External into Active vs Pending
+  const pendingInvites = externalCollaborators.filter(u => isUserPending(u));
+  const activeCollaborators = externalCollaborators.filter(u => !isUserPending(u));
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        
@@ -343,6 +353,9 @@ const UserManagement: React.FC = () => {
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
            </h2>
            <div className="flex gap-2 w-full md:w-auto">
+               <button onClick={handleManualRefresh} className="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-lg transition-colors" title="Atualizar Lista">
+                   <RefreshCw size={20} />
+               </button>
                <button onClick={() => setInviteByIdModal(true)} className="flex-1 md:flex-none bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors border border-blue-200 text-sm">
                    <UserCheck size={18} /> Convidar por ID
                </button>
@@ -407,30 +420,24 @@ const UserManagement: React.FC = () => {
            ) : <p className="text-gray-400 italic text-sm">Nenhum usuário interno.</p>}
        </div>
 
-       {/* --- EXTERNAL COLLABORATORS LIST (SECOND) --- */}
+       {/* --- ACTIVE COLLABORATORS LIST (SECOND) --- */}
        <div className="mb-4">
-           <h3 className="font-bold text-purple-800 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-purple-100">
-               <Briefcase size={16}/> Colaboradores Externos
+           <h3 className="font-bold text-green-700 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-green-100">
+               <Briefcase size={16}/> Colaboradores Ativos
            </h3>
-           {externalCollaborators.length > 0 ? (
+           {activeCollaborators.length > 0 ? (
                <div className="grid grid-cols-1 gap-3">
-                   {externalCollaborators.map(u => {
-                       const pending = isUserPending(u);
+                   {activeCollaborators.map(u => {
                        return (
-                           <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-purple-200 rounded-xl bg-purple-50 shadow-sm gap-4">
+                           <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-green-200 rounded-xl bg-green-50 shadow-sm gap-4">
                                <div className="flex items-center gap-4 w-full">
-                                   {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-purple-200" /> : <div className="w-12 h-12 rounded-full bg-purple-200 flex items-center justify-center font-bold text-purple-700 text-lg">{u.name.charAt(0)}</div>}
+                                   {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-green-200" /> : <div className="w-12 h-12 rounded-full bg-green-200 flex items-center justify-center font-bold text-green-700 text-lg">{u.name.charAt(0)}</div>}
                                    <div className="flex-1 min-w-0">
                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                            <p className="font-bold text-gray-800 text-lg truncate">{u.name}</p>
-                                           <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300 truncate flex items-center gap-1">
-                                               <Briefcase size={10} /> Externo
+                                           <span className="text-[10px] bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded border border-green-200 truncate flex items-center gap-1">
+                                               <CheckCircle size={10} /> Ativo
                                            </span>
-                                           {pending && (
-                                               <span className="text-[10px] bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded border border-yellow-300 flex items-center gap-1 animate-pulse">
-                                                   <Clock size={10} /> Convite Pendente
-                                               </span>
-                                           )}
                                        </div>
                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                            <p className="text-sm text-gray-500">{u.email}</p>
@@ -438,8 +445,8 @@ const UserManagement: React.FC = () => {
                                            <span className="text-xs font-bold px-2 py-0.5 rounded uppercase bg-gray-100 text-gray-700">{u.role}</span>
                                        </div>
                                        <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                                           <span className="font-mono bg-white/50 px-1 rounded border border-purple-200 select-all">{u.id}</span>
-                                           <button onClick={() => copyToClipboard(u.id)} className="hover:text-purple-600" title="Copiar ID"><Copy size={12}/></button>
+                                           <span className="font-mono bg-white/50 px-1 rounded border border-green-200 select-all">{u.id}</span>
+                                           <button onClick={() => copyToClipboard(u.id)} className="hover:text-green-600" title="Copiar ID"><Copy size={12}/></button>
                                        </div>
                                    </div>
                                </div>
@@ -456,8 +463,50 @@ const UserManagement: React.FC = () => {
                        );
                    })}
                </div>
-           ) : <p className="text-gray-400 italic text-sm">Nenhum colaborador externo convidado.</p>}
+           ) : <p className="text-gray-400 italic text-sm mb-6">Nenhum colaborador externo ativo.</p>}
        </div>
+
+       {/* --- PENDING INVITES LIST (THIRD) --- */}
+       {pendingInvites.length > 0 && (
+           <div className="mb-4 animate-fade-in">
+               <h3 className="font-bold text-yellow-700 text-sm uppercase tracking-wider mb-3 flex items-center gap-2 pb-2 border-b border-yellow-200">
+                   <Mail size={16}/> Convites Enviados (Pendentes)
+               </h3>
+               <div className="grid grid-cols-1 gap-3">
+                   {pendingInvites.map(u => {
+                       return (
+                           <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-yellow-200 rounded-xl bg-yellow-50 shadow-sm gap-4">
+                               <div className="flex items-center gap-4 w-full">
+                                   {u.avatarUrl ? <img src={u.avatarUrl} className="w-12 h-12 rounded-full object-cover border border-yellow-200 grayscale" /> : <div className="w-12 h-12 rounded-full bg-yellow-200 flex items-center justify-center font-bold text-yellow-700 text-lg">{u.name.charAt(0)}</div>}
+                                   <div className="flex-1 min-w-0">
+                                       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                           <p className="font-bold text-gray-700 text-lg truncate">{u.name}</p>
+                                           <span className="text-[10px] bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded border border-yellow-300 flex items-center gap-1 animate-pulse">
+                                               <Clock size={10} /> Aguardando Aceite
+                                           </span>
+                                       </div>
+                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                           <p className="text-sm text-gray-500">{u.email}</p>
+                                           <span className="hidden sm:inline text-gray-300">•</span>
+                                           <span className="text-xs font-bold px-2 py-0.5 rounded uppercase bg-white text-gray-500 border border-gray-200">{u.role}</span>
+                                       </div>
+                                   </div>
+                               </div>
+                               <div className="flex gap-2 self-end md:self-center">
+                                   <button 
+                                       onClick={() => requestDelete(u)} 
+                                       className="text-red-500 bg-white border border-red-200 hover:bg-red-50 p-2 rounded-lg transition-colors flex items-center gap-1 text-sm font-bold"
+                                       title="Cancelar Convite"
+                                   >
+                                       <X size={16} /> <span className="hidden sm:inline">Cancelar</span>
+                                   </button>
+                               </div>
+                           </div>
+                       );
+                   })}
+               </div>
+           </div>
+       )}
 
        {/* --- EDIT USER FORM --- */}
        {editingUser && (
