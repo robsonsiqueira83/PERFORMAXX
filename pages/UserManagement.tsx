@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building } from 'lucide-react';
+import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building, Clock } from 'lucide-react';
 import { processImageUpload } from '../services/imageService';
 
 const UserManagement: React.FC = () => {
@@ -73,12 +73,15 @@ const UserManagement: React.FC = () => {
               return false;
           }
 
-          // Rule D: For Staff, show only if they are assigned to at least one team in this panel (exclude pending)
+          // Rule D: For Staff/Collaborators
+          // Show if they are assigned to at least one team in this panel (INCLUDING PENDING)
+          // This ensures newly invited users appear in the list immediately
           if (u.teamIds && u.teamIds.length > 0) {
-              // We filter out pending IDs to determine visibility in the "Active Users" list
-              const activeTeamIds = (u.teamIds || []).filter(id => !id.startsWith('pending:'));
-              const hasAccessToPanelTeam = activeTeamIds.some(tid => panelTeamIds.includes(tid));
-              return hasAccessToPanelTeam;
+              const hasAccessOrInvite = u.teamIds.some(tid => {
+                  const cleanId = tid.replace('pending:', '');
+                  return panelTeamIds.includes(cleanId);
+              });
+              return hasAccessOrInvite;
           }
 
           return false;
@@ -150,22 +153,17 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  // Helper to handle existing user logic (used by Email check and ID check)
+  // Helper to handle existing user logic (used by Email check)
   const processExistingUserInvite = (existingUser: User) => {
      // INVITE FLOW
      if (editingUser?.role && editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL) {
-         // Calculate which teams are new to this user
          const selectedTeams = editingUser.teamIds || [];
-         // Filter out teams the user already has
          const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
          
-         if (newTeamsToInvite.length > 0 || selectedTeams.length === 0) { // If manual ID add, might not have teams selected yet
-             setInviteRole(editingUser.role as UserRole); // Set intended role
-             setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
-             setEditingUser(null); // Close the create/edit modal
-         } else {
-             setError("Este usuário já possui acesso ou convite pendente para os times selecionados.");
-         }
+         // If we are coming from the Create User form and found a match
+         setInviteRole(editingUser.role as UserRole); 
+         setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
+         setEditingUser(null); 
      } else {
          setError("Este email/ID já pertence a um usuário do sistema.");
      }
@@ -177,57 +175,21 @@ const UserManagement: React.FC = () => {
 
       const foundUser = allSystemUsers.find(u => u.id === guestIdInput);
       if (foundUser) {
-          // Found! Prepare to invite
-          // We set editingUser temporarily to pass the role logic if needed, or default
-          setEditingUser({ role: UserRole.TECNICO, teamIds: [] }); 
+          // Found! Directly open invite modal without "Create" context
           setInviteByIdModal(false);
           setGuestIdInput('');
-          processExistingUserInvite(foundUser);
+          
+          // Default role for new invite
+          setInviteRole(UserRole.TECNICO);
+          
+          // Open modal with empty newTeams to force selection
+          setInviteModal({ isOpen: true, user: foundUser, newTeams: [] });
       } else {
           setGuestIdError('Usuário não encontrado com este ID.');
       }
   };
 
-  const confirmInvite = async () => {
-      if (!inviteModal.user) return;
-      
-      const userToUpdate = { ...inviteModal.user };
-      const currentTeamIds = userToUpdate.teamIds || [];
-      
-      // Determine teams to invite (if any selected in edit modal, or if we need to show team selector here)
-      // Since the invite modal logic in 'render' doesn't show a team selector (it assumes they were selected in the previous screen),
-      // we need to be careful. 
-      // If triggered via "Invite by ID", newTeams might be empty initially.
-      // BUT, for simplicity in this flow, if triggered by ID, we should probably allow selecting teams OR 
-      // assume the user goes to the edit modal first.
-      
-      // FIX: If coming from "Invite By ID", we need to open the team selection part. 
-      // However, to keep it simple and reuse existing logic:
-      // The `inviteModal` in the original code just confirms sending the invite for `newTeams` passed to it.
-      // We will modify the invite modal to allow team selection if `newTeams` is empty.
-      
-      let teamsToInvite = inviteModal.newTeams;
-      
-      // If user came from ID search and hasn't picked teams, we can't save yet unless we pick.
-      // Current implementation of `inviteModal` below is just a confirmation dialog. 
-      // Let's assume for now the user MUST pick teams.
-      
-      // ... logic continues ...
-      
-      const pendingTeamIds = teamsToInvite.map(id => `pending:${id}`);
-      userToUpdate.teamIds = [...currentTeamIds, ...pendingTeamIds];
-      
-      if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
-          userToUpdate.role = inviteRole; 
-      }
-      
-      await saveUser(userToUpdate);
-      setInviteModal({ isOpen: false, user: null, newTeams: [] });
-      setSuccessMessage("Convite enviado com sucesso! O usuário deverá aceitar o acesso.");
-      if (currentUser) await loadData(currentContextId, currentUser);
-  };
-
-  // Improved Invite Modal confirmation logic to handle the team selection inside it if needed
+  // Improved Invite Modal confirmation logic to handle the team selection inside it
   const [inviteSelectedTeams, setInviteSelectedTeams] = useState<string[]>([]);
 
   useEffect(() => {
@@ -248,19 +210,25 @@ const UserManagement: React.FC = () => {
       const currentTeamIds = userToUpdate.teamIds || [];
       const pendingTeamIds = inviteSelectedTeams.map(id => `pending:${id}`);
       
-      // Filter out duplicates just in case
-      const uniqueNew = pendingTeamIds.filter(pid => !currentTeamIds.includes(pid));
+      // Filter out duplicates and existing
+      const uniqueNew = pendingTeamIds.filter(pid => !currentTeamIds.includes(pid) && !currentTeamIds.includes(pid.replace('pending:', '')));
       
       userToUpdate.teamIds = [...currentTeamIds, ...uniqueNew];
       
-      // Only update role if it's not a Master/Global (preserve hierarchy)
+      // Only update role if it's not a Master/Global (preserve hierarchy of invited user if they are high level elsewhere)
+      // Actually, for multi-tenancy, a user usually keeps their "Primary" role, or we need a way to have roles per team.
+      // For this simple app, we will NOT overwrite the role if they are already Master/Global.
+      // If they are regular staff, we update role to what was selected (last write wins).
       if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
           userToUpdate.role = inviteRole; 
       }
 
       await saveUser(userToUpdate);
+      
       setInviteModal({ isOpen: false, user: null, newTeams: [] });
       setSuccessMessage("Convite enviado com sucesso!");
+      
+      // Refresh list to show pending
       if (currentUser) await loadData(currentContextId, currentUser);
   };
 
@@ -274,9 +242,11 @@ const UserManagement: React.FC = () => {
     if (!deleteConfirmation || !currentUser) return;
 
     if (deleteConfirmation.isGuestMaster) {
+        // Just remove access to THIS panel's teams
         const targetUser = users.find(u => u.id === deleteConfirmation.id);
         if (targetUser) {
             const panelTeamIds = teams.map(t => t.id);
+            // Keep IDs that do NOT belong to this panel
             const newTeamIds = (targetUser.teamIds || []).filter(tid => {
                 const cleanId = tid.replace('pending:', '');
                 return !panelTeamIds.includes(cleanId);
@@ -285,6 +255,7 @@ const UserManagement: React.FC = () => {
             setSuccessMessage("Colaborador removido deste painel com sucesso!");
         }
     } else {
+        // Full delete
         await deleteUser(deleteConfirmation.id);
     }
 
@@ -319,7 +290,6 @@ const UserManagement: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text);
-      // Small feedback handled by UI icon change usually, but keeping simple here
   };
 
   const getPermissionDescription = (role: UserRole) => {
@@ -340,6 +310,16 @@ const UserManagement: React.FC = () => {
   const externalCollaborators = users.filter(u => u.id !== currentContextId);
   const internalUsers = users.filter(u => u.id === currentContextId);
 
+  // Helper to check if a user is in Pending state for ALL teams in this panel
+  const isUserPending = (u: User) => {
+      const panelTeamIds = teams.map(t => t.id);
+      const userPanelIds = (u.teamIds || []).filter(tid => panelTeamIds.includes(tid.replace('pending:', '')));
+      
+      if (userPanelIds.length === 0) return false;
+      // Return true if ALL relevant IDs are pending
+      return userPanelIds.every(tid => tid.startsWith('pending:'));
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
        
@@ -349,7 +329,7 @@ const UserManagement: React.FC = () => {
            </h2>
            <div className="flex gap-2 w-full md:w-auto">
                <button onClick={() => setInviteByIdModal(true)} className="flex-1 md:flex-none bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors border border-blue-200 text-sm">
-                   <UserCheck size={18} /> Convidar pelo ID
+                   <UserCheck size={18} /> Convidar por ID
                </button>
                <button onClick={() => setEditingUser({role: UserRole.TECNICO, teamIds: []})} className="flex-1 md:flex-none bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors text-sm">
                    <Plus size={18} /> Novo Usuário
@@ -375,7 +355,6 @@ const UserManagement: React.FC = () => {
            {internalUsers.length > 0 ? (
                <div className="grid grid-cols-1 gap-3">
                    {internalUsers.map(u => {
-                       const perm = getPermissionDescription(u.role);
                        return (
                        <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors shadow-sm gap-4 bg-white">
                            <div className="flex items-center gap-4 w-full">
@@ -421,6 +400,7 @@ const UserManagement: React.FC = () => {
            {externalCollaborators.length > 0 ? (
                <div className="grid grid-cols-1 gap-3">
                    {externalCollaborators.map(u => {
+                       const pending = isUserPending(u);
                        return (
                            <div key={u.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-purple-200 rounded-xl bg-purple-50 shadow-sm gap-4">
                                <div className="flex items-center gap-4 w-full">
@@ -431,6 +411,11 @@ const UserManagement: React.FC = () => {
                                            <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300 truncate flex items-center gap-1">
                                                <Briefcase size={10} /> Externo
                                            </span>
+                                           {pending && (
+                                               <span className="text-[10px] bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded border border-yellow-300 flex items-center gap-1 animate-pulse">
+                                                   <Clock size={10} /> Convite Pendente
+                                               </span>
+                                           )}
                                        </div>
                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                            <p className="text-sm text-gray-500">{u.email}</p>
