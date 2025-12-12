@@ -131,16 +131,19 @@ export const saveAthlete = async (athlete: Athlete) => {
       name: athlete.name,
       photo_url: athlete.photoUrl,
       team_id: athlete.teamId,
-      category_id: athlete.categoryId,
+      category_id: athlete.categoryId || null, // FIX: Send null if empty string to avoid uuid syntax error
       position: athlete.position,
       birth_date: athlete.birthDate,
       responsible_name: athlete.responsibleName,
       responsible_phone: athlete.responsiblePhone,
-      pending_transfer_team_id: athlete.pendingTransferTeamId || null // Ensure null if undefined
+      pending_transfer_team_id: athlete.pendingTransferTeamId || null // Ensure null if undefined/empty
   };
-  const { error } = await supabase.from('athletes').upsert(dbAthlete);
+  
+  // Use .select() to force return of the saved row, which validates the 'WITH CHECK' policy immediately
+  const { data, error } = await supabase.from('athletes').upsert(dbAthlete).select();
+  
   if (error) console.error('Error saving athlete:', error);
-  return { error }; // RETURN ERROR FOR UI HANDLING
+  return { data, error };
 };
 
 export const deleteAthlete = async (id: string) => {
