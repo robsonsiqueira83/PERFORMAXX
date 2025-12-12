@@ -9,12 +9,12 @@ import {
   getTrainingSessions, 
   saveTrainingSession, 
   saveTrainingEntry, 
-  deleteTrainingEntry, 
-  saveCategory 
+  saveCategory,
+  deleteTrainingEntry
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, Copy, ArrowRight, UserCheck, XCircle, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -72,8 +72,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         // 1. Regular Athletes
         setAthletes(a.filter(item => item.teamId === teamId));
         
-        // 2. Incoming Transfers (Targeting this team OR generally assigned to current user context logic if improved later)
-        // Currently checks if pendingTransferTeamId matches current view
+        // 2. Incoming Transfers (Targeting this team)
         setIncomingTransfers(a.filter(item => item.pendingTransferTeamId === teamId));
 
         setCategories(c.filter(item => item.teamId === teamId));
@@ -91,7 +90,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         let averageScore = 0;
         
         if (athleteEntries.length > 0) {
-            // Added curr.tactical to ensure correct average calculation
             const total = athleteEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical, curr.tactical), 0);
             averageScore = total / athleteEntries.length;
         }
@@ -172,7 +170,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   // --- TRANSFER HANDLING ---
   
   const openTransferModal = (athlete: Athlete) => {
-      // Default to current teamId if available in the list
       setTargetTransferTeamId(teamId);
       setTransferModal({ isOpen: true, athlete });
   };
@@ -185,133 +182,116 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
       try {
           // --- 1. DATA MIGRATION LOGIC ---
-          // Fetch necessary data
+          // Fetch data to try and copy history
           const allEntries = await getTrainingEntries();
           const allSessions = await getTrainingSessions();
           const allCategories = await getCategories();
 
-          // Filter entries for this athlete
           const athleteEntries = allEntries.filter(e => e.athleteId === athlete.id);
           
-          // Get Target Team Categories
-          const targetTeamCategories = allCategories.filter(c => c.teamId === targetTransferTeamId);
-          // Get Target Team Sessions
-          const targetTeamSessions = allSessions.filter(s => s.teamId === targetTransferTeamId);
+          if (athleteEntries.length > 0) {
+              const targetTeamCategories = allCategories.filter(c => c.teamId === targetTransferTeamId);
+              const targetTeamSessions = allSessions.filter(s => s.teamId === targetTransferTeamId);
 
-          for (const entry of athleteEntries) {
-              const oldSession = allSessions.find(s => s.id === entry.sessionId);
-              if (!oldSession) continue; // Skip if orphan
+              for (const entry of athleteEntries) {
+                  const oldSession = allSessions.find(s => s.id === entry.sessionId);
+                  if (!oldSession) continue;
 
-              // A. Map Category
-              const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
-              let newCategoryId = '';
+                  // A. Map Category
+                  const oldCategory = allCategories.find(c => c.id === oldSession.categoryId);
+                  let newCategoryId = '';
 
-              if (oldCategory) {
-                  // Try to find same category name in new team
-                  const matchingCat = targetTeamCategories.find(c => c.name === oldCategory.name);
-                  if (matchingCat) {
-                      newCategoryId = matchingCat.id;
-                  } else {
-                      // Create new category in target team
-                      newCategoryId = uuidv4();
-                      await saveCategory({
-                          id: newCategoryId,
-                          name: oldCategory.name,
-                          teamId: targetTransferTeamId
-                      });
-                      // Update local cache for next iteration
-                      targetTeamCategories.push({ id: newCategoryId, name: oldCategory.name, teamId: targetTransferTeamId });
+                  if (oldCategory) {
+                      const matchingCat = targetTeamCategories.find(c => c.name === oldCategory.name);
+                      if (matchingCat) {
+                          newCategoryId = matchingCat.id;
+                      } else {
+                          newCategoryId = uuidv4();
+                          await saveCategory({
+                              id: newCategoryId,
+                              name: oldCategory.name,
+                              teamId: targetTransferTeamId
+                          });
+                          targetTeamCategories.push({ id: newCategoryId, name: oldCategory.name, teamId: targetTransferTeamId });
+                      }
                   }
-              }
 
-              if (!newCategoryId) continue; // Safety skip
+                  if (!newCategoryId) continue;
 
-              // B. Map Session (Find matching date/category in target team)
-              let targetSession = targetTeamSessions.find(s => 
-                  s.date === oldSession.date && 
-                  s.categoryId === newCategoryId
-              );
+                  // B. Map Session
+                  let targetSession = targetTeamSessions.find(s => 
+                      s.date === oldSession.date && 
+                      s.categoryId === newCategoryId
+                  );
 
-              let targetSessionId = targetSession?.id;
+                  let targetSessionId = targetSession?.id;
 
-              if (!targetSessionId) {
-                  // Create new session in target team
-                  targetSessionId = uuidv4();
-                  const newSessionData = {
-                      id: targetSessionId,
-                      teamId: targetTransferTeamId,
-                      categoryId: newCategoryId,
-                      date: oldSession.date,
-                      description: (oldSession.description || 'Treino') + ' (Migrado)'
-                  };
-                  await saveTrainingSession(newSessionData);
-                  // Update local cache
-                  targetTeamSessions.push(newSessionData);
-              }
+                  if (!targetSessionId) {
+                      targetSessionId = uuidv4();
+                      const newSessionData = {
+                          id: targetSessionId,
+                          teamId: targetTransferTeamId,
+                          categoryId: newCategoryId,
+                          date: oldSession.date,
+                          description: (oldSession.description || 'Treino') + ' (Migrado)'
+                      };
+                      await saveTrainingSession(newSessionData);
+                      targetTeamSessions.push(newSessionData);
+                  }
 
-              // C. Re-create Entry pointing to New Session
-              await saveTrainingEntry({
-                  ...entry,
-                  id: uuidv4(), // New ID for the entry
-                  sessionId: targetSessionId
-              });
-
-              // D. Delete Old Entry (Clean up from old team)
-              // NOTE: This might fail due to RLS if the new owner doesn't have permission on the old team.
-              // We wrap in try catch to allow the transfer to proceed even if cleanup fails
-              try {
-                await deleteTrainingEntry(entry.id);
-              } catch (e) {
-                console.warn("Could not delete old entry (likely RLS permission):", e);
+                  // C. Create New Entry (Copy)
+                  await saveTrainingEntry({
+                      ...entry,
+                      id: uuidv4(), 
+                      sessionId: targetSessionId
+                  });
               }
           }
 
-          // --- 2. ATHLETE UPDATE ---
-          // Explicitly nullify pendingTransferTeamId
+          // --- 2. ATHLETE UPDATE (Critical Step) ---
           const updatedAthlete = {
               ...athlete,
               teamId: targetTransferTeamId,
               pendingTransferTeamId: null, // explicit null
-              categoryId: '' // reset category
+              categoryId: '' // Service will convert this empty string to null to prevent UUID errors
           };
           
-          // @ts-ignore - bypassing strict type check for null vs undefined, service handles it.
+          // @ts-ignore
           const { error } = await saveAthlete(updatedAthlete);
           
           if (error) {
-              console.error("Failed to update athlete team:", error);
+              console.error("Transfer failed full:", error);
               setFeedback({ 
                   type: 'error', 
-                  message: 'Erro ao transferir atleta. Verifique as permissões de SQL (RLS).' 
+                  message: `Erro RLS: ${error.message} (${error.details || 'Sem detalhes'})` 
               });
               setIsMigrating(false);
               return;
           }
           
           setTransferModal({ isOpen: false, athlete: null });
-          setFeedback({ type: 'success', message: `${athlete.name} transferido e dados históricos migrados com sucesso!` });
+          setFeedback({ type: 'success', message: `Transferência de ${athlete.name} concluída com sucesso!` });
           setRefreshKey(prev => prev + 1);
 
-      } catch (err) {
+      } catch (err: any) {
           console.error("Erro na migração", err);
-          setFeedback({ type: 'error', message: 'Erro crítico ao processar transferência.' });
+          setFeedback({ type: 'error', message: `Erro crítico: ${err.message || 'Falha desconhecida'}` });
       } finally {
           setIsMigrating(false);
       }
   };
 
   const handleRejectTransfer = async (athlete: Athlete) => {
-      // Just clear the pending field, athlete stays in old team
       const updatedAthlete = {
           ...athlete,
-          pendingTransferTeamId: null // Force null to clear
+          pendingTransferTeamId: null
       };
       
       // @ts-ignore
       const { error } = await saveAthlete(updatedAthlete);
 
       if (error) {
-           setFeedback({ type: 'error', message: 'Erro ao recusar (Permissão SQL).' });
+           setFeedback({ type: 'error', message: 'Erro ao recusar. Verifique permissões.' });
            return;
       }
 
