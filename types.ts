@@ -182,12 +182,11 @@ export const normalizeCategoryName = (input: string): string => {
   }
 
   // Extract number for "Sub-XX"
-  // This matches "sub 15", "u15", "under-15", "15", etc.
+  // This matches "sub 15", "u15", "under-15", "15", "Sub 9", etc.
   const numMatch = clean.match(/(\d+)/);
   if (numMatch) {
       const num = parseInt(numMatch[0], 10);
-      // Validate common range if necessary, or just format
-      // Ensure padding with 0 (Sub-07)
+      // Ensure padding with 0 (Sub-07, Sub-09, Sub-10)
       return `Sub-${num.toString().padStart(2, '0')}`;
   }
 
