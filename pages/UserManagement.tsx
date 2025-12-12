@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getUsers, saveUser, deleteUser, getTeams } from '../services/storageService';
+import { getUsers, getUserById, saveUser, deleteUser, getTeams } from '../services/storageService';
 import { User, UserRole, Team } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { Trash2, Edit, Plus, ShieldCheck, Loader2, CheckSquare, Square, AlertCircle, CheckCircle, Lock, Eye, Database, X, Globe, Mail, UserCheck, Briefcase, UserMinus, UserX, Copy, Search, Building, Clock } from 'lucide-react';
@@ -26,6 +26,7 @@ const UserManagement: React.FC = () => {
   const [inviteByIdModal, setInviteByIdModal] = useState(false);
   const [guestIdInput, setGuestIdInput] = useState('');
   const [guestIdError, setGuestIdError] = useState('');
+  const [searchingId, setSearchingId] = useState(false);
 
   // Selected Role for Invite
   const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.TECNICO);
@@ -169,11 +170,28 @@ const UserManagement: React.FC = () => {
      }
   };
 
-  const handleSearchGuestById = () => {
+  const handleSearchGuestById = async () => {
       setGuestIdError('');
       if (!guestIdInput) return;
+      setSearchingId(true);
 
-      const foundUser = allSystemUsers.find(u => u.id === guestIdInput);
+      const term = guestIdInput.trim();
+
+      // 1. Try finding in loaded list (Faster)
+      let foundUser = allSystemUsers.find(u => u.id === term);
+
+      // 2. If not found, try finding directly in DB (Reliable)
+      if (!foundUser) {
+          try {
+              const freshUser = await getUserById(term);
+              if (freshUser) foundUser = freshUser;
+          } catch (err) {
+              console.error(err);
+          }
+      }
+
+      setSearchingId(false);
+
       if (foundUser) {
           // Found! Directly open invite modal without "Create" context
           setInviteByIdModal(false);
@@ -216,9 +234,6 @@ const UserManagement: React.FC = () => {
       userToUpdate.teamIds = [...currentTeamIds, ...uniqueNew];
       
       // Only update role if it's not a Master/Global (preserve hierarchy of invited user if they are high level elsewhere)
-      // Actually, for multi-tenancy, a user usually keeps their "Primary" role, or we need a way to have roles per team.
-      // For this simple app, we will NOT overwrite the role if they are already Master/Global.
-      // If they are regular staff, we update role to what was selected (last write wins).
       if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
           userToUpdate.role = inviteRole; 
       }
@@ -574,7 +589,14 @@ const UserManagement: React.FC = () => {
 
                     <div className="flex gap-2">
                         <button onClick={() => setInviteByIdModal(false)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                        <button onClick={handleSearchGuestById} className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Buscar & Convidar</button>
+                        <button 
+                            onClick={handleSearchGuestById} 
+                            disabled={searchingId}
+                            className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {searchingId && <Loader2 className="animate-spin" size={16} />}
+                            Buscar & Convidar
+                        </button>
                     </div>
                 </div>
            </div>
