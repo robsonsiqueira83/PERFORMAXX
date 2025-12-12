@@ -278,14 +278,15 @@ const Layout: React.FC<LayoutProps> = ({
                     </div>
                 </div>
                 
-                {/* Row 2: Selectors Label + Inputs */}
-                <div className="flex flex-col gap-1">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selecione o ambiente:</p>
-                    
-                    <div className="flex flex-col sm:flex-row gap-3 w-full">
-                         {/* 1. CONTEXT/PANEL SELECTOR (First) */}
-                         {showPanelSelector && (
-                             <div className="relative flex-1">
+                {/* Row 2: Selectors with Specific Labels */}
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                     {/* 1. CONTEXT/PANEL SELECTOR (First) */}
+                     {showPanelSelector && (
+                         <div className="relative flex-1">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Selecione o ambiente:
+                            </label>
+                            <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Briefcase size={14} className="text-gray-500" />
                                 </div>
@@ -300,11 +301,16 @@ const Layout: React.FC<LayoutProps> = ({
                                     ))}
                                 </select>
                                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-                             </div>
-                         )}
+                            </div>
+                         </div>
+                     )}
 
-                         {/* 2. TEAM SELECTOR (Second) */}
-                         <div className="relative flex-1">
+                     {/* 2. TEAM SELECTOR (Second) */}
+                     <div className="relative flex-1">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Selecione o time:
+                        </label>
+                        <div className="relative">
                             <select 
                                 value={selectedTeamId}
                                 onChange={(e) => onTeamChange(e.target.value)}
@@ -319,8 +325,8 @@ const Layout: React.FC<LayoutProps> = ({
                                 )}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
-                         </div>
-                    </div>
+                        </div>
+                     </div>
                 </div>
             </div>
         </header>
