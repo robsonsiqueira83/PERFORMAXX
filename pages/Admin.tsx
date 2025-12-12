@@ -77,11 +77,16 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
     const contextId = ctxId || viewingContextId;
     
+    // Check if I am the owner of this panel OR a Global Admin
+    const isOwnerOrGlobal = u && (u.id === contextId || u.role === UserRole.GLOBAL);
+
     // 1. Owned Teams (Managed by this Panel)
-    if (contextId) {
+    if (contextId && isOwnerOrGlobal) {
         setOwnedTeams(allTeams.filter(t => t.ownerId === contextId));
     } else {
-        setOwnedTeams(allTeams); 
+        // If I am a guest viewing another panel, I should NOT see the "Managed Teams" section
+        // as if I own them. I should only see the teams I'm invited to (below).
+        setOwnedTeams([]); 
     }
 
     // 2. Guest Teams (Teams I accepted to work in, but don't own)
@@ -93,11 +98,16 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         setPendingGuestTeams(allTeams.filter(t => pendingIds.includes(t.id)));
 
         // Find Active Guest Teams (Not pending, not owned)
-        // Clean active IDs logic
         const activeIds = teamIds.filter(id => !id.startsWith('pending:'));
-        const myActiveTeams = allTeams.filter(t => 
+        let myActiveTeams = allTeams.filter(t => 
             activeIds.includes(t.id) && t.ownerId !== u.id
         );
+
+        // FILTER: If viewing a specific context as a GUEST, only show guest teams belonging to THAT context.
+        if (contextId && !isOwnerOrGlobal) {
+            myActiveTeams = myActiveTeams.filter(t => t.ownerId === contextId);
+        }
+
         setActiveGuestTeams(myActiveTeams);
     }
     
@@ -451,6 +461,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       );
   };
 
+  // Helper to determine if I am owner of the current context
+  const isOwnerOrGlobal = currentUser && (currentUser.id === viewingContextId || currentUser.role === UserRole.GLOBAL);
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
       <div className="p-6 border-b border-gray-100 flex items-center gap-2">
@@ -502,28 +515,30 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                 </div>
             )}
 
-            {/* SECTION 1: MY TEAMS */}
-            <div>
-                <div className="mb-4 flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                        Gerenciar Meus Times
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{ownedTeams.length}</span>
-                    </h3>
-                    {canEdit && (
-                        <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm">
-                            <Plus size={16}/> Novo Time
-                        </button>
-                    )}
+            {/* SECTION 1: MY TEAMS (Visible only if OWNER or GLOBAL) */}
+            {isOwnerOrGlobal && (
+                <div>
+                    <div className="mb-4 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                            Gerenciar Meus Times
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{ownedTeams.length}</span>
+                        </h3>
+                        {canEdit && (
+                            <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm">
+                                <Plus size={16}/> Novo Time
+                            </button>
+                        )}
+                    </div>
+                    <div className="space-y-4">
+                        {ownedTeams.map(team => renderTeamCard(team, false))}
+                        {ownedTeams.length === 0 && <div className="text-gray-400 text-center py-8 italic border border-dashed border-gray-200 rounded-xl bg-gray-50">Nenhum time criado neste painel.</div>}
+                    </div>
                 </div>
-                <div className="space-y-4">
-                    {ownedTeams.map(team => renderTeamCard(team, false))}
-                    {ownedTeams.length === 0 && <div className="text-gray-400 text-center py-8 italic border border-dashed border-gray-200 rounded-xl bg-gray-50">Nenhum time criado neste painel.</div>}
-                </div>
-            </div>
+            )}
 
             {/* SECTION 2: ACTIVE GUEST TEAMS */}
             {activeGuestTeams.length > 0 && (
-                <div className="pt-6 border-t border-gray-200">
+                <div className={isOwnerOrGlobal ? "pt-6 border-t border-gray-200" : ""}>
                     <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
                         Times em que Colaboro
                         <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{activeGuestTeams.length}</span>
