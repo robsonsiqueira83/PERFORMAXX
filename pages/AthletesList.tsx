@@ -15,7 +15,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName, UserRole } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Rocket, PlayCircle, LogOut } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, ArrowUpDown, Loader2, Share2, AlertCircle, CheckCircle, ArrowRight, UserCheck, XCircle, ArrowRightLeft, Download, Rocket, PlayCircle, LogOut, AlertTriangle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -48,6 +48,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [pullRgInput, setPullRgInput] = useState('');
   const [foundAthleteToPull, setFoundAthleteToPull] = useState<Athlete | null>(null);
   const [pullSearchError, setPullSearchError] = useState('');
+
+  // Duplicate Conflict Modal State
+  const [duplicateConflict, setDuplicateConflict] = useState<{ athlete: Athlete, teamName: string } | null>(null);
 
   // Quick Setup Modal State
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -271,17 +274,26 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     // --- RG VALIDATION & UNIQUENESS CHECK ---
     if (finalRg) {
         // 1. Validate Format
-        // Allow numbers, dots, dashes, and X/x. Length between 5 and 20.
         const rgRegex = /^[0-9xX.-]{5,20}$/;
         if (!rgRegex.test(finalRg)) {
              setFeedback({ type: 'error', message: 'RG inválido. Insira apenas números, pontos e traços (mínimo 5 caracteres).' });
              return;
         }
 
-        // 2. Check Uniqueness (Manual Entry)
-        const exists = allSystemAthletes.some(a => a.rg === finalRg);
-        if (exists) {
-             setFeedback({ type: 'error', message: 'Este RG/Identificador já está em uso no sistema.' });
+        // 2. Check Uniqueness & Trigger Conflict Flow
+        const existingAthlete = allSystemAthletes.find(a => a.rg === finalRg);
+        if (existingAthlete) {
+             if (existingAthlete.teamId === teamId) {
+                 setFeedback({ type: 'error', message: 'Este atleta já está cadastrado no seu time.' });
+             } else {
+                 // Found in ANOTHER team -> Trigger Transfer Logic
+                 const ownerTeam = teams.find(t => t.id === existingAthlete.teamId);
+                 setDuplicateConflict({
+                     athlete: existingAthlete,
+                     teamName: ownerTeam?.name || 'Time Desconhecido'
+                 });
+                 setShowModal(false); // Close create form
+             }
              return;
         }
     } else {
@@ -289,7 +301,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         let isUnique = false;
         while (!isUnique) {
             finalRg = `PROV-${uuidv4().substring(0, 6).toUpperCase()}`;
-            // Check against ALL athletes in system to ensure global uniqueness
             const exists = allSystemAthletes.some(a => a.rg === finalRg);
             if (!exists) isUnique = true;
         }
@@ -348,6 +359,21 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       setPullRgInput('');
       setFoundAthleteToPull(null);
       setFeedback({ type: 'success', message: 'Solicitação enviada! O time atual deve aprovar a liberação.' });
+      setRefreshKey(prev => prev + 1);
+  };
+
+  const handleRequestTransferFromConflict = async () => {
+      if (!duplicateConflict) return;
+      
+      const updatedAthlete = {
+          ...duplicateConflict.athlete,
+          pendingTransferTeamId: teamId
+      };
+      
+      // @ts-ignore
+      await saveAthlete(updatedAthlete);
+      setDuplicateConflict(null);
+      setFeedback({ type: 'success', message: 'Solicitação enviada! Aguarde a aprovação do time atual.' });
       setRefreshKey(prev => prev + 1);
   };
 
@@ -880,6 +906,39 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               </form>
            </div>
         </div>
+      )}
+
+      {/* DUPLICATE RG CONFLICT MODAL */}
+      {duplicateConflict && (
+         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center border-2 border-yellow-400">
+                 <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertTriangle className="text-yellow-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Atleta Já Cadastrado!</h3>
+                 <p className="text-sm text-gray-600 mb-4">
+                     O atleta <strong>{duplicateConflict.athlete.name}</strong> (RG: {duplicateConflict.athlete.rg}) já faz parte do time:
+                 </p>
+                 <div className="bg-gray-100 p-3 rounded-lg mb-6 font-bold text-gray-800 border border-gray-200">
+                     {duplicateConflict.teamName}
+                 </div>
+                 
+                 <div className="flex flex-col gap-2">
+                     <button 
+                        onClick={handleRequestTransferFromConflict}
+                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                     >
+                         <ArrowRightLeft size={18} /> Solicitar Transferência
+                     </button>
+                     <button 
+                        onClick={() => setDuplicateConflict(null)}
+                        className="w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-200"
+                     >
+                         Cancelar
+                     </button>
+                 </div>
+             </div>
+         </div>
       )}
 
       {/* PULL ATHLETE MODAL (Solicitar por RG) */}
