@@ -19,7 +19,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock, Copy, CheckCircle } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock, Copy, CheckCircle, Search } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,6 +63,7 @@ const AthleteProfile: React.FC = () => {
   // Transfer Logic State
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferTeamId, setTransferTeamId] = useState('');
+  const [searchResult, setSearchResult] = useState<{found: boolean, text: string} | null>(null);
 
   // UI Feedback
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -362,6 +363,7 @@ const AthleteProfile: React.FC = () => {
       setShowEditModal(false);
       setIsTransferring(false);
       setTransferTeamId('');
+      setSearchResult(null);
       
       setRefreshKey(prev => prev + 1);
   };
@@ -389,6 +391,16 @@ const AthleteProfile: React.FC = () => {
           navigator.clipboard.writeText(athlete.rg);
           setCopyFeedback(true);
           setTimeout(() => setCopyFeedback(false), 2000);
+      }
+  };
+
+  const handleVerifyTeam = () => {
+      if (!transferTeamId) return;
+      const team = allTeams.find(t => t.id === transferTeamId);
+      if (team) {
+          setSearchResult({ found: true, text: team.name });
+      } else {
+          setSearchResult({ found: false, text: 'Time não encontrado com este ID.' });
       }
   };
 
@@ -898,7 +910,10 @@ const AthleteProfile: React.FC = () => {
                              isTransferring && (
                                 <button 
                                     type="button"
-                                    onClick={() => setIsTransferring(false)}
+                                    onClick={() => {
+                                        setIsTransferring(false);
+                                        setSearchResult(null);
+                                    }}
                                     className="text-xs text-gray-500 hover:text-gray-700"
                                 >
                                     Cancelar
@@ -923,9 +938,26 @@ const AthleteProfile: React.FC = () => {
                                     className="flex-1 bg-white border border-blue-300 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                     placeholder="Cole o ID do time aqui..."
                                     value={transferTeamId}
-                                    onChange={(e) => setTransferTeamId(e.target.value)}
+                                    onChange={(e) => {
+                                        setTransferTeamId(e.target.value);
+                                        setSearchResult(null); // Reset search on change
+                                    }}
                                 />
+                                <button 
+                                    type="button"
+                                    onClick={handleVerifyTeam}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors"
+                                    title="Pesquisar Time"
+                                >
+                                    <Search size={18} />
+                                </button>
                              </div>
+                             {searchResult && (
+                                 <p className={`text-xs mt-2 font-bold flex items-center gap-1 ${searchResult.found ? 'text-green-600' : 'text-red-500'}`}>
+                                     {searchResult.found ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                                     {searchResult.found ? `Time encontrado: ${searchResult.text}` : searchResult.text}
+                                 </p>
+                             )}
                              <p className="text-[10px] text-orange-600 mt-2 flex items-center gap-1">
                                  <AlertTriangle size={10} />
                                  Ao solicitar, o atleta aguardará aprovação no novo time.
