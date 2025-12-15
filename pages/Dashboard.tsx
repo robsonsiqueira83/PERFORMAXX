@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2 } from 'lucide-react';
+import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { 
   getAthletes, 
   getCategories, 
@@ -22,6 +22,9 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  
+  // Mobile Accordion State
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   
   // Custom Date Range State
   const [startDate, setStartDate] = useState('');
@@ -315,152 +318,217 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
+  const selectStyle = "bg-white border border-gray-300 text-gray-700 rounded-lg p-2.5 text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[150px] shadow-sm font-medium";
+
   return (
     <div className="space-y-8 pb-10">
       
-      {/* Top Controls & Quick Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      {/* MOBILE ACCORDION TOGGLE */}
+      <div className="md:hidden">
+          <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className="w-full bg-white border border-gray-200 p-4 rounded-xl flex justify-between items-center shadow-sm text-blue-800 font-bold hover:bg-gray-50 transition-colors"
+          >
+              <span className="flex items-center gap-2"><Filter size={18} className="text-blue-600"/> Filtros e Opções</span>
+              {showMobileFilters ? <ChevronUp size={20} className="text-gray-400"/> : <ChevronDown size={20} className="text-gray-400"/>}
+          </button>
+      </div>
+
+      {/* FILTERS CONTAINER (Accordion on Mobile, Row on Desktop) */}
+      <div className={`
+          flex flex-col md:flex-row justify-between items-start md:items-end gap-6 
+          ${showMobileFilters ? 'flex animate-fade-in' : 'hidden md:flex'} 
+          bg-white md:bg-transparent p-6 md:p-0 rounded-xl shadow-sm md:shadow-none border md:border-none border-gray-100 mt-2 md:mt-0
+      `}>
         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto flex-wrap">
-          {/* ... filters ... */}
-          <div className="flex flex-col">
-             <label className="text-xs font-semibold text-gray-500 mb-1">CATEGORIA</label>
-             <select 
-               className="bg-gray-100 border border-gray-300 text-gray-900 rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
-               value={selectedCategory}
-               onChange={(e) => setSelectedCategory(e.target.value)}
-             >
-               <option value="all">Todas</option>
-               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-             </select>
+          {/* CATEGORY FILTER */}
+          <div className="flex flex-col w-full md:w-auto">
+             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Categoria</label>
+             <div className="relative">
+                 <select 
+                   className={selectStyle}
+                   value={selectedCategory}
+                   onChange={(e) => setSelectedCategory(e.target.value)}
+                 >
+                   <option value="all">Todas</option>
+                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                 </select>
+                 <ChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14} />
+             </div>
           </div>
-          <div className="flex flex-col">
-             <label className="text-xs font-semibold text-gray-500 mb-1">POSIÇÃO</label>
-             <select 
-               className="bg-gray-100 border border-gray-300 text-gray-900 rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
-               value={selectedPosition}
-               onChange={(e) => setSelectedPosition(e.target.value)}
-             >
-               <option value="all">Todas</option>
-               {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
-             </select>
+
+          {/* POSITION FILTER */}
+          <div className="flex flex-col w-full md:w-auto">
+             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Posição</label>
+             <div className="relative">
+                 <select 
+                   className={selectStyle}
+                   value={selectedPosition}
+                   onChange={(e) => setSelectedPosition(e.target.value)}
+                 >
+                   <option value="all">Todas</option>
+                   {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                 </select>
+                 <ChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14} />
+             </div>
           </div>
-          <div className="flex flex-col">
-             <label className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1"><Calendar size={12}/> PERÍODO</label>
-             <select 
-               className="bg-gray-100 border border-gray-300 text-gray-900 rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
-               value={selectedPeriod}
-               onChange={(e) => setSelectedPeriod(e.target.value)}
-             >
-               <option value="all">Todo o Período</option>
-               <option value="today">Hoje</option>
-               <option value="week">Últimos 7 dias</option>
-               <option value="month">Últimos 30 dias</option>
-               <option value="year">Este Ano</option>
-               <option value="custom">Personalizado</option>
-             </select>
+
+          {/* PERIOD FILTER */}
+          <div className="flex flex-col w-full md:w-auto">
+             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1 flex items-center gap-1"><Calendar size={10}/> Período</label>
+             <div className="relative">
+                 <select 
+                   className={selectStyle}
+                   value={selectedPeriod}
+                   onChange={(e) => setSelectedPeriod(e.target.value)}
+                 >
+                   <option value="all">Todo o Período</option>
+                   <option value="today">Hoje</option>
+                   <option value="week">Últimos 7 dias</option>
+                   <option value="month">Últimos 30 dias</option>
+                   <option value="year">Este Ano</option>
+                   <option value="custom">Personalizado</option>
+                 </select>
+                 <ChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14} />
+             </div>
           </div>
           
           {selectedPeriod === 'custom' && (
-              <div className="flex gap-2">
-                  <div className="flex flex-col">
-                      <label className="text-xs font-semibold text-gray-500 mb-1">Início</label>
+              <div className="flex gap-2 w-full md:w-auto">
+                  <div className="flex flex-col w-1/2 md:w-auto">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Início</label>
                       <input 
                         type="date" 
-                        className="bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
+                        className={selectStyle}
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                       />
                   </div>
-                  <div className="flex flex-col">
-                      <label className="text-xs font-semibold text-gray-500 mb-1">Fim</label>
+                  <div className="flex flex-col w-1/2 md:w-auto">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Fim</label>
                       <input 
                         type="date" 
-                        className="bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
+                        className={selectStyle}
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                       />
                   </div>
               </div>
           )}
-
         </div>
 
-        <div className="flex gap-2 w-full md:w-auto">
-           <Link to="/athletes" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              <Users size={16} />
+        {/* ACTION BUTTONS (Moved inside accordion on mobile for cleaner look) */}
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto pt-4 md:pt-0 border-t md:border-none border-gray-100">
+           <Link to="/athletes" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95">
+              <Users size={18} />
               Atletas
            </Link>
            {/* HIDE NEW TRAINING IF READ ONLY */}
            {currentUser && canEditData(currentUser.role) && (
-               <Link to="/training" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                  <ClipboardList size={16} />
+               <Link to="/training" className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#4ade80] hover:bg-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95">
+                  <ClipboardList size={18} />
                   Nova Atuação
                </Link>
            )}
         </div>
       </div>
 
-      {/* Top 3 Ranking */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-         {rankedAthletes.map((athlete, index) => (
-             <div key={athlete.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 relative overflow-hidden">
-                 <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <Trophy size={60} />
+      {/* Top 3 Ranking (Improved Visuals) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         {rankedAthletes.map((athlete, index) => {
+             // Styling based on Rank
+             let rankColor = "bg-gray-100 text-gray-600";
+             let cardBorder = "border-gray-100";
+             let gradient = "from-white to-gray-50";
+             
+             if (index === 0) { 
+                 rankColor = "bg-yellow-100 text-yellow-700 border-yellow-200"; 
+                 cardBorder = "border-yellow-200 ring-1 ring-yellow-100";
+                 gradient = "from-yellow-50/50 to-white";
+             } else if (index === 1) {
+                 rankColor = "bg-slate-200 text-slate-700 border-slate-300";
+                 cardBorder = "border-slate-200";
+                 gradient = "from-slate-50 to-white";
+             } else if (index === 2) {
+                 rankColor = "bg-orange-100 text-orange-800 border-orange-200";
+                 cardBorder = "border-orange-200";
+                 gradient = "from-orange-50/50 to-white";
+             }
+
+             return (
+             <div key={athlete.id} className={`bg-gradient-to-br ${gradient} rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border ${cardBorder} relative overflow-hidden group`}>
+                 <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <Trophy size={80} />
                  </div>
+                 
                  <div className="flex items-center gap-4 relative z-10">
                      <div className="relative">
                         {athlete.photoUrl ? (
-                            <img src={athlete.photoUrl} alt={athlete.name} className="w-16 h-16 rounded-full object-cover border-2 border-blue-100" />
+                            <img src={athlete.photoUrl} alt={athlete.name} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" />
                         ) : (
-                            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl font-bold">
+                            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-gray-400 text-xl font-bold border-2 border-gray-100 shadow-sm">
                                 {athlete.name.charAt(0)}
                             </div>
                         )}
-                        <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#4ade80] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        <div className={`absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shadow-sm border ${rankColor}`}>
                             #{index + 1}
                         </div>
                      </div>
                      <div>
-                         <h3 className="font-bold text-gray-800 truncate max-w-[120px]">{athlete.name}</h3>
-                         <p className="text-xs text-gray-500">{getCalculatedCategory(athlete.birthDate)} - <span className="text-purple-600 font-semibold">{athlete.position}</span></p>
-                         <p className="text-xs text-gray-500">{athlete.sessionsCount} atuações</p>
+                         <h3 className="font-bold text-gray-800 truncate max-w-[140px] text-lg leading-tight">{athlete.name}</h3>
+                         <div className="flex flex-col gap-0.5 mt-1">
+                             <span className="text-xs text-gray-500 font-medium">{getCalculatedCategory(athlete.birthDate)}</span>
+                             <span className="text-xs text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded w-fit">{athlete.position}</span>
+                         </div>
                      </div>
                  </div>
-                 <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-end">
+                 
+                 <div className="mt-5 pt-4 border-t border-gray-200/60 flex justify-between items-end">
                      <div>
-                         <span className="text-xs text-gray-400 font-uppercase">SCORE MÉDIO</span>
-                         <div className="text-2xl font-bold text-blue-900">{athlete.averageScore}</div>
+                         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Score Médio</span>
+                         <div className="text-3xl font-black text-gray-800 leading-none mt-0.5">{athlete.averageScore}</div>
                      </div>
-                     <Link to={`/athletes/${athlete.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                         Ver Detalhes &rarr;
+                     <Link to={`/athletes/${athlete.id}`} className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+                         Ver Perfil
                      </Link>
                  </div>
              </div>
-         ))}
+         )})}
          {rankedAthletes.length === 0 && (
-             <div className="col-span-3 p-8 text-center text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
-                 {filteredEntries.length === 0 
-                    ? "Nenhum dado encontrado para o período selecionado." 
-                    : "Nenhum atleta suficiente para gerar o ranking com os filtros atuais."}
+             <div className="col-span-3 p-12 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 flex flex-col items-center gap-2">
+                 <Users size={32} className="opacity-20"/>
+                 <p>{filteredEntries.length === 0 ? "Nenhum dado encontrado para o período selecionado." : "Dados insuficientes para gerar ranking."}</p>
              </div>
          )}
       </div>
 
       {/* Football Field Visualization - Best XI */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-         <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <Shirt size={20} className="text-green-600"/>
-            Seleção do Momento (4-3-3) {selectedCategory !== 'all' && `- ${categories.find(c => c.id === selectedCategory)?.name}`}
-         </h3>
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+         <div className="flex justify-between items-center mb-6">
+             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <div className="bg-green-100 p-2 rounded-lg text-green-700"><Shirt size={20}/></div>
+                Seleção do Momento (4-3-3)
+             </h3>
+             {selectedCategory !== 'all' && (
+                 <span className="text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1 rounded-full border border-gray-200">
+                     {categories.find(c => c.id === selectedCategory)?.name}
+                 </span>
+             )}
+         </div>
          
-         {/* Field Container */}
-         <div className="relative w-full aspect-[3/4] md:aspect-[16/9] lg:aspect-[2/1] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
+         {/* Field Container with improved gradient */}
+         <div className="relative w-full aspect-[3/4] md:aspect-[16/9] lg:aspect-[2/1] bg-gradient-to-b from-green-600 to-green-700 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner">
+             {/* Field Pattern (Stripes) */}
+             <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
+
              {/* Field Markings */}
-             <div className="absolute inset-4 border-2 border-white/40 rounded-sm"></div>
-             <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2"></div>
-             <div className="absolute top-1/2 left-1/2 w-24 h-24 md:w-32 md:h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
-             <div className="absolute bottom-4 left-1/2 w-48 h-24 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
-             <div className="absolute top-4 left-1/2 w-48 h-24 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
+             <div className="absolute inset-4 border-2 border-white/60 rounded-sm pointer-events-none"></div>
+             <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/60 transform -translate-y-1/2 pointer-events-none"></div>
+             <div className="absolute top-1/2 left-1/2 w-24 h-24 md:w-32 md:h-32 border-2 border-white/60 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+             
+             {/* Goals Areas */}
+             <div className="absolute bottom-4 left-1/2 w-48 h-24 border-2 border-white/60 border-b-0 transform -translate-x-1/2 bg-transparent pointer-events-none"></div>
+             <div className="absolute top-4 left-1/2 w-48 h-24 border-2 border-white/60 border-t-0 transform -translate-x-1/2 bg-transparent pointer-events-none"></div>
 
              {/* Players */}
              {bestXI.map((pos, idx) => (
@@ -473,26 +541,23 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                       <Link to={`/athletes/${pos.player.id}`} className="flex flex-col items-center">
                           <div className="relative">
                              {pos.player.photoUrl ? (
-                                 <img src={pos.player.photoUrl} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md object-cover bg-white" alt={pos.player.name} />
+                                 <img src={pos.player.photoUrl} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white" alt={pos.player.name} />
                              ) : (
-                                 <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md bg-white flex items-center justify-center text-xs font-bold text-gray-700">
+                                 <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
                                      {pos.player.name.charAt(0)}
                                  </div>
                              )}
-                             <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow border border-white">
+                             <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow border border-white">
                                  {pos.player.averageScore}
                              </div>
                           </div>
-                          <div className="mt-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white text-[10px] md:text-xs font-medium text-center truncate max-w-[80px]">
+                          <div className="mt-1 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] md:text-[10px] font-bold text-center truncate max-w-[80px] shadow-sm border border-white/20">
                               {pos.player.name.split(' ')[0]}
-                          </div>
-                          <div className="text-[9px] text-white/90 bg-black/30 px-1 rounded mt-0.5">
-                              {pos.player.position}
                           </div>
                       </Link>
                    ) : (
-                       <div className="opacity-50 flex flex-col items-center">
-                           <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/50 bg-transparent flex items-center justify-center text-white/50 text-xs">
+                       <div className="opacity-40 flex flex-col items-center hover:opacity-60 transition-opacity">
+                           <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/70 bg-white/10 flex items-center justify-center text-white text-[10px] font-bold shadow-sm">
                                {pos.role}
                            </div>
                        </div>
@@ -504,105 +569,105 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
       <div className="border-t border-gray-200 my-8"></div>
       
-      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2 px-1">
          <Activity className="text-blue-600"/> 
          Média Geral {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
       </h2>
 
       {/* TACTICAL CHARTS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Defendendo (Média)</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4 text-sm uppercase tracking-wide border-b border-purple-50 pb-2">Defendendo (Média)</h3>
               <div className="h-[250px]">
                  {teamStats && teamStats.tactical_def ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_def}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                        <PolarGrid stroke="#e5e7eb" /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados suficientes</div>}
               </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Construindo (Média)</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4 text-sm uppercase tracking-wide border-b border-purple-50 pb-2">Construindo (Média)</h3>
               <div className="h-[250px]">
                  {teamStats && teamStats.tactical_const ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_const}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                        <PolarGrid stroke="#e5e7eb" /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados suficientes</div>}
               </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Último Terço (Média)</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-purple-700 mb-4 text-sm uppercase tracking-wide border-b border-purple-50 pb-2">Último Terço (Média)</h3>
               <div className="h-[250px]">
                  {teamStats && teamStats.tactical_ult ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={teamStats.tactical_ult}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                        <PolarGrid stroke="#e5e7eb" /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados suficientes</div>}
               </div>
           </div>
       </div>
 
       {/* TECH/PHYS Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-blue-700 mb-4 text-sm uppercase tracking-wide border-b border-blue-50 pb-2">Fundamentos (Média)</h3>
               <div className="h-[300px]">
                  {teamStats ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamStats.technical}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <PolarGrid stroke="#e5e7eb" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
                         <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
-                        <RechartsTooltip />
+                        <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados suficientes</div>}
               </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-orange-700 mb-4">Condição Físico (Média)</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-orange-700 mb-4 text-sm uppercase tracking-wide border-b border-orange-50 pb-2">Condição Físico (Média)</h3>
                <div className="h-[300px]">
                  {teamStats ? (
                    <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamStats.physical}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <PolarGrid stroke="#e5e7eb" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
                         <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
-                        <RechartsTooltip />
+                        <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
                    </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                 ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados suficientes</div>}
               </div>
           </div>
       </div>
 
       {/* Evolution Line Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6">
-         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mt-6">
+         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-lg">
             <TrendingUp size={20} className="text-green-600"/>
             Evolução Score Médio {selectedCategory !== 'all' ? `(${categories.find(c => c.id === selectedCategory)?.name})` : ''}
          </h3>
          <div className="h-[300px]">
              {evolutionData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={evolutionData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" />
-                        <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" />
-                        <RechartsTooltip />
-                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+                    <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                        <XAxis dataKey="date" fontSize={11} stroke="#9ca3af" tickMargin={10} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0, 10]} fontSize={11} stroke="#9ca3af" axisLine={false} tickLine={false} />
+                        <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 6, fill: '#10b981', stroke: 'white', strokeWidth: 2 }} dot={{r: 4, fill: '#10b981'}} />
                     </LineChart>
                 </ResponsiveContainer>
-             ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados históricos para o período selecionado</div>}
+             ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados históricos para o período selecionado</div>}
          </div>
       </div>
 
