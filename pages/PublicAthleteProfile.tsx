@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   getAthletes, 
@@ -12,7 +12,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar } from 'lucide-react';
+import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 import PublicHeader from '../components/PublicHeader';
 
@@ -28,7 +28,13 @@ const PublicAthleteProfile: React.FC = () => {
 
   // Filtering State
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [customDate, setCustomDate] = useState<string>('');
   const [viewingEntry, setViewingEntry] = useState<any | null>(null);
+  
+  // Calendar State
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const calendarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
      const load = async () => {
@@ -52,11 +58,27 @@ const PublicAthleteProfile: React.FC = () => {
      load();
   }, [athleteId]);
 
+  // Close calendar on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+        setIsCalendarOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [calendarRef]);
+
   // Full History Data
   const historyData = useMemo(() => {
     return entries.map(entry => {
       const session = sessions.find(s => s.id === entry.sessionId);
       if (!session) return null;
+      
+      const isRealTime = session.description?.includes('Análise em Tempo Real');
+
       return {
         id: entry.id,
         date: new Date(session.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
@@ -66,7 +88,8 @@ const PublicAthleteProfile: React.FC = () => {
         physical: entry.physical,
         tactical: entry.tactical,
         heatmapPoints: entry.heatmapPoints || [],
-        entry: entry
+        entry: entry,
+        isRealTime
       };
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
   }, [entries, sessions]);
@@ -93,12 +116,14 @@ const PublicAthleteProfile: React.FC = () => {
             case 'year':
                 const startYear = `${now.getFullYear()}-01-01`;
                 return sIso >= startYear;
+            case 'custom':
+                return customDate ? sIso === customDate : true;
             case 'all':
             default:
                 return true;
         }
     });
-  }, [entries, sessions, selectedPeriod]);
+  }, [entries, sessions, selectedPeriod, customDate]);
 
   // Overall Score
   const overallScore = useMemo(() => {
@@ -217,6 +242,55 @@ const PublicAthleteProfile: React.FC = () => {
       return { stroke: '#22c55e', fill: '#22c55e' };
   };
 
+  // Calendar Logic
+  const getDaysInMonth = (date: Date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const days = new Date(year, month + 1, 0).getDate();
+      const firstDay = new Date(year, month, 1).getDay();
+      return { days, firstDay };
+  };
+  const { days: daysInMonth, firstDay } = getDaysInMonth(calendarMonth);
+  const getSessionDatesMap = () => {
+      const map = new Map<string, string>(); // Date -> Type (RealTime or Regular)
+      historyData.forEach(h => { 
+          if (h && h.fullDate) {
+              map.set(h.fullDate, h.isRealTime ? 'realtime' : 'regular');
+          } 
+      });
+      return map;
+  };
+  const sessionDates = getSessionDatesMap();
+  
+  const handleDateSelect = (day: number) => {
+      const year = calendarMonth.getFullYear();
+      const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
+      const dayStr = String(day).padStart(2, '0');
+      const dateStr = `${year}-${month}-${dayStr}`;
+      
+      setCustomDate(dateStr);
+      setSelectedPeriod('custom');
+      setIsCalendarOpen(false);
+  };
+  
+  const changeMonth = (offset: number) => {
+      const newDate = new Date(calendarMonth);
+      newDate.setMonth(newDate.getMonth() + offset);
+      setCalendarMonth(newDate);
+  };
+
+  // Handle Select Change
+  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      setSelectedPeriod(val);
+      if (val === 'custom') {
+          setIsCalendarOpen(true);
+      } else {
+          setIsCalendarOpen(false);
+          setCustomDate('');
+      }
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-10 text-center text-gray-500">Atleta não encontrado.</div>;
 
@@ -229,6 +303,57 @@ const PublicAthleteProfile: React.FC = () => {
      const datePart = dateString.split('T')[0];
      const [year, month, day] = datePart.split('-');
      return `${day}/${month}/${year}`;
+  };
+
+  // Activity Mini Calendar Renderer
+  const renderActivityCalendar = () => {
+      const currentMonthDates = Array.from({length: daysInMonth}, (_, i) => {
+          const d = i + 1;
+          const full = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const type = sessionDates.get(full); // 'realtime' | 'regular' | undefined
+          return { d, full, type };
+      });
+
+      return (
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-[300px] flex flex-col">
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                  <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">{calendarMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                  <div className="flex gap-2">
+                      <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded text-gray-600"><ChevronLeft size={16}/></button>
+                      <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded text-gray-600"><ChevronRight size={16}/></button>
+                  </div>
+              </div>
+              <div className="flex-1 flex flex-col justify-center gap-2">
+                  <div className="grid grid-cols-7 gap-1 mb-1">
+                      {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-[10px] text-center font-bold text-gray-400">{d}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                      {Array(firstDay).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+                      {currentMonthDates.map(day => {
+                          const isSelected = customDate === day.full && selectedPeriod === 'custom';
+                          return (
+                              <button 
+                                key={day.d}
+                                onClick={() => handleDateSelect(day.d)}
+                                className={`aspect-square rounded-lg flex items-center justify-center text-xs transition-colors relative
+                                    ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200 hover:bg-purple-200' : 
+                                      day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold border border-green-200 hover:bg-green-200' : 
+                                      'text-gray-400 hover:bg-gray-50'}
+                                    ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                                `}
+                              >
+                                  {day.d}
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-4 justify-center shrink-0">
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
+              </div>
+          </div>
+      );
   };
 
   return (
@@ -263,19 +388,44 @@ const PublicAthleteProfile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col items-end gap-2 w-full md:w-auto">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 relative" ref={calendarRef}>
                         <label className="text-xs font-bold text-gray-500">PERÍODO:</label>
-                        <select 
-                            value={selectedPeriod}
-                            onChange={(e) => setSelectedPeriod(e.target.value)}
-                            className="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-sm font-semibold"
-                        >
-                            <option value="all">Todo o Período</option>
-                            <option value="today">Hoje</option>
-                            <option value="week">Últimos 7 dias</option>
-                            <option value="month">Últimos 30 dias</option>
-                            <option value="year">Este Ano</option>
-                        </select>
+                        <div className="relative">
+                            <select 
+                                value={selectedPeriod}
+                                onChange={handlePeriodChange}
+                                className="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-sm font-semibold appearance-none pr-8 cursor-pointer"
+                            >
+                                <option value="all">Todo o Período</option>
+                                <option value="today">Hoje</option>
+                                <option value="week">Últimos 7 dias</option>
+                                <option value="month">Últimos 30 dias</option>
+                                <option value="year">Este Ano</option>
+                                <option value="custom">Data Específica...</option>
+                            </select>
+                            <ChevronDown size={14} className="text-gray-400 absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+                        </div>
+                        {isCalendarOpen && (
+                             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-100 z-50 p-4 animate-fade-in">
+                                 <div className="flex items-center justify-between mb-2 px-1">
+                                    <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft size={16} /></button>
+                                    <span className="text-sm font-bold text-gray-800 capitalize">{calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                                    <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight size={16} /></button>
+                                 </div>
+                                 <div className="grid grid-cols-7 gap-1 text-center mb-1">{['D','S','T','Q','Q','S','S'].map(d => <span key={d} className="text-[10px] text-gray-400 font-bold">{d}</span>)}</div>
+                                 <div className="grid grid-cols-7 gap-1">
+                                    {Array(firstDay).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+                                    {Array(daysInMonth).fill(null).map((_, i) => {
+                                        const day = i + 1;
+                                        const fullDate = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                        const isSelected = customDate === fullDate;
+                                        return (
+                                            <button key={day} onClick={() => handleDateSelect(day)} className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-100 text-gray-700'}`}>{day}</button>
+                                        );
+                                    })}
+                                 </div>
+                             </div>
+                         )}
                     </div>
 
                     <div className="text-center px-6 py-2 bg-gray-50 rounded-xl border border-gray-100 min-w-[140px]">
@@ -430,21 +580,27 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
         </div>
 
-        {/* --- EVOLUTION CHART --- */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-            <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
-            <div className="h-[300px]">
-                {historyData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={historyData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" />
-                            <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" />
-                            <RechartsTooltip />
-                            <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados históricos</div>}
+        {/* --- EVOLUTION CHART & CALENDAR --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
+                <div className="h-[300px]">
+                    {historyData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={historyData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" tickMargin={10} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" axisLine={false} tickLine={false} />
+                                <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                                <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8, fill: '#10b981', stroke: 'white' }} dot={{r: 4, fill: '#10b981'}} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados históricos</div>}
+                </div>
+            </div>
+            
+            <div className="flex flex-col">
+                {renderActivityCalendar()}
             </div>
         </div>
 
@@ -459,6 +615,7 @@ const PublicAthleteProfile: React.FC = () => {
                         <div className="flex-1">
                             <div className="flex items-center gap-3">
                                 <span className="font-bold text-gray-800">{item!.date}</span>
+                                {item!.isRealTime && <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">Tempo Real</span>}
                                 <span className={`text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
                             </div>
                         </div>

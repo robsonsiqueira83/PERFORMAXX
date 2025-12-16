@@ -446,14 +446,18 @@ const AthleteProfile: React.FC = () => {
       return map;
   };
   const sessionDates = getSessionDatesMap();
+  
   const handleDateSelect = (day: number) => {
       const year = calendarMonth.getFullYear();
       const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
       const dayStr = String(day).padStart(2, '0');
       const dateStr = `${year}-${month}-${dayStr}`;
+      
       setCustomDate(dateStr);
+      setSelectedPeriod('custom');
       setIsCalendarOpen(false);
   };
+  
   const changeMonth = (offset: number) => {
       const newDate = new Date(calendarMonth);
       newDate.setMonth(newDate.getMonth() + offset);
@@ -500,17 +504,23 @@ const AthleteProfile: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-7 gap-1">
                       {Array(firstDay).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
-                      {currentMonthDates.map(day => (
-                          <div 
-                            key={day.d} 
-                            className={`aspect-square rounded-lg flex items-center justify-center text-xs transition-colors
-                                ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200' : 
-                                  day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold border border-green-200' : 
-                                  'text-gray-400 hover:bg-gray-50'}`}
-                          >
-                              {day.d}
-                          </div>
-                      ))}
+                      {currentMonthDates.map(day => {
+                          const isSelected = customDate === day.full && selectedPeriod === 'custom';
+                          return (
+                              <button 
+                                key={day.d}
+                                onClick={() => handleDateSelect(day.d)}
+                                className={`aspect-square rounded-lg flex items-center justify-center text-xs transition-colors relative
+                                    ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200 hover:bg-purple-200' : 
+                                      day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold border border-green-200 hover:bg-green-200' : 
+                                      'text-gray-400 hover:bg-gray-50'}
+                                    ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                                `}
+                              >
+                                  {day.d}
+                              </button>
+                          );
+                      })}
                   </div>
               </div>
               <div className="mt-4 pt-3 border-t border-gray-100 flex gap-4 justify-center shrink-0">
@@ -749,6 +759,7 @@ const AthleteProfile: React.FC = () => {
       {/* --- MODALS --- */}
       
       {/* REPLAY MODAL */}
+      {/* ... (Existing modals remain unchanged) ... */}
       {showReplayModal && replayData && (
           <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
