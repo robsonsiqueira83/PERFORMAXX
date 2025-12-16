@@ -36,7 +36,7 @@ const RealTimeEvaluation: React.FC = () => {
   const [eventsLog, setEventsLog] = useState<GameEvent[]>([]);
   
   // Interaction State
-  const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: Pick Location, 2: Rate Stats
+  const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: (Skipped), 2: Rate Stats
   const [capturedTime, setCapturedTime] = useState<string>('');
   const [capturedSeconds, setCapturedSeconds] = useState<number>(0);
   
@@ -166,17 +166,13 @@ const RealTimeEvaluation: React.FC = () => {
       recognition.start();
   };
 
-  // Step 1: Capture Time
-  const handleInsertAction = () => {
-    if (!isRunning && timer === 0) return;
+  // Direct Field Click (Merge Step 1 & 2)
+  const handleFieldClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isRunning) return; // Only allow when running
+
+    // Capture Time immediately
     setCapturedTime(formatTime(timer));
     setCapturedSeconds(timer);
-    setStep(1);
-  };
-
-  // Step 2: Field Click
-  const handleFieldClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (step !== 1) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -347,36 +343,30 @@ const RealTimeEvaluation: React.FC = () => {
 
       <div className="max-w-3xl mx-auto p-4 flex flex-col gap-6">
           
-          {/* MAIN ACTION BUTTON */}
-          {step === 0 && (
-              <div className="flex justify-center">
-                  <button 
-                    onClick={handleInsertAction}
-                    disabled={!isRunning}
-                    className={`
-                        w-full py-6 rounded-2xl font-black text-xl shadow-xl transform transition-all active:scale-95 flex items-center justify-center gap-3 border-b-4
-                        ${isRunning ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700' : 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'}
-                    `}
-                  >
-                      <MapPin size={28} /> REGISTRAR AÇÃO
-                  </button>
-              </div>
-          )}
+          {/* FIELD AREA - Always Visible */}
+          <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300`}>
+              
+              {/* Overlay Prompt when Running but not yet clicked */}
+              {isRunning && step === 0 && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                      <div className="bg-white/30 backdrop-blur-[2px] px-4 py-2 rounded-full shadow-lg text-white font-bold text-sm border border-white/40 animate-pulse">
+                          Toque no campo para registrar ação
+                      </div>
+                  </div>
+              )}
 
-          {/* FIELD AREA */}
-          <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300 ${step === 1 ? 'ring-4 ring-blue-400 scale-[1.02]' : ''}`}>
-              {/* Overlay Prompt */}
-              {step === 1 && (
-                  <div className="absolute inset-0 bg-black/20 z-10 flex items-center justify-center pointer-events-none">
-                      <div className="bg-white/90 backdrop-blur-sm px-6 py-3 rounded-full shadow-2xl text-blue-900 font-bold text-lg animate-bounce border border-blue-200">
-                          Toque na posição do atleta
+              {/* Not Running Overlay */}
+              {!isRunning && timer === 0 && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
+                      <div className="text-white font-bold text-lg text-center">
+                          Inicie o cronômetro para avaliar
                       </div>
                   </div>
               )}
 
               {/* Interaction Layer */}
               <div 
-                className={`absolute inset-0 z-0 ${step === 1 ? 'cursor-crosshair' : ''}`}
+                className={`absolute inset-0 z-0 ${isRunning && step === 0 ? 'cursor-crosshair' : 'cursor-default'}`}
                 onClick={handleFieldClick}
               >
                   {/* Field Lines */}

@@ -9,7 +9,7 @@ import {
   deleteTrainingEntry
 } from '../services/storageService';
 import { Athlete, TrainingEntry, TrainingSession, HeatmapPoint, User } from '../types';
-import { ArrowLeft, Save, Trash2, FileText, Loader2, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, FileText, Loader2, Calendar, AlertCircle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,6 +26,10 @@ const AthleteEvaluation: React.FC = () => {
   const [currentHeatmapPoints, setCurrentHeatmapPoints] = useState<HeatmapPoint[]>([]);
   const [currentNotes, setCurrentNotes] = useState('');
   
+  // Logic for Real Time Filtering
+  const [isRealTimeLog, setIsRealTimeLog] = useState(false);
+  const [registeredKeys, setRegisteredKeys] = useState<Set<string>>(new Set());
+
   const [currentStats, setCurrentStats] = useState({
     // Condição Física
     velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
@@ -57,13 +61,36 @@ const AthleteEvaluation: React.FC = () => {
                  const session = allSessions.find(s => s.id === entry.sessionId);
                  if (session) setTrainingDate(session.date);
                  
-                 // Display JSON logs as text if present
+                 // Handle Notes and Real Time Logs logic
                  let displayNotes = entry.notes || '';
+                 let isRT = false;
+                 const keysFound = new Set<string>();
+
                  try {
                     const parsed = JSON.parse(displayNotes);
-                    if (parsed.type === 'REAL_TIME_LOG') displayNotes = `[Log de Tempo Real: ${parsed.totalEvents} ações]`;
-                 } catch (e) {}
+                    if (parsed.type === 'REAL_TIME_LOG') {
+                        isRT = true;
+                        displayNotes = `[Log de Tempo Real: ${parsed.totalEvents} ações registradas]`;
+                        
+                        // Parse events to find which stats were actually touched
+                        if (parsed.events && Array.isArray(parsed.events)) {
+                            parsed.events.forEach((evt: any) => {
+                                if (evt.stats) {
+                                    Object.entries(evt.stats).forEach(([key, val]) => {
+                                        if (Number(val) > 0) {
+                                            keysFound.add(key);
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }
+                 } catch (e) {
+                     // Not JSON or standard note
+                 }
 
+                 setIsRealTimeLog(isRT);
+                 setRegisteredKeys(keysFound);
                  setCurrentNotes(displayNotes);
                  setCurrentHeatmapPoints(entry.heatmapPoints || []);
                  
@@ -140,7 +167,7 @@ const AthleteEvaluation: React.FC = () => {
 
      // Preserve original notes if it was a real-time log and user didn't change it
      let notesToSave = currentNotes;
-     if (entryId && currentNotes.startsWith('[Log de Tempo Real')) {
+     if (entryId && isRealTimeLog && currentNotes.startsWith('[Log de Tempo Real')) {
          const allEntries = await getTrainingEntries();
          const originalEntry = allEntries.find(e => e.id === entryId);
          if (originalEntry) notesToSave = originalEntry.notes || '';
@@ -185,6 +212,30 @@ const AthleteEvaluation: React.FC = () => {
       }
   };
 
+  // Helper to check visibility based on Real Time mode
+  const shouldShowStat = (key: string) => {
+      if (!isRealTimeLog) return true; // Show all for normal editing
+      return registeredKeys.has(key);
+  };
+
+  // Helper to render a slider conditionally
+  const renderStat = (label: string, key: keyof typeof currentStats) => {
+      if (!shouldShowStat(key as string)) return null;
+      return (
+          <StatSlider 
+              label={label} 
+              value={currentStats[key]} 
+              onChange={v => setCurrentStats(prev => ({...prev, [key]: v}))} 
+          />
+      );
+  };
+
+  // Helper to check if a section should be rendered at all
+  const shouldShowSection = (keysToCheck: (keyof typeof currentStats)[]) => {
+      if (!isRealTimeLog) return true;
+      return keysToCheck.some(key => registeredKeys.has(key as string));
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
 
@@ -221,6 +272,16 @@ const AthleteEvaluation: React.FC = () => {
                  </div>
             </div>
 
+            {isRealTimeLog && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 flex items-center gap-3 animate-fade-in">
+                    <AlertCircle className="text-blue-600" />
+                    <p className="text-blue-800 text-sm">
+                        Esta é uma análise de tempo real. Apenas os indicadores registrados durante o jogo estão sendo exibidos. 
+                        <span className="font-bold ml-1">Indicadores não avaliados foram ocultados.</span>
+                    </p>
+                </div>
+            )}
+
             <div className="space-y-6">
                   {/* Heatmap Input */}
                   <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -234,68 +295,78 @@ const AthleteEvaluation: React.FC = () => {
                   {/* Stats Sliders */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {/* Defendendo */}
-                      <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Defendendo</h4>
-                           <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
-                           <StatSlider label="Pressão" value={currentStats.def_pressao} onChange={v => setCurrentStats({...currentStats, def_pressao: v})} />
-                           <StatSlider label="Cobertura" value={currentStats.def_cobertura} onChange={v => setCurrentStats({...currentStats, def_cobertura: v})} />
-                           <StatSlider label="Fechamento" value={currentStats.def_fechamento} onChange={v => setCurrentStats({...currentStats, def_fechamento: v})} />
-                           <StatSlider label="Temporização" value={currentStats.def_temporizacao} onChange={v => setCurrentStats({...currentStats, def_temporizacao: v})} />
-                           <StatSlider label="Desarme Tát." value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
-                           <StatSlider label="Reação" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
-                      </div>
+                      {shouldShowSection(['def_posicionamento', 'def_pressao', 'def_cobertura', 'def_fechamento', 'def_temporizacao', 'def_desarme_tatico', 'def_reacao']) && (
+                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
+                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Defendendo</h4>
+                               {renderStat("Posicionamento", "def_posicionamento")}
+                               {renderStat("Pressão", "def_pressao")}
+                               {renderStat("Cobertura", "def_cobertura")}
+                               {renderStat("Fechamento", "def_fechamento")}
+                               {renderStat("Temporização", "def_temporizacao")}
+                               {renderStat("Desarme Tát.", "def_desarme_tatico")}
+                               {renderStat("Reação", "def_reacao")}
+                          </div>
+                      )}
 
                       {/* Construindo */}
-                      <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Construindo</h4>
-                           <StatSlider label="Qual. Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
-                           <StatSlider label="Visão" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
-                           <StatSlider label="Apoios" value={currentStats.const_apoios} onChange={v => setCurrentStats({...currentStats, const_apoios: v})} />
-                           <StatSlider label="Mobilidade" value={currentStats.const_mobilidade} onChange={v => setCurrentStats({...currentStats, const_mobilidade: v})} />
-                           <StatSlider label="Circulação" value={currentStats.const_circulacao} onChange={v => setCurrentStats({...currentStats, const_circulacao: v})} />
-                           <StatSlider label="Quebra Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
-                           <StatSlider label="Decisão" value={currentStats.const_tomada_decisao} onChange={v => setCurrentStats({...currentStats, const_tomada_decisao: v})} />
-                      </div>
+                      {shouldShowSection(['const_qualidade_passe', 'const_visao', 'const_apoios', 'const_mobilidade', 'const_circulacao', 'const_quebra_linhas', 'const_tomada_decisao']) && (
+                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
+                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Construindo</h4>
+                               {renderStat("Qual. Passe", "const_qualidade_passe")}
+                               {renderStat("Visão", "const_visao")}
+                               {renderStat("Apoios", "const_apoios")}
+                               {renderStat("Mobilidade", "const_mobilidade")}
+                               {renderStat("Circulação", "const_circulacao")}
+                               {renderStat("Quebra Linhas", "const_quebra_linhas")}
+                               {renderStat("Decisão", "const_tomada_decisao")}
+                          </div>
+                      )}
 
                       {/* Último Terço */}
-                      <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Último Terço</h4>
-                           <StatSlider label="Movimentação" value={currentStats.ult_movimentacao} onChange={v => setCurrentStats({...currentStats, ult_movimentacao: v})} />
-                           <StatSlider label="Atq Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
-                           <StatSlider label="1v1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
-                           <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
-                           <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
-                           <StatSlider label="Ritmo" value={currentStats.ult_ritmo} onChange={v => setCurrentStats({...currentStats, ult_ritmo: v})} />
-                           <StatSlider label="Bolas Paradas" value={currentStats.ult_bolas_paradas} onChange={v => setCurrentStats({...currentStats, ult_bolas_paradas: v})} />
-                      </div>
+                      {shouldShowSection(['ult_movimentacao', 'ult_ataque_espaco', 'ult_1v1', 'ult_ultimo_passe', 'ult_finalizacao_eficiente', 'ult_ritmo', 'ult_bolas_paradas']) && (
+                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
+                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Último Terço</h4>
+                               {renderStat("Movimentação", "ult_movimentacao")}
+                               {renderStat("Atq Espaço", "ult_ataque_espaco")}
+                               {renderStat("1v1", "ult_1v1")}
+                               {renderStat("Último Passe", "ult_ultimo_passe")}
+                               {renderStat("Finalização", "ult_finalizacao_eficiente")}
+                               {renderStat("Ritmo", "ult_ritmo")}
+                               {renderStat("Bolas Paradas", "ult_bolas_paradas")}
+                          </div>
+                      )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Technical */}
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                           <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">Fundamentos</h4>
-                           <StatSlider label="Controle" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
-                           <StatSlider label="Condução" value={currentStats.conducao} onChange={v => setCurrentStats({...currentStats, conducao: v})} />
-                           <StatSlider label="Passe" value={currentStats.passe} onChange={v => setCurrentStats({...currentStats, passe: v})} />
-                           <StatSlider label="Recepção" value={currentStats.recepcao} onChange={v => setCurrentStats({...currentStats, recepcao: v})} />
-                           <StatSlider label="Drible" value={currentStats.drible} onChange={v => setCurrentStats({...currentStats, drible: v})} />
-                           <StatSlider label="Finalização" value={currentStats.finalizacao} onChange={v => setCurrentStats({...currentStats, finalizacao: v})} />
-                           <StatSlider label="Cruzamento" value={currentStats.cruzamento} onChange={v => setCurrentStats({...currentStats, cruzamento: v})} />
-                           <StatSlider label="Desarme" value={currentStats.desarme} onChange={v => setCurrentStats({...currentStats, desarme: v})} />
-                           <StatSlider label="Intercept." value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
-                      </div>
+                      {shouldShowSection(['controle_bola', 'conducao', 'passe', 'recepcao', 'drible', 'finalizacao', 'cruzamento', 'desarme', 'interceptacao']) && (
+                          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 h-fit">
+                               <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">Fundamentos</h4>
+                               {renderStat("Controle", "controle_bola")}
+                               {renderStat("Condução", "conducao")}
+                               {renderStat("Passe", "passe")}
+                               {renderStat("Recepção", "recepcao")}
+                               {renderStat("Drible", "drible")}
+                               {renderStat("Finalização", "finalizacao")}
+                               {renderStat("Cruzamento", "cruzamento")}
+                               {renderStat("Desarme", "desarme")}
+                               {renderStat("Intercept.", "interceptacao")}
+                          </div>
+                      )}
 
                       {/* Physical */}
-                      <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                           <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">Físico</h4>
-                           <StatSlider label="Velocidade" value={currentStats.velocidade} onChange={v => setCurrentStats({...currentStats, velocidade: v})} />
-                           <StatSlider label="Agilidade" value={currentStats.agilidade} onChange={v => setCurrentStats({...currentStats, agilidade: v})} />
-                           <StatSlider label="Resistência" value={currentStats.resistencia} onChange={v => setCurrentStats({...currentStats, resistencia: v})} />
-                           <StatSlider label="Força" value={currentStats.forca} onChange={v => setCurrentStats({...currentStats, forca: v})} />
-                           <StatSlider label="Coordenação" value={currentStats.coordenacao} onChange={v => setCurrentStats({...currentStats, coordenacao: v})} />
-                           <StatSlider label="Mobilidade" value={currentStats.mobilidade} onChange={v => setCurrentStats({...currentStats, mobilidade: v})} />
-                           <StatSlider label="Estabilidade" value={currentStats.estabilidade} onChange={v => setCurrentStats({...currentStats, estabilidade: v})} />
-                      </div>
+                      {shouldShowSection(['velocidade', 'agilidade', 'resistencia', 'forca', 'coordenacao', 'mobilidade', 'estabilidade']) && (
+                          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 h-fit">
+                               <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">Físico</h4>
+                               {renderStat("Velocidade", "velocidade")}
+                               {renderStat("Agilidade", "agilidade")}
+                               {renderStat("Resistência", "resistencia")}
+                               {renderStat("Força", "forca")}
+                               {renderStat("Coordenação", "coordenacao")}
+                               {renderStat("Mobilidade", "mobilidade")}
+                               {renderStat("Estabilidade", "estabilidade")}
+                          </div>
+                      )}
                   </div>
 
                   <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">

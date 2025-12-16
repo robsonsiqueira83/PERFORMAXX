@@ -490,7 +490,7 @@ const AthleteProfile: React.FC = () => {
       });
 
       return (
-          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-[300px] flex flex-col">
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-full flex flex-col min-h-[300px]">
               <div className="flex justify-between items-center mb-4 shrink-0">
                   <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">{calendarMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
                   <div className="flex gap-2">
@@ -700,9 +700,9 @@ const AthleteProfile: React.FC = () => {
 
       {/* --- EVOLUTION CHART & CALENDAR --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
-              <div className="h-[300px]">
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full min-h-[350px]">
+              <h3 className="font-bold text-gray-800 mb-4 shrink-0">Evolução do Score Total</h3>
+              <div className="flex-1 min-h-0">
                   {historyData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={historyData}>
@@ -717,7 +717,7 @@ const AthleteProfile: React.FC = () => {
               </div>
           </div>
           
-          <div className="flex flex-col">
+          <div className="h-full">
               {renderActivityCalendar()}
           </div>
       </div>
@@ -759,7 +759,6 @@ const AthleteProfile: React.FC = () => {
       {/* --- MODALS --- */}
       
       {/* REPLAY MODAL */}
-      {/* ... (Existing modals remain unchanged) ... */}
       {showReplayModal && replayData && (
           <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">

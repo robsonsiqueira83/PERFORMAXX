@@ -12,7 +12,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, PlayCircle, PauseCircle, X } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 import PublicHeader from '../components/PublicHeader';
 
@@ -35,6 +35,13 @@ const PublicAthleteProfile: React.FC = () => {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const calendarRef = useRef<HTMLDivElement>(null);
+
+  // Replay Modal State
+  const [showReplayModal, setShowReplayModal] = useState(false);
+  const [replayData, setReplayData] = useState<any>(null);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [isReplaying, setIsReplaying] = useState(false);
+  const replayTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
      const load = async () => {
@@ -70,6 +77,25 @@ const PublicAthleteProfile: React.FC = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [calendarRef]);
+
+  // REPLAY LOGIC
+  useEffect(() => {
+      if (isReplaying && replayData && replayData.events) {
+          replayTimerRef.current = window.setInterval(() => {
+              setReplayIndex(prev => {
+                  const next = prev + 1;
+                  if (next >= replayData.events.length) {
+                      setIsReplaying(false);
+                      return prev;
+                  }
+                  return next;
+              });
+          }, 2000); // 2 seconds per event step
+      } else {
+          if (replayTimerRef.current) clearInterval(replayTimerRef.current);
+      }
+      return () => { if (replayTimerRef.current) clearInterval(replayTimerRef.current); };
+  }, [isReplaying, replayData]);
 
   // Full History Data
   const historyData = useMemo(() => {
@@ -291,6 +317,24 @@ const PublicAthleteProfile: React.FC = () => {
       }
   };
 
+  const handleHistoryItemClick = (item: any) => {
+      if (item.isRealTime && item.entry.notes) {
+          try {
+              const parsed = JSON.parse(item.entry.notes);
+              if (parsed.type === 'REAL_TIME_LOG' && parsed.events) {
+                  setReplayData(parsed);
+                  setReplayIndex(0);
+                  setIsReplaying(false);
+                  setShowReplayModal(true);
+                  return;
+              }
+          } catch(e) {
+              // fallback to regular modal
+          }
+      }
+      setViewingEntry(item);
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-10 text-center text-gray-500">Atleta não encontrado.</div>;
 
@@ -315,7 +359,7 @@ const PublicAthleteProfile: React.FC = () => {
       });
 
       return (
-          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-[300px] flex flex-col">
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-auto min-h-[300px] flex flex-col">
               <div className="flex justify-between items-center mb-4 shrink-0">
                   <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">{calendarMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
                   <div className="flex gap-2">
@@ -611,7 +655,7 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
             <div className="divide-y divide-gray-100">
                 {historyData.map((item) => (
-                    <div key={item!.id} onClick={() => setViewingEntry(item)} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div key={item!.id} onClick={() => handleHistoryItemClick(item)} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-3">
                                 <span className="font-bold text-gray-800">{item!.date}</span>
@@ -624,8 +668,95 @@ const PublicAthleteProfile: React.FC = () => {
             </div>
         </div>
 
-        {/* View Detail Modal */}
-        {viewingEntry && (
+        {/* REPLAY MODAL */}
+        {showReplayModal && replayData && (
+          <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
+                  <div className="p-4 bg-gray-900 text-white flex justify-between items-center shrink-0">
+                      <div>
+                          <h3 className="font-bold flex items-center gap-2"><PlayCircle size={18} /> Replay da Sessão</h3>
+                          <p className="text-xs text-gray-400">{new Date(replayData.startTime).toLocaleString()} • {replayData.events.length} ações</p>
+                      </div>
+                      <button onClick={() => setShowReplayModal(false)}><X className="text-gray-400 hover:text-white" /></button>
+                  </div>
+                  
+                  {/* FIELD AREA */}
+                  <div className="relative aspect-[16/9] bg-green-600 border-b-4 border-green-800 shrink-0">
+                      {/* Field Background (Static Lines) */}
+                      <div className="absolute inset-0 pointer-events-none opacity-50">
+                          <div className="absolute inset-4 border-2 border-white rounded-sm"></div>
+                          <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white"></div>
+                          <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+                      </div>
+
+                      {/* Animated Marker */}
+                      {replayData.events[replayIndex] && (
+                          <div 
+                            className="absolute w-6 h-6 bg-yellow-400 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-10"
+                            style={{ left: `${replayData.events[replayIndex].location.x}%`, top: `${replayData.events[replayIndex].location.y}%` }}
+                          >
+                              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-mono">
+                                  {replayData.events[replayIndex].timestamp}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* DETAILS AREA (Below Field) */}
+                  <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+                      {replayData.events[replayIndex] ? (
+                          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm animate-fade-in">
+                              <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                                  <div className="flex items-center gap-2">
+                                      <span className={`px-2 py-1 rounded text-xs font-bold text-white
+                                          ${replayData.events[replayIndex].zone === 'DEF' ? 'bg-purple-600' : replayData.events[replayIndex].zone === 'MID' ? 'bg-blue-600' : 'bg-orange-600'}
+                                      `}>
+                                          {replayData.events[replayIndex].zone === 'DEF' ? 'DEFESA' : replayData.events[replayIndex].zone === 'MID' ? 'MEIO' : 'ATAQUE'}
+                                      </span>
+                                      <span className="text-gray-400 text-xs font-bold uppercase">{replayData.events[replayIndex].period}º Tempo</span>
+                                  </div>
+                                  <span className="text-blue-600 font-bold text-sm">Ação {replayIndex + 1} de {replayData.events.length}</span>
+                              </div>
+                              
+                              <div className="mb-4">
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Observação</h4>
+                                  <p className="text-gray-800 text-sm italic bg-gray-50 p-2 rounded border border-gray-100">
+                                      "{replayData.events[replayIndex].note || 'Sem observações registradas.'}"
+                                  </p>
+                              </div>
+
+                              <div>
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Indicadores Avaliados</h4>
+                                  <div className="grid grid-cols-2 gap-2">
+                                      {Object.entries(replayData.events[replayIndex].stats).map(([k, v]: any) => (
+                                          v > 0 && (
+                                              <div key={k} className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded border border-gray-100">
+                                                  <span className="text-xs text-gray-600 font-medium capitalize">{k.replace(/_/g, ' ')}</span>
+                                                  <span className={`text-sm font-bold ${v>=8?'text-green-600':v<4?'text-red-600':'text-gray-700'}`}>{v}</span>
+                                              </div>
+                                          )
+                                      ))}
+                                  </div>
+                              </div>
+                          </div>
+                      ) : (
+                          <div className="text-center text-gray-400 py-10">Carregando dados da ação...</div>
+                      )}
+                  </div>
+
+                  <div className="p-4 bg-white border-t border-gray-200 flex justify-center gap-4 shrink-0">
+                      <button onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))} className="p-3 hover:bg-gray-100 rounded-full transition-colors text-gray-600"><ChevronLeft size={24}/></button>
+                      <button onClick={() => setIsReplaying(!isReplaying)} className="p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform active:scale-95">
+                          {isReplaying ? <PauseCircle size={28} /> : <PlayCircle size={28} />}
+                      </button>
+                      <button onClick={() => setReplayIndex(Math.min(replayData.events.length - 1, replayIndex + 1))} className="p-3 hover:bg-gray-100 rounded-full transition-colors text-gray-600"><ChevronRight size={24}/></button>
+                  </div>
+              </div>
+          </div>
+        )}
+
+        {/* View Detail Modal (Fallback) */}
+        {viewingEntry && !showReplayModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto relative animate-fade-in">
                     <button onClick={() => setViewingEntry(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">X</button>
