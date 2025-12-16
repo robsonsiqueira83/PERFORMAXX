@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
 import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint } from '../types';
-import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag } from 'lucide-react';
+import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag, Mic } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -42,7 +42,11 @@ const RealTimeEvaluation: React.FC = () => {
   
   // Custom Modal States
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   
+  // Voice Recognition State
+  const [isListening, setIsListening] = useState(false);
+
   // Temp Data for Current Action
   const [fieldClick, setFieldClick] = useState<{x: number, y: number} | null>(null);
   const [zone, setZone] = useState<'DEF' | 'MID' | 'ATT' | null>(null);
@@ -125,6 +129,42 @@ const RealTimeEvaluation: React.FC = () => {
   };
 
   const btnState = getButtonLabel();
+
+  // Voice Input Logic
+  const handleVoiceInput = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (!SpeechRecognition) {
+          alert("Seu navegador não suporta reconhecimento de voz.");
+          return;
+      }
+
+      if (isListening) return; // Already active
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      setIsListening(true);
+
+      recognition.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setCurrentNotes(prev => (prev ? `${prev} ${transcript}` : transcript));
+          setIsListening(false);
+      };
+
+      recognition.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsListening(false);
+      };
+
+      recognition.onend = () => {
+          setIsListening(false);
+      };
+
+      recognition.start();
+  };
 
   // Step 1: Capture Time
   const handleInsertAction = () => {
@@ -266,9 +306,8 @@ const RealTimeEvaluation: React.FC = () => {
   };
 
   const handleAbort = () => {
-      if (window.confirm('Tem certeza que deseja cancelar? Todos os dados desta sessão serão perdidos.')) {
-          navigate(`/athletes/${athlete?.id}`);
-      }
+      setShowCancelModal(false);
+      navigate(`/athletes/${athlete?.id}`);
   };
 
   if (loading || !athlete) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -418,18 +457,27 @@ const RealTimeEvaluation: React.FC = () => {
                           </div>
                       )}
 
-                      {/* 2. Observations */}
+                      {/* 2. Observations with Voice Input */}
                       <div>
                           <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
                               Observação (Opcional)
                           </label>
-                          <input 
-                            type="text"
-                            className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            placeholder="Ex: Errou o passe mas recuperou..."
-                            value={currentNotes}
-                            onChange={(e) => setCurrentNotes(e.target.value)}
-                          />
+                          <div className="relative">
+                              <input 
+                                type="text"
+                                className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                placeholder="Ex: Errou o passe mas recuperou..."
+                                value={currentNotes}
+                                onChange={(e) => setCurrentNotes(e.target.value)}
+                              />
+                              <button 
+                                onClick={handleVoiceInput}
+                                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100'}`}
+                                title="Falar anotação"
+                              >
+                                  <Mic size={18} />
+                              </button>
+                          </div>
                       </div>
 
                       {/* 3. Actions */}
@@ -480,7 +528,7 @@ const RealTimeEvaluation: React.FC = () => {
       {/* FIXED FOOTER */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex justify-between items-center md:px-8">
           <button 
-            onClick={handleAbort}
+            onClick={() => setShowCancelModal(true)}
             className="text-red-500 font-bold text-sm flex items-center gap-2 px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
           >
               <XCircle size={20} /> <span className="hidden md:inline">Cancelar Análise</span>
@@ -519,6 +567,35 @@ const RealTimeEvaluation: React.FC = () => {
                         className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg"
                      >
                          Salvar
+                     </button>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* CUSTOM CANCEL MODAL */}
+      {showCancelModal && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertTriangle className="text-red-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Cancelar Análise?</h3>
+                 <p className="text-gray-500 mb-6">
+                     Tem certeza que deseja cancelar? Todos os dados desta sessão <strong>serão perdidos permanentemente</strong>.
+                 </p>
+                 <div className="flex gap-3">
+                     <button 
+                        onClick={() => setShowCancelModal(false)} 
+                        className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200"
+                     >
+                         Voltar
+                     </button>
+                     <button 
+                        onClick={handleAbort} 
+                        className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 shadow-lg"
+                     >
+                         Sim, Cancelar
                      </button>
                  </div>
              </div>

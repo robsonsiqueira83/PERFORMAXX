@@ -486,30 +486,36 @@ const AthleteProfile: React.FC = () => {
       });
 
       return (
-          <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm w-full max-w-[200px]">
-              <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-gray-500 uppercase">{calendarMonth.toLocaleString('pt-BR', { month: 'short' })}</span>
-                  <div className="flex gap-1">
-                      <button onClick={() => changeMonth(-1)} className="p-0.5 hover:bg-gray-100 rounded"><ChevronLeft size={12}/></button>
-                      <button onClick={() => changeMonth(1)} className="p-0.5 hover:bg-gray-100 rounded"><ChevronRight size={12}/></button>
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm w-full h-[300px] flex flex-col">
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                  <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">{calendarMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                  <div className="flex gap-2">
+                      <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded text-gray-600"><ChevronLeft size={16}/></button>
+                      <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded text-gray-600"><ChevronRight size={16}/></button>
                   </div>
               </div>
-              <div className="grid grid-cols-7 gap-1">
-                  {currentMonthDates.map(day => (
-                      <div 
-                        key={day.d} 
-                        className={`h-5 w-5 rounded flex items-center justify-center text-[10px] 
-                            ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold' : 
-                              day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold' : 
-                              'text-gray-300'}`}
-                      >
-                          {day.d}
-                      </div>
-                  ))}
+              <div className="flex-1 flex flex-col justify-center gap-2">
+                  <div className="grid grid-cols-7 gap-1 mb-1">
+                      {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-[10px] text-center font-bold text-gray-400">{d}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                      {Array(firstDay).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+                      {currentMonthDates.map(day => (
+                          <div 
+                            key={day.d} 
+                            className={`aspect-square rounded-lg flex items-center justify-center text-xs transition-colors
+                                ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200' : 
+                                  day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold border border-green-200' : 
+                                  'text-gray-400 hover:bg-gray-50'}`}
+                          >
+                              {day.d}
+                          </div>
+                      ))}
+                  </div>
               </div>
-              <div className="mt-2 flex gap-2 justify-center">
-                  <div className="flex items-center gap-1 text-[9px] text-gray-500"><div className="w-2 h-2 bg-green-100 rounded-full"></div> Atuação</div>
-                  <div className="flex items-center gap-1 text-[9px] text-gray-500"><div className="w-2 h-2 bg-purple-100 rounded-full"></div> Tempo Real</div>
+              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-4 justify-center shrink-0">
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
               </div>
           </div>
       );
