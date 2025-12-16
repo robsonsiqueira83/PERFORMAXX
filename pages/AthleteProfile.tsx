@@ -13,13 +13,12 @@ import {
   getTeams
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-// Added UserRole to imports
-import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint, User, canEditData, canDeleteData, Team, UserRole } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, HeatmapPoint, User, canEditData, canDeleteData, Team, UserRole } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, Eye, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, ArrowRightLeft, AlertTriangle, Clock, Copy, CheckCircle, Search } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -52,7 +51,6 @@ const AthleteProfile: React.FC = () => {
   // Local state for modals
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
-  const [viewingEntry, setViewingEntry] = useState<any | null>(null);
   
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; type: 'athlete' | 'entry' | null; id?: string }>({ isOpen: false, type: null });
@@ -577,7 +575,6 @@ const AthleteProfile: React.FC = () => {
             </Link>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><UserIcon className="text-blue-600"/> Perfil do Atleta</h2>
          </div>
-         {/* ... (Date Filter Select code remains similar) ... */}
          <div className="relative" ref={calendarRef}>
              <select value={selectedPeriod} onChange={handlePeriodChange} className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 shadow-sm focus:outline-none cursor-pointer appearance-none pr-8">
                <option value="all">Todo o Período</option>
@@ -679,6 +676,9 @@ const AthleteProfile: React.FC = () => {
                     <div className="flex flex-col gap-2 w-full sm:w-auto">
                         <button onClick={openNewTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
                         <div className="flex gap-2 w-full">
+                            <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors" title="Análise em Tempo Real">
+                                <Timer size={16} />
+                            </button>
                             <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors flex-1"><Edit size={16} /> Editar</button>
                             {/* STRICT DELETE PERMISSION */}
                             {canDeleteData(currentUser.role) && (
@@ -691,176 +691,430 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* ... (Existing charts and heatmap code remains identical) ... */}
-      {/* --- AGGREGATE HEATMAP & ANALYSIS GRID --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-hidden flex flex-col items-center justify-center">
-              <div className="w-full max-w-xl">
-                  <HeatmapField points={aggregateHeatmapPoints} readOnly={true} label="Mapa de Calor (Posicionamento)" perspective={true} />
-              </div>
+      {/* --- HEATMAP & ANALYSIS --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center">
+             <div className="w-full max-w-xl">
+                 <HeatmapField points={aggregateHeatmapPoints} readOnly={true} label="Mapa de Calor (Geral)" perspective={true} />
+             </div>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-full">
-               <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Análise de Desempenho</h3>
-               {filteredEntries.length > 0 ? (
-                   <div className="flex-1 flex flex-col justify-center gap-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                    <TrendingUp className="text-blue-600" /> Análise de Desempenho
+                </h3>
+                {filteredEntries.length > 0 ? (
+                    <div className="flex-1 flex flex-col justify-center gap-6">
                         <div>
-                            <h4 className="text-sm font-bold text-green-600 uppercase mb-3 border-b border-green-100 pb-1 flex items-center gap-2"><TrendingUp size={16} /> Destaques (Melhores)</h4>
-                            <div className="space-y-3">{performanceAnalysis.best.map((item, idx) => (<div key={idx} className="flex justify-between items-center bg-green-50 px-3 py-2 rounded-lg"><div><span className="font-bold text-gray-800 text-sm">{item.label}</span><span className="text-xs text-gray-500 ml-2">({item.type})</span></div><span className="text-green-700 font-bold">{item.score.toFixed(1)}</span></div>))}</div>
+                            <h4 className="text-sm font-bold text-green-600 uppercase mb-3 border-b border-green-100 pb-1 flex items-center gap-2"><TrendingUp size={16} /> Destaques</h4>
+                            <div className="space-y-3">
+                                {performanceAnalysis.best.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-green-50 px-3 py-2 rounded-lg">
+                                        <div><span className="font-bold text-gray-800 text-sm">{item.label}</span><span className="text-xs text-gray-500 ml-2">({item.type})</span></div>
+                                        <span className="text-green-700 font-bold">{item.score.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                         <div className="w-full border-t border-dashed border-gray-200"></div>
                         <div>
                             <h4 className="text-sm font-bold text-red-500 uppercase mb-3 border-b border-red-100 pb-1 flex items-center gap-2"><TrendingDown size={16} /> Pontos de Atenção</h4>
-                            <div className="space-y-3">{performanceAnalysis.worst.map((item, idx) => (<div key={idx} className="flex justify-between items-center bg-red-50 px-3 py-2 rounded-lg"><div><span className="font-bold text-gray-800 text-sm">{item.label}</span><span className="text-xs text-gray-500 ml-2">({item.type})</span></div><span className="text-red-600 font-bold">{item.score.toFixed(1)}</span></div>))}</div>
+                            <div className="space-y-3">
+                                {performanceAnalysis.worst.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-red-50 px-3 py-2 rounded-lg">
+                                        <div><span className="font-bold text-gray-800 text-sm">{item.label}</span><span className="text-xs text-gray-500 ml-2">({item.type})</span></div>
+                                        <span className="text-red-600 font-bold">{item.score.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                   </div>
-               ) : (
-                   <div className="flex-1 flex items-center justify-center text-gray-400 italic">Sem dados suficientes para análise neste período.</div>
-               )}
+                    </div>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-400 italic">Sem dados suficientes para análise neste período.</div>
+                )}
           </div>
       </div>
 
-      {/* TACTICAL CHARTS ROW */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+      {/* --- RADAR CHARTS --- */}
+      <h3 className="text-xl font-bold text-gray-800 mt-2 mb-4">Atributos Técnicos e Táticos</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
               <div className="h-[250px]">
-                 {currentRadarStats && currentRadarStats.tactical_def ? (
-                   <ResponsiveContainer width="100%" height="100%">
+                  {currentRadarStats && currentRadarStats.tactical_def ? (
+                  <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_def}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                          <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                  </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
               <div className="h-[250px]">
-                 {currentRadarStats && currentRadarStats.tactical_const ? (
-                   <ResponsiveContainer width="100%" height="100%">
+                  {currentRadarStats && currentRadarStats.tactical_const ? (
+                  <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_const}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                          <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                  </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
               <div className="h-[250px]">
-                 {currentRadarStats && currentRadarStats.tactical_ult ? (
-                   <ResponsiveContainer width="100%" height="100%">
+                  {currentRadarStats && currentRadarStats.tactical_ult ? (
+                  <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_ult}>
-                        <PolarGrid /><PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} /><Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} /><RechartsTooltip />
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                          <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                  </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
               </div>
           </div>
       </div>
 
-      {/* TECH/PHYS Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <h3 className="text-xl font-bold text-gray-800 mt-6 mb-4">Fundamentos e Físico</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-blue-700 mb-4">Fundamentos</h3>
+              <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
               <div className="h-[300px]">
-                 {currentRadarStats ? (
-                   <ResponsiveContainer width="100%" height="100%">
+                  {currentRadarStats ? (
+                  <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.technical}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
-                        <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
-                        <RechartsTooltip />
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                          <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                  </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
               </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-orange-700 mb-4">Condição Física</h3>
-               <div className="h-[300px]">
-                 {currentRadarStats ? (
-                   <ResponsiveContainer width="100%" height="100%">
+              <h3 className="font-bold text-orange-700 mb-4">Condição Física (Média)</h3>
+              <div className="h-[300px]">
+                  {currentRadarStats ? (
+                  <ResponsiveContainer width="100%" height="100%">
                       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.physical}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
-                        <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
-                        <RechartsTooltip />
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                          <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
                       </RadarChart>
-                   </ResponsiveContainer>
-                 ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados</div>}
+                  </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
               </div>
           </div>
       </div>
-
-      {/* Evolution Line Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6">
-         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <TrendingUp size={20} className="text-green-600"/>
-            Evolução Score Total
-         </h3>
-         <div className="h-[300px]">
-             {historyData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={historyData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" />
-                        <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" />
-                        <RechartsTooltip />
-                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
-                    </LineChart>
-                </ResponsiveContainer>
-             ) : <div className="h-full flex items-center justify-center text-gray-400">Sem dados históricos para o período selecionado</div>}
-         </div>
+      
+      {/* --- EVOLUTION CHART --- */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+          <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
+          <div className="h-[300px]">
+              {historyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={historyData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" tickMargin={10} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" axisLine={false} tickLine={false} />
+                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                          <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8, fill: '#10b981', stroke: 'white' }} dot={{r: 4, fill: '#10b981'}} />
+                      </LineChart>
+                  </ResponsiveContainer>
+              ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados históricos</div>}
+          </div>
       </div>
 
-      {/* History List */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+      {/* --- HISTORY LIST --- */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
-             <h3 className="font-bold text-gray-800">Histórico de Atuações</h3>
+              <h3 className="font-bold text-gray-800">Histórico de Atuações</h3>
           </div>
           <div className="divide-y divide-gray-100">
               {historyData.map((item) => (
-                  <div key={item!.id} className={`p-4 hover:bg-gray-50 transition-colors ${editingEntryId === item!.id ? 'bg-gray-50' : ''}`}>
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 cursor-pointer" onClick={() => setViewingEntry(item)}>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-bold text-gray-800">{item!.date}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                {currentUser && canEditData(currentUser.role) && (
-                                    <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"><Edit size={16} /></button>
-                                )}
-                                {currentUser && canDeleteData(currentUser.role) && (
-                                    <button onClick={(e) => { e.stopPropagation(); setConfirmModal({isOpen: true, type: 'entry', id: item!.entry.id}); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full"><Trash2 size={16} /></button>
-                                )}
-                                <button onClick={(e) => { e.stopPropagation(); setViewingEntry(item); }} className="p-2 text-gray-400 hover:bg-gray-50 rounded-full"><Eye size={16} /></button>
-                            </div>
-                        </div>
+                  <div key={item!.id} 
+                       onClick={() => openEditTrainingModal(item!.entry, item!.fullDate)}
+                       className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4 group"
+                  >
+                      <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                              <span className="font-bold text-gray-800">{item!.date}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
+                          </div>
+                      </div>
+                      <div className="text-gray-400 group-hover:text-blue-600 transition-colors">
+                          <Edit size={16} />
+                      </div>
                   </div>
               ))}
+              {historyData.length === 0 && <div className="p-8 text-center text-gray-400 italic">Nenhuma atuação registrada no período.</div>}
           </div>
       </div>
-
+      
       {/* --- MODALS --- */}
+      
+      {/* EDIT PROFILE MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+           <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl relative my-8">
+              <div className="flex justify-between items-center mb-6">
+                 <h3 className="text-xl font-bold text-gray-800">Editar Perfil</h3>
+                 <button onClick={() => setShowEditModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
+              </div>
+              
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                 <div className="flex flex-col items-center mb-6">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
+                        {editFormData.photoUrl ? (
+                            <img src={editFormData.photoUrl} className="w-full h-full object-cover" />
+                        ) : (
+                            <UserIcon size={32} className="text-gray-400" />
+                        )}
+                    </div>
+                    <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800">
+                        <Upload size={14} /> Alterar Foto
+                        <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
+                 </div>
+
+                 <div>
+                     <label className="block text-sm font-bold text-gray-700 mb-1">Nome</label>
+                     <input className={inputClass} value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-1">Posição</label>
+                         <select className={inputClass} value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
+                             {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                         </select>
+                     </div>
+                     <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-1">Categoria</label>
+                         <select className={inputClass} value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                         </select>
+                     </div>
+                 </div>
+
+                 <div>
+                     <label className="block text-sm font-bold text-gray-700 mb-1">Data de Nascimento</label>
+                     <input type="date" className={inputClass} value={editFormData.birthDate || ''} onChange={handleEditDateChange} />
+                 </div>
+
+                 <div>
+                     <label className="block text-sm font-bold text-gray-700 mb-1">RG (Identificador)</label>
+                     <input type="text" className={inputClass} value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-1">Responsável</label>
+                         <input className={inputClass} value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
+                     </div>
+                     <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-1">Telefone</label>
+                         <input className={inputClass} value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
+                     </div>
+                 </div>
+
+                 {/* TRANSFER REQUEST SECTION */}
+                 <div className="mt-6 pt-4 border-t border-gray-100">
+                     <button 
+                         type="button" 
+                         onClick={() => setIsTransferring(!isTransferring)}
+                         className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 mb-2"
+                     >
+                         <ArrowRightLeft size={16} /> Solicitar Transferência para outro time
+                     </button>
+                     
+                     {isTransferring && (
+                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                             <label className="block text-xs font-bold text-gray-700 mb-1">ID do Time de Destino</label>
+                             <div className="flex gap-2 mb-2">
+                                 <input 
+                                     type="text" 
+                                     className={inputClass}
+                                     placeholder="Cole o ID do time aqui..."
+                                     value={transferTeamId}
+                                     onChange={(e) => setTransferTeamId(e.target.value)}
+                                 />
+                                 <button 
+                                     type="button"
+                                     onClick={handleVerifyTeam}
+                                     className="bg-gray-200 hover:bg-gray-300 px-3 rounded text-gray-700 font-bold"
+                                 >
+                                     <Search size={18} />
+                                 </button>
+                             </div>
+                             {searchResult && (
+                                 <div className={`text-xs font-bold p-2 rounded mb-2 ${searchResult.found ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                     {searchResult.text}
+                                 </div>
+                             )}
+                             <p className="text-[10px] text-gray-500">
+                                 Ao salvar, uma solicitação será enviada. O atleta só mudará de time após aprovação do destino.
+                             </p>
+                         </div>
+                     )}
+                 </div>
+
+                 <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-2 hover:bg-blue-700 transition-colors shadow-md">
+                     Salvar Alterações
+                 </button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* TRAINING MODAL (NEW / EDIT) */}
+      {showTrainingModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+           <div className="bg-white rounded-xl w-full max-w-4xl p-6 shadow-2xl relative my-8">
+              <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-4 border-b">
+                 <div>
+                     <h3 className="text-xl font-bold text-gray-800">{editingEntryId ? 'Editar Atuação' : 'Nova Atuação'}</h3>
+                     <input type="date" value={trainingDate} onChange={(e) => setTrainingDate(e.target.value)} className="text-sm text-gray-500 border rounded px-2 py-1 mt-1" />
+                 </div>
+                 
+                 <div className="flex gap-2">
+                     {editingEntryId && (
+                         <button 
+                            onClick={() => setConfirmModal({ isOpen: true, type: 'entry', id: editingEntryId })}
+                            className="bg-red-50 text-red-600 px-3 py-1.5 rounded hover:bg-red-100 font-bold flex items-center gap-1"
+                         >
+                             <Trash2 size={16} /> Excluir
+                         </button>
+                     )}
+                     <button onClick={() => setShowTrainingModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
+                 </div>
+              </div>
+              
+              <div className="space-y-8">
+                  {/* Heatmap Input */}
+                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                       <HeatmapField 
+                          points={currentHeatmapPoints} 
+                          onChange={setCurrentHeatmapPoints} 
+                          label="Mapa de Calor (Toque para marcar)" 
+                       />
+                  </div>
+
+                  {/* Stats Sliders */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* Defendendo */}
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Defendendo</h4>
+                           <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
+                           <StatSlider label="Pressão" value={currentStats.def_pressao} onChange={v => setCurrentStats({...currentStats, def_pressao: v})} />
+                           <StatSlider label="Cobertura" value={currentStats.def_cobertura} onChange={v => setCurrentStats({...currentStats, def_cobertura: v})} />
+                           <StatSlider label="Fechamento" value={currentStats.def_fechamento} onChange={v => setCurrentStats({...currentStats, def_fechamento: v})} />
+                           <StatSlider label="Temporização" value={currentStats.def_temporizacao} onChange={v => setCurrentStats({...currentStats, def_temporizacao: v})} />
+                           <StatSlider label="Desarme Tát." value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
+                           <StatSlider label="Reação" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
+                      </div>
+
+                      {/* Construindo */}
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Construindo</h4>
+                           <StatSlider label="Qual. Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
+                           <StatSlider label="Visão" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
+                           <StatSlider label="Apoios" value={currentStats.const_apoios} onChange={v => setCurrentStats({...currentStats, const_apoios: v})} />
+                           <StatSlider label="Mobilidade" value={currentStats.const_mobilidade} onChange={v => setCurrentStats({...currentStats, const_mobilidade: v})} />
+                           <StatSlider label="Circulação" value={currentStats.const_circulacao} onChange={v => setCurrentStats({...currentStats, const_circulacao: v})} />
+                           <StatSlider label="Quebra Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
+                           <StatSlider label="Decisão" value={currentStats.const_tomada_decisao} onChange={v => setCurrentStats({...currentStats, const_tomada_decisao: v})} />
+                      </div>
+
+                      {/* Último Terço */}
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Último Terço</h4>
+                           <StatSlider label="Movimentação" value={currentStats.ult_movimentacao} onChange={v => setCurrentStats({...currentStats, ult_movimentacao: v})} />
+                           <StatSlider label="Atq Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
+                           <StatSlider label="1v1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
+                           <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
+                           <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
+                           <StatSlider label="Ritmo" value={currentStats.ult_ritmo} onChange={v => setCurrentStats({...currentStats, ult_ritmo: v})} />
+                           <StatSlider label="Bolas Paradas" value={currentStats.ult_bolas_paradas} onChange={v => setCurrentStats({...currentStats, ult_bolas_paradas: v})} />
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Technical */}
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                           <h4 className="text-xs uppercase font-bold text-blue-700 mb-3 border-b border-blue-200 pb-1">Fundamentos</h4>
+                           <StatSlider label="Controle" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
+                           <StatSlider label="Condução" value={currentStats.conducao} onChange={v => setCurrentStats({...currentStats, conducao: v})} />
+                           <StatSlider label="Passe" value={currentStats.passe} onChange={v => setCurrentStats({...currentStats, passe: v})} />
+                           <StatSlider label="Recepção" value={currentStats.recepcao} onChange={v => setCurrentStats({...currentStats, recepcao: v})} />
+                           <StatSlider label="Drible" value={currentStats.drible} onChange={v => setCurrentStats({...currentStats, drible: v})} />
+                           <StatSlider label="Finalização" value={currentStats.finalizacao} onChange={v => setCurrentStats({...currentStats, finalizacao: v})} />
+                           <StatSlider label="Cruzamento" value={currentStats.cruzamento} onChange={v => setCurrentStats({...currentStats, cruzamento: v})} />
+                           <StatSlider label="Desarme" value={currentStats.desarme} onChange={v => setCurrentStats({...currentStats, desarme: v})} />
+                           <StatSlider label="Intercept." value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
+                      </div>
+
+                      {/* Physical */}
+                      <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                           <h4 className="text-xs uppercase font-bold text-orange-700 mb-3 border-b border-orange-200 pb-1">Físico</h4>
+                           <StatSlider label="Velocidade" value={currentStats.velocidade} onChange={v => setCurrentStats({...currentStats, velocidade: v})} />
+                           <StatSlider label="Agilidade" value={currentStats.agilidade} onChange={v => setCurrentStats({...currentStats, agilidade: v})} />
+                           <StatSlider label="Resistência" value={currentStats.resistencia} onChange={v => setCurrentStats({...currentStats, resistencia: v})} />
+                           <StatSlider label="Força" value={currentStats.forca} onChange={v => setCurrentStats({...currentStats, forca: v})} />
+                           <StatSlider label="Coordenação" value={currentStats.coordenacao} onChange={v => setCurrentStats({...currentStats, coordenacao: v})} />
+                           <StatSlider label="Mobilidade" value={currentStats.mobilidade} onChange={v => setCurrentStats({...currentStats, mobilidade: v})} />
+                           <StatSlider label="Estabilidade" value={currentStats.estabilidade} onChange={v => setCurrentStats({...currentStats, estabilidade: v})} />
+                      </div>
+                  </div>
+
+                  <div>
+                      <h4 className="text-sm font-bold text-gray-700 mb-2">Observações</h4>
+                      <textarea 
+                        className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-blue-500 h-24"
+                        value={currentNotes}
+                        onChange={(e) => setCurrentNotes(e.target.value)}
+                        placeholder="Notas sobre a atuação..."
+                      ></textarea>
+                  </div>
+
+                  <button 
+                    onClick={handleSaveTraining}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2"
+                  >
+                      <Save size={18} /> Salvar Atuação
+                  </button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* CONFIRMATION MODAL */}
       {confirmModal.isOpen && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <Trash2 className="text-red-600" size={32} />
+                     <AlertTriangle className="text-red-600" size={32} />
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir {confirmModal.type === 'athlete' ? 'Atleta' : 'Atuação'}?</h3>
-                 <p className="text-gray-500 mb-6">
-                    {confirmModal.type === 'athlete' 
-                       ? "Tem certeza que deseja excluir este atleta? Todos os dados serão perdidos." 
-                       : "Deseja excluir esta atuação do histórico do atleta?"}
-                 </p>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">
+                     {confirmModal.type === 'athlete' ? 'Excluir Atleta?' : 'Excluir Atuação?'}
+                 </h3>
+                 <p className="text-gray-500 mb-6">Esta ação não pode ser desfeita.</p>
                  <div className="flex gap-3">
                      <button onClick={() => setConfirmModal({isOpen: false, type: null})} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
                      <button onClick={handleConfirmAction} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
@@ -869,297 +1123,11 @@ const AthleteProfile: React.FC = () => {
          </div>
       )}
 
-      {/* ... (Existing Edit/Training/View Modals remain here, no changes needed to them besides proper closing) ... */}
-      
-      {/* 1. EDIT ATHLETE MODAL (Same as before) */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6 border-b pb-2">
-                <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800"><Edit className="text-blue-500"/> Editar Atleta</h3>
-                <button onClick={() => setShowEditModal(false)}><X size={24} className="text-gray-400 hover:text-red-500" /></button>
-              </div>
-              
-              <form onSubmit={handleUpdateProfile} className="space-y-4">
-                 <div className="flex flex-col items-center mb-4">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                       {editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={32} className="text-gray-400" />}
-                    </div>
-                    <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800">
-                       <Upload size={14} /> Alterar Foto
-                       <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
-                    </label>
-                 </div>
-
-                 {/* TRANSFER TEAM SECTION */}
-                 <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
-                     <div className="flex items-center justify-between">
-                         <div>
-                             <p className="text-xs font-bold text-blue-600 uppercase">Vínculo com Time</p>
-                             <p className="font-bold text-gray-800">{allTeams.find(t => t.id === athlete?.teamId)?.name || 'Desconhecido'}</p>
-                         </div>
-                         {!isTransferring && !athlete?.pendingTransferTeamId ? (
-                             <button 
-                                type="button"
-                                onClick={() => setIsTransferring(true)}
-                                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-colors flex items-center gap-1 font-bold"
-                             >
-                                 <ArrowRightLeft size={12} /> Solicitar Transferência
-                             </button>
-                         ) : (
-                             isTransferring && (
-                                <button 
-                                    type="button"
-                                    onClick={() => {
-                                        setIsTransferring(false);
-                                        setSearchResult(null);
-                                    }}
-                                    className="text-xs text-gray-500 hover:text-gray-700"
-                                >
-                                    Cancelar
-                                </button>
-                             )
-                         )}
-                     </div>
-
-                     {/* Pending Status inside Modal */}
-                     {athlete?.pendingTransferTeamId && !isTransferring && (
-                         <div className="mt-3 bg-yellow-100 text-yellow-800 p-2 rounded text-xs">
-                             <p><strong>Aguardando Aprovação:</strong> O time de destino deve aceitar a transferência para que ela seja concluída.</p>
-                         </div>
-                     )}
-
-                     {isTransferring && (
-                         <div className="mt-3 animate-fade-in">
-                             <label className="block text-xs font-bold text-gray-600 mb-1">ID do Novo Time de Destino</label>
-                             <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    className="flex-1 bg-white border border-blue-300 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Cole o ID do time aqui..."
-                                    value={transferTeamId}
-                                    onChange={(e) => {
-                                        setTransferTeamId(e.target.value);
-                                        setSearchResult(null); // Reset search on change
-                                    }}
-                                />
-                                <button 
-                                    type="button"
-                                    onClick={handleVerifyTeam}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors"
-                                    title="Pesquisar Time"
-                                >
-                                    <Search size={18} />
-                                </button>
-                             </div>
-                             {searchResult && (
-                                 <p className={`text-xs mt-2 font-bold flex items-center gap-1 ${searchResult.found ? 'text-green-600' : 'text-red-500'}`}>
-                                     {searchResult.found ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
-                                     {searchResult.found ? `Time encontrado: ${searchResult.text}` : searchResult.text}
-                                 </p>
-                             )}
-                             <p className="text-[10px] text-orange-600 mt-2 flex items-center gap-1">
-                                 <AlertTriangle size={10} />
-                                 Ao solicitar, o atleta aguardará aprovação no novo time.
-                             </p>
-                         </div>
-                     )}
-                 </div>
-
-                 <div>
-                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
-                   <input required type="text" className={inputClass} value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
-                 </div>
-
-                 <div>
-                   <label className="block text-sm font-semibold text-gray-700 mb-1">RG / Identificador</label>
-                   <input type="text" className={inputClass} value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
-                   <p className="text-[10px] text-gray-500 mt-1">Identificador único do atleta. Se gerado automaticamente, atualize para o RG real.</p>
-                 </div>
-                 
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Data Nasc.</label>
-                      <input type="date" className={inputClass} value={editFormData.birthDate || ''} onChange={handleEditDateChange} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
-                      <select required className={inputClass} value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})} disabled={isTransferring || !!athlete?.pendingTransferTeamId}>
-                         <option value="">Selecione...</option>
-                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    </div>
-                 </div>
-
-                 <div>
-                   <label className="block text-sm font-semibold text-gray-700 mb-1">Posição</label>
-                   <select className={inputClass} value={editFormData.position || ''} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
-                      {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
-                   </select>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                   <div>
-                     <label className="block text-sm font-semibold text-gray-700 mb-1">Responsável</label>
-                     <input type="text" className={inputClass} value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
-                   </div>
-                   <div>
-                     <label className="block text-sm font-semibold text-gray-700 mb-1">Telefone</label>
-                     <input type="text" className={inputClass} value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
-                   </div>
-                 </div>
-
-                 <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-4 hover:bg-blue-700 transition-colors">
-                    Salvar Alterações
-                 </button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {/* 2. TRAINING MODAL ... (rest is same) */}
-      {showTrainingModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-           <div className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6 border-b pb-2 sticky top-0 bg-white z-10">
-                <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-                    <ClipboardList className="text-green-500"/> {editingEntryId ? 'Editar Atuação' : 'Nova Atuação'}
-                </h3>
-                <button onClick={() => setShowTrainingModal(false)}><X size={24} className="text-gray-400 hover:text-red-500" /></button>
-              </div>
-
-              <div className="mb-6">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Data da Atuação</label>
-                  <input type="date" className={inputClass} value={trainingDate} onChange={e => setTrainingDate(e.target.value)} />
-              </div>
-
-              {/* HEATMAP */}
-              <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                   <HeatmapField 
-                      points={currentHeatmapPoints} 
-                      onChange={setCurrentHeatmapPoints} 
-                      label="Mapa de Calor (Toque para marcar)" 
-                   />
-              </div>
-
-              <div className="space-y-8 mb-8">
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                       {/* Defendendo */}
-                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Defendendo</h4>
-                           <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
-                           <StatSlider label="Pressão na bola" value={currentStats.def_pressao} onChange={v => setCurrentStats({...currentStats, def_pressao: v})} />
-                           <StatSlider label="Cobertura" value={currentStats.def_cobertura} onChange={v => setCurrentStats({...currentStats, def_cobertura: v})} />
-                           <StatSlider label="Fechamento linhas" value={currentStats.def_fechamento} onChange={v => setCurrentStats({...currentStats, def_fechamento: v})} />
-                           <StatSlider label="Temporização" value={currentStats.def_temporizacao} onChange={v => setCurrentStats({...currentStats, def_temporizacao: v})} />
-                           <StatSlider label="Desarme tempo certo" value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
-                           <StatSlider label="Reação pós-perda" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
-                       </div>
-                       {/* Construindo */}
-                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Construindo</h4>
-                           <StatSlider label="Qualidade Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
-                           <StatSlider label="Visão de Jogo" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
-                           <StatSlider label="Apoios/Linhas" value={currentStats.const_apoios} onChange={v => setCurrentStats({...currentStats, const_apoios: v})} />
-                           <StatSlider label="Mobilidade receber" value={currentStats.const_mobilidade} onChange={v => setCurrentStats({...currentStats, const_mobilidade: v})} />
-                           <StatSlider label="Circulação bola" value={currentStats.const_circulacao} onChange={v => setCurrentStats({...currentStats, const_circulacao: v})} />
-                           <StatSlider label="Quebra de linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
-                           <StatSlider label="Decisão sob pressão" value={currentStats.const_tomada_decisao} onChange={v => setCurrentStats({...currentStats, const_tomada_decisao: v})} />
-                       </div>
-                       {/* Último Terço */}
-                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                           <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Tático: Último Terço</h4>
-                           <StatSlider label="Mov. sem bola" value={currentStats.ult_movimentacao} onChange={v => setCurrentStats({...currentStats, ult_movimentacao: v})} />
-                           <StatSlider label="Ataque ao espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
-                           <StatSlider label="Capacidade 1x1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
-                           <StatSlider label="Último passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
-                           <StatSlider label="Finalização efic." value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
-                           <StatSlider label="Ritmo decisão" value={currentStats.ult_ritmo} onChange={v => setCurrentStats({...currentStats, ult_ritmo: v})} />
-                           <StatSlider label="Bolas paradas" value={currentStats.ult_bolas_paradas} onChange={v => setCurrentStats({...currentStats, ult_bolas_paradas: v})} />
-                       </div>
-                   </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                  {/* Fundamentos */}
-                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                      <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">Fundamentos</h4>
-                      <StatSlider label="Controle de bola" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
-                      <StatSlider label="Condução" value={currentStats.conducao} onChange={v => setCurrentStats({...currentStats, conducao: v})} />
-                      <StatSlider label="Passe" value={currentStats.passe} onChange={v => setCurrentStats({...currentStats, passe: v})} />
-                      <StatSlider label="Recepção orient." value={currentStats.recepcao} onChange={v => setCurrentStats({...currentStats, recepcao: v})} />
-                      <StatSlider label="Drible" value={currentStats.drible} onChange={v => setCurrentStats({...currentStats, drible: v})} />
-                      <StatSlider label="Finalização" value={currentStats.finalizacao} onChange={v => setCurrentStats({...currentStats, finalizacao: v})} />
-                      <StatSlider label="Cruzamento" value={currentStats.cruzamento} onChange={v => setCurrentStats({...currentStats, cruzamento: v})} />
-                      <StatSlider label="Desarme" value={currentStats.desarme} onChange={v => setCurrentStats({...currentStats, desarme: v})} />
-                      <StatSlider label="Interceptação" value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
-                  </div>
-                  {/* Physical */}
-                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                      <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">Condição Física</h4>
-                      <StatSlider label="Velocidade" value={currentStats.velocidade} onChange={v => setCurrentStats({...currentStats, velocidade: v})} />
-                      <StatSlider label="Agilidade" value={currentStats.agilidade} onChange={v => setCurrentStats({...currentStats, agilidade: v})} />
-                      <StatSlider label="Resistência" value={currentStats.resistencia} onChange={v => setCurrentStats({...currentStats, resistencia: v})} />
-                      <StatSlider label="Força/Potência" value={currentStats.forca} onChange={v => setCurrentStats({...currentStats, forca: v})} />
-                      <StatSlider label="Coordenação" value={currentStats.coordenacao} onChange={v => setCurrentStats({...currentStats, coordenacao: v})} />
-                      <StatSlider label="Mobilidade" value={currentStats.mobilidade} onChange={v => setCurrentStats({...currentStats, mobilidade: v})} />
-                      <StatSlider label="Estabilidade Core" value={currentStats.estabilidade} onChange={v => setCurrentStats({...currentStats, estabilidade: v})} />
-                  </div>
-              </div>
-
-              <div className="mt-8">
-                  <h4 className="text-sm uppercase font-bold text-gray-500 mb-2 flex items-center gap-2"><FileText size={16} /> Observações</h4>
-                  <textarea 
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-blue-500 h-24"
-                    value={currentNotes}
-                    onChange={(e) => setCurrentNotes(e.target.value)}
-                  ></textarea>
-              </div>
-
-              <div className="mt-8 flex justify-end">
-                  <button onClick={handleSaveTraining} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl shadow-lg transform active:scale-95 transition-all flex items-center gap-2 text-lg">
-                      <Save size={24} /> Salvar
-                  </button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* 3. VIEW DETAILS MODAL (Same as before) */}
-      {viewingEntry && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto relative shadow-2xl">
-                    <button onClick={() => setViewingEntry(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">X</button>
-                    <div className="flex items-center gap-3 mb-6 border-b pb-4">
-                        <div>
-                            <h3 className="font-bold text-xl text-gray-800">Detalhes da Atuação</h3>
-                            <p className="text-sm text-gray-500">{viewingEntry.date}</p>
-                        </div>
-                    </div>
-                    {viewingEntry.heatmapPoints?.length > 0 && <div className="mb-6"><HeatmapField points={viewingEntry.heatmapPoints} readOnly={true} label="Posicionamento" /></div>}
-                    {viewingEntry.entry.notes && <div className="bg-yellow-50 p-4 mb-6 rounded"><p className="text-sm italic text-gray-700">{viewingEntry.entry.notes}</p></div>}
-                    
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                         <div>
-                             <h4 className="font-bold text-blue-500 mb-2 border-b">Fundamentos</h4>
-                             {Object.entries(viewingEntry.technical).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
-                         </div>
-                         <div>
-                             <h4 className="font-bold text-orange-500 mb-2 border-b">Físico</h4>
-                             {Object.entries(viewingEntry.physical).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
-                         </div>
-                    </div>
-                    {viewingEntry.tactical && (
-                      <div className="mt-4">
-                         <h4 className="font-bold text-purple-500 mb-2 border-b text-xs">Tático (Resumo)</h4>
-                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            {Object.entries(viewingEntry.tactical).slice(0,10).map(([k,v]:any)=><div key={k} className="flex justify-between capitalize border-b border-gray-100 py-1"><span>{k.replace('def_','').replace('const_','').replace('ult_','').replace(/_/g,' ')}</span><span className="font-bold">{v}</span></div>)}
-                            <div className="col-span-2 text-center text-gray-400 italic mt-2">...ver gráfico completo no perfil</div>
-                         </div>
-                      </div>
-                    )}
-                </div>
-            </div>
+      {/* COPY RG FEEDBACK */}
+      {copyFeedback && (
+         <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in flex items-center gap-2 font-bold z-50">
+             <CheckCircle size={18} /> RG Copiado!
+         </div>
       )}
 
     </div>
