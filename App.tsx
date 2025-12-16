@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import AthletesList from './pages/AthletesList';
 import AthleteProfile from './pages/AthleteProfile';
+import AthleteEvaluation from './pages/AthleteEvaluation'; // New Page
 import Training from './pages/Training';
 import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
@@ -178,7 +179,12 @@ const App: React.FC = () => {
             ) : <Navigate to={user ? "/" : "/login"} />
         } />
 
-        {/* APP ROUTES */}
+        {/* REAL TIME EVALUATION (NO LAYOUT) */}
+        {user && (
+            <Route path="/athletes/:id/realtime" element={<RealTimeEvaluation />} />
+        )}
+
+        {/* APP ROUTES (WITH LAYOUT) */}
         <Route path="*" element={
            !user ? (
              <Navigate to="/login" />
@@ -196,7 +202,11 @@ const App: React.FC = () => {
                   <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
-                  <Route path="/athletes/:id/realtime" element={<RealTimeEvaluation />} />
+                  
+                  {/* Evaluation Page Routes (New/Edit) */}
+                  <Route path="/athletes/:id/evaluation" element={<AthleteEvaluation />} />
+                  <Route path="/athletes/:id/evaluation/:entryId" element={<AthleteEvaluation />} />
+
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
                   
