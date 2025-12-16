@@ -2,9 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
 import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint } from '../types';
-import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
+
+// Interface for a single event in the timeline
+interface GameEvent {
+    timestamp: string; // "05:30"
+    seconds: number;   // 330
+    zone: 'DEF' | 'MID' | 'ATT';
+    location: { x: number; y: number };
+    stats: any; // The specific stats modified in this event
+    note: string;
+}
 
 const RealTimeEvaluation: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,30 +26,32 @@ const RealTimeEvaluation: React.FC = () => {
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const [startTime, setStartTime] = useState<string | null>(null);
 
-  // Evaluation Flow State
-  // 0: Idle/Running, 1: Action Timestamp Captured (Waiting for Field Click), 2: Zone Selected (Form Open)
-  const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [capturedTime, setCapturedTime] = useState<string>('');
+  // Data Collection State
+  const [eventsLog, setEventsLog] = useState<GameEvent[]>([]);
   
-  // Field Data
+  // Interaction State
+  const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: Pick Location, 2: Rate Stats
+  const [capturedTime, setCapturedTime] = useState<string>('');
+  const [capturedSeconds, setCapturedSeconds] = useState<number>(0);
+  
+  // Temp Data for Current Action
   const [fieldClick, setFieldClick] = useState<{x: number, y: number} | null>(null);
   const [zone, setZone] = useState<'DEF' | 'MID' | 'ATT' | null>(null);
-
-  // Form Data
   const [currentNotes, setCurrentNotes] = useState('');
-  const [currentStats, setCurrentStats] = useState({
-    // Condição Física (Optional here, mostly focusing on Tactical/Tech)
-    velocidade: 0, agilidade: 0, resistencia: 0, forca: 0, coordenacao: 0, mobilidade: 0, estabilidade: 0,
-    // Fundamentos
-    controle_bola: 0, conducao: 0, passe: 0, recepcao: 0, drible: 0, finalizacao: 0, cruzamento: 0, desarme: 0, interceptacao: 0,
-    // Tático - Defendendo
-    def_posicionamento: 0, def_pressao: 0, def_cobertura: 0, def_fechamento: 0, def_temporizacao: 0, def_desarme_tatico: 0, def_reacao: 0,
-    // Tático - Construindo
-    const_qualidade_passe: 0, const_visao: 0, const_apoios: 0, const_mobilidade: 0, const_circulacao: 0, const_quebra_linhas: 0, const_tomada_decisao: 0,
-    // Tático - Último Terço
-    ult_movimentacao: 0, ult_ataque_espaco: 0, ult_1v1: 0, ult_ultimo_passe: 0, ult_finalizacao_eficiente: 0, ult_ritmo: 0, ult_bolas_paradas: 0
-  });
+  const [currentStats, setCurrentStats] = useState(getEmptyStats());
+
+  function getEmptyStats() {
+      return {
+        // Init all to 0 (meaning "not rated" for this specific action)
+        velocidade: 0, agilidade: 0, resistencia: 0, forca: 0, coordenacao: 0, mobilidade: 0, estabilidade: 0,
+        controle_bola: 0, conducao: 0, passe: 0, recepcao: 0, drible: 0, finalizacao: 0, cruzamento: 0, desarme: 0, interceptacao: 0,
+        def_posicionamento: 0, def_pressao: 0, def_cobertura: 0, def_fechamento: 0, def_temporizacao: 0, def_desarme_tatico: 0, def_reacao: 0,
+        const_qualidade_passe: 0, const_visao: 0, const_apoios: 0, const_mobilidade: 0, const_circulacao: 0, const_quebra_linhas: 0, const_tomada_decisao: 0,
+        ult_movimentacao: 0, ult_ataque_espaco: 0, ult_1v1: 0, ult_ultimo_passe: 0, ult_finalizacao_eficiente: 0, ult_ritmo: 0, ult_bolas_paradas: 0
+      };
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -54,11 +66,12 @@ const RealTimeEvaluation: React.FC = () => {
   // Timer Logic
   useEffect(() => {
     if (isRunning) {
+      if (!startTime) setStartTime(new Date().toISOString()); // Capture start Date/Time for DB
+      
       timerRef.current = window.setInterval(() => {
         setTimer((prev) => prev + 1);
       }, 1000);
       
-      // Request Wake Lock
       if ('wakeLock' in navigator) {
           navigator.wakeLock.request('screen').catch(err => console.log(err));
       }
@@ -80,9 +93,10 @@ const RealTimeEvaluation: React.FC = () => {
 
   // Step 1: Capture Time
   const handleInsertAction = () => {
+    if (!isRunning && timer === 0) return;
     setCapturedTime(formatTime(timer));
+    setCapturedSeconds(timer);
     setStep(1);
-    // Do not stop timer, game continues
   };
 
   // Step 2: Field Click
@@ -95,8 +109,7 @@ const RealTimeEvaluation: React.FC = () => {
 
     setFieldClick({ x, y });
 
-    // Determine Zone (0-33: Def, 33-66: Mid, 66-100: Att)
-    // Assuming Left is Defense, Right is Attack
+    // Determine Zone
     if (x < 33.33) setZone('DEF');
     else if (x < 66.66) setZone('MID');
     else setZone('ATT');
@@ -104,137 +117,190 @@ const RealTimeEvaluation: React.FC = () => {
     setStep(2);
   };
 
-  // Step 3: Save Action
-  const handleSaveAction = async () => {
-    if (!athlete) return;
+  // Step 3: Confirm Action (Push to Log)
+  const handleConfirmAction = () => {
+      if (!zone || !fieldClick) return;
 
-    // 1. Find or Create Session for Today
-    const today = new Date().toISOString().split('T')[0];
-    const sessions = await getTrainingSessions();
-    let sessionId = sessions.find(s => s.teamId === athlete.teamId && s.date === today && s.categoryId === athlete.categoryId)?.id;
+      const newEvent: GameEvent = {
+          timestamp: capturedTime,
+          seconds: capturedSeconds,
+          zone: zone,
+          location: fieldClick,
+          stats: { ...currentStats }, // Copy values
+          note: currentNotes
+      };
 
-    if (!sessionId) {
-        sessionId = uuidv4();
-        await saveTrainingSession({
-            id: sessionId,
-            teamId: athlete.teamId,
-            categoryId: athlete.categoryId,
-            date: today,
-            description: 'Análise em Tempo Real'
-        });
-    }
+      setEventsLog(prev => [...prev, newEvent]);
 
-    // 2. Prepare Entry Data
-    // We only save the stats that were populated (non-zero). 
-    // Ideally, "Real-time" should append to a single session entry or create granular entries. 
-    // Given the constraints, we create a discrete entry representing this action event.
-    
-    // Notes auto-format
-    const timestampNote = `[${capturedTime}] Ação em ${zone}: ${currentNotes}`;
-
-    const entry: TrainingEntry = {
-        id: uuidv4(),
-        sessionId,
-        athleteId: athlete.id,
-        technical: {
-            controle_bola: currentStats.controle_bola, conducao: currentStats.conducao, passe: currentStats.passe,
-            recepcao: currentStats.recepcao, drible: currentStats.drible, finalizacao: currentStats.finalizacao,
-            cruzamento: currentStats.cruzamento, desarme: currentStats.desarme, interceptacao: currentStats.interceptacao
-        },
-        physical: {
-            velocidade: currentStats.velocidade, agilidade: currentStats.agilidade, resistencia: currentStats.resistencia,
-            forca: currentStats.forca, coordenacao: currentStats.coordenacao, mobilidade: currentStats.mobilidade, estabilidade: currentStats.estabilidade
-        },
-        tactical: {
-            def_posicionamento: currentStats.def_posicionamento, def_pressao: currentStats.def_pressao, def_cobertura: currentStats.def_cobertura,
-            def_fechamento: currentStats.def_fechamento, def_temporizacao: currentStats.def_temporizacao, def_desarme_tatico: currentStats.def_desarme_tatico,
-            def_reacao: currentStats.def_reacao,
-            const_qualidade_passe: currentStats.const_qualidade_passe, const_visao: currentStats.const_visao, const_apoios: currentStats.const_apoios,
-            const_mobilidade: currentStats.const_mobilidade, const_circulacao: currentStats.const_circulacao, const_quebra_linhas: currentStats.const_quebra_linhas,
-            const_tomada_decisao: currentStats.const_tomada_decisao,
-            ult_movimentacao: currentStats.ult_movimentacao, ult_ataque_espaco: currentStats.ult_ataque_espaco, ult_1v1: currentStats.ult_1v1,
-            ult_ultimo_passe: currentStats.ult_ultimo_passe, ult_finalizacao_eficiente: currentStats.ult_finalizacao_eficiente,
-            ult_ritmo: currentStats.ult_ritmo, ult_bolas_paradas: currentStats.ult_bolas_paradas
-        },
-        heatmapPoints: fieldClick ? [{ x: fieldClick.x, y: fieldClick.y }] : [],
-        notes: timestampNote
-    };
-
-    await saveTrainingEntry(entry);
-
-    // 3. Reset for next action (Keep timer running)
-    setStep(0);
-    setFieldClick(null);
-    setZone(null);
-    setCapturedTime('');
-    setCurrentNotes('');
-    // Reset stats to 0 for next entry
-    setCurrentStats(prev => {
-        const reset: any = {};
-        Object.keys(prev).forEach(k => reset[k] = 0);
-        return reset as any;
-    });
+      // Reset UI for next action
+      setStep(0);
+      setFieldClick(null);
+      setZone(null);
+      setCurrentNotes('');
+      setCurrentStats(getEmptyStats());
   };
 
   const handleCancelAction = () => {
       setStep(0);
       setFieldClick(null);
       setZone(null);
-      setCapturedTime('');
+  };
+
+  // --- FINISH SESSION ---
+  const handleFinishSession = async () => {
+      if (!athlete || eventsLog.length === 0) {
+          if (window.confirm("Nenhuma ação registrada. Deseja sair sem salvar?")) {
+              navigate(-1);
+          }
+          return;
+      }
+
+      if (!window.confirm(`Deseja encerrar a análise com ${eventsLog.length} ações registradas?`)) return;
+
+      setLoading(true);
+
+      // 1. Calculate Averages
+      // We need to average only the non-zero stats across all events
+      const finalStats: any = getEmptyStats();
+      const counts: any = getEmptyStats();
+
+      // Initialize counts to 0
+      Object.keys(counts).forEach(k => counts[k] = 0);
+
+      eventsLog.forEach(evt => {
+          Object.keys(evt.stats).forEach(key => {
+              const val = evt.stats[key];
+              if (val > 0) {
+                  finalStats[key] += val;
+                  counts[key]++;
+              }
+          });
+      });
+
+      // Divide by count
+      Object.keys(finalStats).forEach(key => {
+          if (counts[key] > 0) {
+              finalStats[key] = Math.round((finalStats[key] / counts[key]) * 2) / 2; // Round to 0.5
+          } else {
+              finalStats[key] = 5; // Default average if no data points for this stat
+          }
+      });
+
+      // 2. Create Session
+      const sessionDate = startTime ? startTime.split('T')[0] : new Date().toISOString().split('T')[0];
+      const sessionId = uuidv4();
+
+      await saveTrainingSession({
+          id: sessionId,
+          teamId: athlete.teamId,
+          categoryId: athlete.categoryId,
+          date: sessionDate,
+          description: 'Análise em Tempo Real' // This tag is important for the icon
+      });
+
+      // 3. Create Single Entry with Log in Notes
+      const entry: TrainingEntry = {
+          id: uuidv4(),
+          sessionId,
+          athleteId: athlete.id,
+          // Map calculated averages to structure
+          technical: {
+            controle_bola: finalStats.controle_bola, conducao: finalStats.conducao, passe: finalStats.passe,
+            recepcao: finalStats.recepcao, drible: finalStats.drible, finalizacao: finalStats.finalizacao,
+            cruzamento: finalStats.cruzamento, desarme: finalStats.desarme, interceptacao: finalStats.interceptacao
+          },
+          physical: {
+            velocidade: finalStats.velocidade, agilidade: finalStats.agilidade, resistencia: finalStats.resistencia,
+            forca: finalStats.forca, coordenacao: finalStats.coordenacao, mobilidade: finalStats.mobilidade, estabilidade: finalStats.estabilidade
+          },
+          tactical: {
+            def_posicionamento: finalStats.def_posicionamento, def_pressao: finalStats.def_pressao, def_cobertura: finalStats.def_cobertura,
+            def_fechamento: finalStats.def_fechamento, def_temporizacao: finalStats.def_temporizacao, def_desarme_tatico: finalStats.def_desarme_tatico,
+            def_reacao: finalStats.def_reacao,
+            const_qualidade_passe: finalStats.const_qualidade_passe, const_visao: finalStats.const_visao, const_apoios: finalStats.const_apoios,
+            const_mobilidade: finalStats.const_mobilidade, const_circulacao: finalStats.const_circulacao, const_quebra_linhas: finalStats.const_quebra_linhas,
+            const_tomada_decisao: finalStats.const_tomada_decisao,
+            ult_movimentacao: finalStats.ult_movimentacao, ult_ataque_espaco: finalStats.ult_ataque_espaco, ult_1v1: finalStats.ult_1v1,
+            ult_ultimo_passe: finalStats.ult_ultimo_passe, ult_finalizacao_eficiente: finalStats.ult_finalizacao_eficiente,
+            ult_ritmo: finalStats.ult_ritmo, ult_bolas_paradas: finalStats.ult_bolas_paradas
+          },
+          heatmapPoints: eventsLog.map(e => e.location), // All points
+          // STORE THE JSON LOG HERE
+          notes: JSON.stringify({
+              type: 'REAL_TIME_LOG',
+              startTime: startTime,
+              totalEvents: eventsLog.length,
+              events: eventsLog
+          })
+      };
+
+      await saveTrainingEntry(entry);
+      navigate(`/athletes/${athlete.id}`);
+  };
+
+  const handleAbort = () => {
+      if (window.confirm('Tem certeza que deseja cancelar? Todos os dados desta sessão serão perdidos.')) {
+          navigate(-1);
+      }
   };
 
   if (loading || !athlete) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-32">
       
       {/* Header */}
-      <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-20">
+      <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
               <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-blue-600">
                   <ArrowLeft size={24} />
               </button>
               <div>
-                  <h1 className="font-bold text-gray-800 leading-tight">{athlete.name}</h1>
-                  <span className="text-xs text-gray-500 font-mono">Análise Ao Vivo</span>
+                  <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{athlete.name}</h1>
+                  <span className="text-xs text-gray-500 font-mono flex items-center gap-1">
+                      {startTime ? <span className="text-green-600 flex items-center gap-1"><Clock size={10}/> Iniciado</span> : 'Aguardando início'}
+                  </span>
               </div>
           </div>
           
           <div className="flex items-center gap-2">
-              <div className={`font-mono text-xl font-bold px-3 py-1 rounded-lg ${isRunning ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-100 text-gray-500'}`}>
+              <div className={`font-mono text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
                   {formatTime(timer)}
               </div>
               <button 
                 onClick={handleToggleTimer}
-                className={`p-2 rounded-full shadow-sm transition-all ${isRunning ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}
+                className={`p-3 rounded-full shadow-lg transition-all transform active:scale-95 ${isRunning ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-600 text-white hover:bg-green-700'}`}
               >
-                  {isRunning ? <Pause size={20} /> : <Play size={20} />}
+                  {isRunning ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
               </button>
           </div>
       </div>
 
       <div className="max-w-3xl mx-auto p-4 flex flex-col gap-6">
           
-          {/* ACTION BUTTON */}
-          <div className="flex items-center gap-4">
-              <button 
-                onClick={handleInsertAction}
-                disabled={!isRunning && timer === 0}
-                className={`flex-1 py-4 rounded-2xl font-bold text-lg shadow-lg transform transition-all active:scale-95 flex items-center justify-center gap-2
-                    ${step > 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}
-                `}
-              >
-                  <MapPin size={24} /> {step === 0 ? 'REGISTRAR AÇÃO' : 'Ação em andamento...'}
-              </button>
-          </div>
+          {/* MAIN ACTION BUTTON */}
+          {step === 0 && (
+              <div className="flex justify-center">
+                  <button 
+                    onClick={handleInsertAction}
+                    disabled={!isRunning && timer === 0}
+                    className={`
+                        w-full py-6 rounded-2xl font-black text-xl shadow-xl transform transition-all active:scale-95 flex items-center justify-center gap-3 border-b-4
+                        ${(isRunning || timer > 0) ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700' : 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'}
+                    `}
+                  >
+                      <MapPin size={28} /> REGISTRAR AÇÃO
+                  </button>
+              </div>
+          )}
 
           {/* FIELD AREA */}
-          <div className="relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none">
+          <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300 ${step === 1 ? 'ring-4 ring-blue-400 scale-[1.02]' : ''}`}>
               {/* Overlay Prompt */}
               {step === 1 && (
-                  <div className="absolute inset-0 bg-black/40 z-10 flex items-center justify-center pointer-events-none">
-                      <div className="bg-white px-4 py-2 rounded-full shadow-lg text-blue-900 font-bold text-sm animate-bounce">
-                          Toque no campo para localizar
+                  <div className="absolute inset-0 bg-black/20 z-10 flex items-center justify-center pointer-events-none">
+                      <div className="bg-white/90 backdrop-blur-sm px-6 py-3 rounded-full shadow-2xl text-blue-900 font-bold text-lg animate-bounce border border-blue-200">
+                          Toque na posição do atleta
                       </div>
                   </div>
               )}
@@ -256,40 +322,45 @@ const RealTimeEvaluation: React.FC = () => {
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white/40 font-bold text-[10px] uppercase">Construção</div>
                   <div className="absolute bottom-2 right-4 text-white/40 font-bold text-[10px] uppercase">Ataque</div>
 
-                  {/* Marker */}
+                  {/* Marker for Current Action */}
                   {fieldClick && (
                       <div 
-                        className="absolute w-6 h-6 bg-yellow-400 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 z-20 transition-all duration-300 ease-out"
+                        className="absolute w-8 h-8 bg-yellow-400 border-4 border-white rounded-full shadow-xl transform -translate-x-1/2 -translate-y-1/2 z-20 animate-ping-once"
                         style={{ left: `${fieldClick.x}%`, top: `${fieldClick.y}%` }}
                       >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap">
-                              {capturedTime}
-                          </div>
                       </div>
                   )}
+
+                  {/* Ghost Markers for Past Actions */}
+                  {eventsLog.map((evt, idx) => (
+                      <div 
+                        key={idx}
+                        className="absolute w-3 h-3 bg-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-0"
+                        style={{ left: `${evt.location.x}%`, top: `${evt.location.y}%` }}
+                      />
+                  ))}
               </div>
           </div>
 
           {/* DYNAMIC FORM (Step 2) */}
           {step === 2 && zone && (
-              <div className="animate-slide-up bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                  <div className={`p-4 border-b text-white flex justify-between items-center
+              <div className="animate-slide-up bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden relative z-20">
+                  <div className={`p-4 border-b text-white flex justify-between items-center shadow-md
                       ${zone === 'DEF' ? 'bg-purple-600' : zone === 'MID' ? 'bg-blue-600' : 'bg-orange-600'}
                   `}>
                       <div>
-                          <h3 className="font-bold text-lg">
-                              {zone === 'DEF' && 'Ação Defensiva'}
-                              {zone === 'MID' && 'Construção / Meio'}
-                              {zone === 'ATT' && 'Ação Ofensiva / Final'}
+                          <h3 className="font-bold text-lg flex items-center gap-2">
+                              {zone === 'DEF' && '🛡️ Ação Defensiva'}
+                              {zone === 'MID' && '⚙️ Construção / Meio'}
+                              {zone === 'ATT' && '🚀 Ação Ofensiva'}
                           </h3>
-                          <p className="text-xs opacity-80">Preencha os dados da jogada</p>
                       </div>
-                      <div className="font-mono bg-white/20 px-2 py-1 rounded text-sm">{capturedTime}</div>
+                      <div className="font-mono bg-black/20 px-3 py-1 rounded-lg text-sm font-bold border border-white/20">{capturedTime}</div>
                   </div>
 
-                  <div className="p-6 space-y-6">
+                  <div className="p-6 space-y-6 max-h-[50vh] overflow-y-auto">
                       
-                      {/* 1. Zone Specific Stats */}
+                      {/* 1. Zone Specific Stats - Only show 3-4 key stats for speed */}
                       {zone === 'DEF' && (
                           <div className="space-y-4">
                               <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
@@ -319,46 +390,81 @@ const RealTimeEvaluation: React.FC = () => {
 
                       {/* 2. Observations */}
                       <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                              <FileText size={16} /> Observações Rápidas
+                          <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
+                              Observação (Opcional)
                           </label>
-                          <textarea 
-                            className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 text-sm"
-                            placeholder="Detalhes do lance..."
+                          <input 
+                            type="text"
+                            className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Ex: Errou o passe mas recuperou..."
                             value={currentNotes}
                             onChange={(e) => setCurrentNotes(e.target.value)}
-                          ></textarea>
+                          />
                       </div>
 
                       {/* 3. Actions */}
                       <div className="flex gap-3 pt-2">
                           <button 
                             onClick={handleCancelAction}
-                            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50"
+                            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
                           >
                               Cancelar
                           </button>
                           <button 
-                            onClick={handleSaveAction}
-                            className={`flex-[2] py-3 rounded-xl font-bold text-white shadow-md flex items-center justify-center gap-2
+                            onClick={handleConfirmAction}
+                            className={`flex-[2] py-3 rounded-xl font-bold text-white shadow-md flex items-center justify-center gap-2 transform active:scale-95 transition-all
                                 ${zone === 'DEF' ? 'bg-purple-600 hover:bg-purple-700' : zone === 'MID' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}
                             `}
                           >
-                              <Save size={18} /> Salvar & Continuar
+                              <CheckCircle size={20} /> Confirmar Jogada
                           </button>
                       </div>
                   </div>
               </div>
           )}
 
-          {step === 0 && (
-              <div className="text-center text-gray-400 text-sm py-10 border-2 border-dashed border-gray-200 rounded-xl">
-                  <Timer size={32} className="mx-auto mb-2 opacity-50" />
-                  <p>Aguardando início da ação...</p>
+          {/* Event Log Preview */}
+          {eventsLog.length > 0 && step === 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                  <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 flex justify-between">
+                      <span>Timeline da Sessão</span>
+                      <span className="bg-gray-100 text-gray-600 px-2 rounded-full text-xs py-0.5">{eventsLog.length} ações</span>
+                  </h3>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                      {eventsLog.slice().reverse().map((evt, i) => (
+                          <div key={i} className="flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg p-2 min-w-[100px] flex flex-col items-center">
+                              <span className="text-xs font-mono text-gray-400 font-bold">{evt.timestamp}</span>
+                              <span className={`text-[10px] font-bold px-1 rounded mt-1 
+                                  ${evt.zone === 'DEF' ? 'text-purple-600 bg-purple-50' : evt.zone === 'MID' ? 'text-blue-600 bg-blue-50' : 'text-orange-600 bg-orange-50'}
+                              `}>
+                                  {evt.zone}
+                              </span>
+                          </div>
+                      ))}
+                  </div>
               </div>
           )}
 
       </div>
+
+      {/* FIXED FOOTER */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex justify-between items-center md:px-8">
+          <button 
+            onClick={handleAbort}
+            className="text-red-500 font-bold text-sm flex items-center gap-2 px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+          >
+              <XCircle size={20} /> <span className="hidden md:inline">Cancelar Análise</span>
+          </button>
+          
+          <button 
+            onClick={handleFinishSession}
+            disabled={eventsLog.length === 0}
+            className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+              <StopCircle size={20} /> ENCERRAR E SALVAR
+          </button>
+      </div>
+
     </div>
   );
 };

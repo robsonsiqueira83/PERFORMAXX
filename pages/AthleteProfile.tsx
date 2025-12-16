@@ -18,7 +18,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, SkipForward, ArrowRightLeft, Search, AlertTriangle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,6 +51,12 @@ const AthleteProfile: React.FC = () => {
   // Local state for modals
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
+  
+  // Replay Modal State
+  const [showReplayModal, setShowReplayModal] = useState(false);
+  const [replayData, setReplayData] = useState<any>(null);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [isReplaying, setIsReplaying] = useState(false);
   
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; type: 'athlete' | 'entry' | null; id?: string }>({ isOpen: false, type: null });
@@ -88,6 +94,7 @@ const AthleteProfile: React.FC = () => {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null); // If null, it's a new entry
   
   const calendarRef = useRef<HTMLDivElement>(null);
+  const replayTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
      // Get User for permissions
@@ -133,6 +140,25 @@ const AthleteProfile: React.FC = () => {
     };
   }, [calendarRef]);
 
+  // REPLAY LOGIC
+  useEffect(() => {
+      if (isReplaying && replayData && replayData.events) {
+          replayTimerRef.current = window.setInterval(() => {
+              setReplayIndex(prev => {
+                  const next = prev + 1;
+                  if (next >= replayData.events.length) {
+                      setIsReplaying(false);
+                      return prev;
+                  }
+                  return next;
+              });
+          }, 2000); // 2 seconds per event step
+      } else {
+          if (replayTimerRef.current) clearInterval(replayTimerRef.current);
+      }
+      return () => { if (replayTimerRef.current) clearInterval(replayTimerRef.current); };
+  }, [isReplaying, replayData]);
+
   // Handle Select Change
   const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const val = e.target.value;
@@ -150,6 +176,9 @@ const AthleteProfile: React.FC = () => {
     return entries.map(entry => {
       const session = sessions.find(s => s.id === entry.sessionId);
       if (!session) return null;
+      
+      const isRealTime = session.description?.includes('Análise em Tempo Real');
+
       return {
         id: entry.id,
         date: new Date(session.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
@@ -159,7 +188,9 @@ const AthleteProfile: React.FC = () => {
         physical: entry.physical,
         tactical: entry.tactical,
         heatmapPoints: entry.heatmapPoints || [],
-        entry: entry
+        entry: entry,
+        isRealTime: isRealTime, // Flag for UI
+        sessionDescription: session.description
       };
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
   }, [entries, sessions]);
@@ -402,6 +433,24 @@ const AthleteProfile: React.FC = () => {
       }
   };
 
+  const handleHistoryItemClick = (item: any) => {
+      if (item.isRealTime && item.entry.notes) {
+          try {
+              const parsed = JSON.parse(item.entry.notes);
+              if (parsed.type === 'REAL_TIME_LOG' && parsed.events) {
+                  setReplayData(parsed);
+                  setReplayIndex(0);
+                  setIsReplaying(false);
+                  setShowReplayModal(true);
+                  return;
+              }
+          } catch(e) {
+              // Not JSON or legacy note
+          }
+      }
+      openEditTrainingModal(item.entry, item.fullDate);
+  };
+
   // Calendar Logic
   const getDaysInMonth = (date: Date) => {
       const year = date.getFullYear();
@@ -411,12 +460,16 @@ const AthleteProfile: React.FC = () => {
       return { days, firstDay };
   };
   const { days: daysInMonth, firstDay } = getDaysInMonth(calendarMonth);
-  const getSessionDatesSet = () => {
-      const dates = new Set<string>();
-      historyData.forEach(h => { if (h && h.fullDate) dates.add(h.fullDate); });
-      return dates;
+  const getSessionDatesMap = () => {
+      const map = new Map<string, string>(); // Date -> Type (RealTime or Regular)
+      historyData.forEach(h => { 
+          if (h && h.fullDate) {
+              map.set(h.fullDate, h.isRealTime ? 'realtime' : 'regular');
+          } 
+      });
+      return map;
   };
-  const sessionDates = getSessionDatesSet();
+  const sessionDates = getSessionDatesMap();
   const handleDateSelect = (day: number) => {
       const year = calendarMonth.getFullYear();
       const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
@@ -489,7 +542,14 @@ const AthleteProfile: React.FC = () => {
         ...entry.tactical 
     });
     setCurrentHeatmapPoints(entry.heatmapPoints || []);
-    setCurrentNotes(entry.notes || '');
+    // Handle notes: if JSON, show a simple message, otherwise show text
+    let displayNotes = entry.notes || '';
+    try {
+        const parsed = JSON.parse(displayNotes);
+        if (parsed.type === 'REAL_TIME_LOG') displayNotes = `[Log de Tempo Real: ${parsed.totalEvents} ações]`;
+    } catch (e) {}
+    
+    setCurrentNotes(displayNotes);
     setTrainingDate(date);
     setShowTrainingModal(true);
   };
@@ -517,6 +577,16 @@ const AthleteProfile: React.FC = () => {
 
      const entryId = editingEntryId || uuidv4();
 
+     // If editing a Real Time log, preserve the original notes if not modified by user to something else
+     // This is a simple check to avoid overwriting the JSON log with the "[Log...]" placeholder
+     let notesToSave = currentNotes;
+     if (editingEntryId) {
+         const originalEntry = entries.find(e => e.id === editingEntryId);
+         if (originalEntry && currentNotes.startsWith('[Log de Tempo Real')) {
+             notesToSave = originalEntry.notes || '';
+         }
+     }
+
      const entry: TrainingEntry = {
          id: entryId,
          sessionId: sessionId,
@@ -542,7 +612,7 @@ const AthleteProfile: React.FC = () => {
             ult_ritmo: currentStats.ult_ritmo, ult_bolas_paradas: currentStats.ult_bolas_paradas
          },
          heatmapPoints: currentHeatmapPoints,
-         notes: currentNotes
+         notes: notesToSave
      };
      
      await saveTrainingEntry(entry);
@@ -565,6 +635,47 @@ const AthleteProfile: React.FC = () => {
   const defColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_def) : { stroke: '#6b21a8', fill: '#a855f7' };
   const constColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_const) : { stroke: '#7e22ce', fill: '#a855f7' };
   const ultColor = currentRadarStats ? getTacticalColor(currentRadarStats.tactical_ult) : { stroke: '#9333ea', fill: '#d8b4fe' };
+
+  // Activity Mini Calendar Renderer
+  const renderActivityCalendar = () => {
+      // Last 14 days or just a grid of filled dates?
+      // Let's make a grid for the current month
+      const currentMonthDates = Array.from({length: daysInMonth}, (_, i) => {
+          const d = i + 1;
+          const full = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const type = sessionDates.get(full); // 'realtime' | 'regular' | undefined
+          return { d, full, type };
+      });
+
+      return (
+          <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm w-full max-w-[200px]">
+              <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-gray-500 uppercase">{calendarMonth.toLocaleString('pt-BR', { month: 'short' })}</span>
+                  <div className="flex gap-1">
+                      <button onClick={() => changeMonth(-1)} className="p-0.5 hover:bg-gray-100 rounded"><ChevronLeft size={12}/></button>
+                      <button onClick={() => changeMonth(1)} className="p-0.5 hover:bg-gray-100 rounded"><ChevronRight size={12}/></button>
+                  </div>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                  {currentMonthDates.map(day => (
+                      <div 
+                        key={day.d} 
+                        className={`h-5 w-5 rounded flex items-center justify-center text-[10px] 
+                            ${day.type === 'realtime' ? 'bg-purple-100 text-purple-700 font-bold' : 
+                              day.type === 'regular' ? 'bg-green-100 text-green-700 font-bold' : 
+                              'text-gray-300'}`}
+                      >
+                          {day.d}
+                      </div>
+                  ))}
+              </div>
+              <div className="mt-2 flex gap-2 justify-center">
+                  <div className="flex items-center gap-1 text-[9px] text-gray-500"><div className="w-2 h-2 bg-green-100 rounded-full"></div> Atuação</div>
+                  <div className="flex items-center gap-1 text-[9px] text-gray-500"><div className="w-2 h-2 bg-purple-100 rounded-full"></div> Tempo Real</div>
+              </div>
+          </div>
+      );
+  };
 
   return (
     <div className="space-y-6 pb-20 relative">
@@ -598,10 +709,9 @@ const AthleteProfile: React.FC = () => {
                         {Array(daysInMonth).fill(null).map((_, i) => {
                             const day = i + 1;
                             const fullDate = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                            const hasSession = sessionDates.has(fullDate);
                             const isSelected = customDate === fullDate;
                             return (
-                                <button key={day} onClick={() => handleDateSelect(day)} className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-100 text-gray-700'} ${hasSession && !isSelected ? 'bg-green-100 text-green-700 border border-green-200 font-bold' : ''}`}>{day}</button>
+                                <button key={day} onClick={() => handleDateSelect(day)} className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-100 text-gray-700'}`}>{day}</button>
                             );
                         })}
                      </div>
@@ -734,110 +844,27 @@ const AthleteProfile: React.FC = () => {
           </div>
       </div>
 
-      {/* --- RADAR CHARTS --- */}
-      <h3 className="text-xl font-bold text-gray-800 mt-2 mb-4">Atributos Técnicos e Táticos</h3>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Defendendo</h3>
-              <div className="h-[250px]">
-                  {currentRadarStats && currentRadarStats.tactical_def ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_def}>
-                          <PolarGrid stroke="#e5e7eb" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                          <Radar name="Defendendo" dataKey="A" stroke={defColor.stroke} fill={defColor.fill} fillOpacity={0.4} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      </RadarChart>
-                  </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
-              </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Construindo</h3>
-              <div className="h-[250px]">
-                  {currentRadarStats && currentRadarStats.tactical_const ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_const}>
-                          <PolarGrid stroke="#e5e7eb" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                          <Radar name="Construindo" dataKey="A" stroke={constColor.stroke} fill={constColor.fill} fillOpacity={0.4} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      </RadarChart>
-                  </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
-              </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-purple-700 mb-4">Último Terço</h3>
-              <div className="h-[250px]">
-                  {currentRadarStats && currentRadarStats.tactical_ult ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={currentRadarStats.tactical_ult}>
-                          <PolarGrid stroke="#e5e7eb" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 9, fontWeight: 600 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                          <Radar name="Último Terço" dataKey="A" stroke={ultColor.stroke} fill={ultColor.fill} fillOpacity={0.4} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      </RadarChart>
-                  </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
-              </div>
-          </div>
-      </div>
-
-      <h3 className="text-xl font-bold text-gray-800 mt-6 mb-4">Fundamentos e Físico</h3>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-blue-700 mb-4">Fundamentos (Média)</h3>
+      {/* --- EVOLUTION CHART & CALENDAR --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
               <div className="h-[300px]">
-                  {currentRadarStats ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.technical}>
-                          <PolarGrid stroke="#e5e7eb" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                          <Radar name="Fundamentos" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      </RadarChart>
-                  </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
+                  {historyData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={historyData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                              <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" tickMargin={10} axisLine={false} tickLine={false} />
+                              <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" axisLine={false} tickLine={false} />
+                              <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                              <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8, fill: '#10b981', stroke: 'white' }} dot={{r: 4, fill: '#10b981'}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados históricos</div>}
               </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-orange-700 mb-4">Condição Física (Média)</h3>
-              <div className="h-[300px]">
-                  {currentRadarStats ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={currentRadarStats.physical}>
-                          <PolarGrid stroke="#e5e7eb" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 600 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                          <Radar name="Físico" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      </RadarChart>
-                  </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>}
-              </div>
-          </div>
-      </div>
-      
-      {/* --- EVOLUTION CHART --- */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-          <h3 className="font-bold text-gray-800 mb-4">Evolução do Score Total</h3>
-          <div className="h-[300px]">
-              {historyData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={historyData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                          <XAxis dataKey="date" fontSize={12} stroke="#9ca3af" tickMargin={10} axisLine={false} tickLine={false} />
-                          <YAxis domain={[0, 10]} fontSize={12} stroke="#9ca3af" axisLine={false} tickLine={false} />
-                          <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                          <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8, fill: '#10b981', stroke: 'white' }} dot={{r: 4, fill: '#10b981'}} />
-                      </LineChart>
-                  </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados históricos</div>}
+          
+          <div className="flex flex-col">
+              {renderActivityCalendar()}
           </div>
       </div>
 
@@ -849,17 +876,25 @@ const AthleteProfile: React.FC = () => {
           <div className="divide-y divide-gray-100">
               {historyData.map((item) => (
                   <div key={item!.id} 
-                       onClick={() => openEditTrainingModal(item!.entry, item!.fullDate)}
+                       onClick={() => handleHistoryItemClick(item)}
                        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4 group"
                   >
                       <div className="flex-1">
                           <div className="flex items-center gap-3">
-                              <span className="font-bold text-gray-800">{item!.date}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
+                              {/* TYPE ICON */}
+                              <div className={`p-2 rounded-lg ${item!.isRealTime ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
+                                  {item!.isRealTime ? <Timer size={20} /> : <ClipboardList size={20} />}
+                              </div>
+                              <div>
+                                  <span className="font-bold text-gray-800 block">{item!.date}</span>
+                                  <span className="text-xs text-gray-500">{item!.isRealTime ? 'Análise em Tempo Real' : 'Atuação Regular'}</span>
+                              </div>
+                              <span className={`ml-2 text-xs px-2 py-0.5 rounded font-bold ${item!.score >= 8 ? 'bg-green-100 text-green-800' : item!.score >= 4 ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'}`}>Score: {item!.score.toFixed(1)}</span>
                           </div>
                       </div>
-                      <div className="text-gray-400 group-hover:text-blue-600 transition-colors">
-                          <Edit size={16} />
+                      <div className="flex gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="text-blue-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded"><Edit size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmModal({ isOpen: true, type: 'entry', id: item!.id }); }} className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
                       </div>
                   </div>
               ))}
@@ -869,6 +904,70 @@ const AthleteProfile: React.FC = () => {
       
       {/* --- MODALS --- */}
       
+      {/* REPLAY MODAL */}
+      {showReplayModal && replayData && (
+          <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative">
+                  <div className="p-4 bg-gray-900 text-white flex justify-between items-center">
+                      <div>
+                          <h3 className="font-bold flex items-center gap-2"><PlayCircle size={18} /> Replay da Sessão</h3>
+                          <p className="text-xs text-gray-400">{new Date(replayData.startTime).toLocaleString()} • {replayData.events.length} ações</p>
+                      </div>
+                      <button onClick={() => setShowReplayModal(false)}><X className="text-gray-400 hover:text-white" /></button>
+                  </div>
+                  
+                  <div className="relative aspect-[16/9] bg-green-600 border-b-4 border-green-800">
+                      {/* Field Background (Static Lines) */}
+                      <div className="absolute inset-0 pointer-events-none opacity-50">
+                          <div className="absolute inset-4 border-2 border-white rounded-sm"></div>
+                          <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white"></div>
+                          <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+                      </div>
+
+                      {/* Animated Marker */}
+                      {replayData.events[replayIndex] && (
+                          <>
+                              <div 
+                                className="absolute w-6 h-6 bg-yellow-400 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-10"
+                                style={{ left: `${replayData.events[replayIndex].location.x}%`, top: `${replayData.events[replayIndex].location.y}%` }}
+                              >
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                      {replayData.events[replayIndex].timestamp}
+                                  </div>
+                              </div>
+                              
+                              {/* Stats Overlay */}
+                              <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg text-sm border-l-4 border-blue-600 transition-all">
+                                  <div className="flex justify-between font-bold text-gray-800 mb-1">
+                                      <span>{replayData.events[replayIndex].zone === 'DEF' ? 'Defesa' : replayData.events[replayIndex].zone === 'MID' ? 'Meio-Campo' : 'Ataque'}</span>
+                                      <span className="text-blue-600">Ação {replayIndex + 1}/{replayData.events.length}</span>
+                                  </div>
+                                  <p className="text-gray-600 italic mb-2">"{replayData.events[replayIndex].note || 'Sem observações'}"</p>
+                                  <div className="flex flex-wrap gap-2">
+                                      {Object.entries(replayData.events[replayIndex].stats).map(([k, v]: any) => (
+                                          v > 0 && (
+                                              <span key={k} className="text-xs bg-gray-100 px-2 py-1 rounded border border-gray-200 font-medium">
+                                                  {k.replace('_', ' ').substring(0, 15)}: <span className={v>=8?'text-green-600':v<4?'text-red-600':'text-gray-600'}>{v}</span>
+                                              </span>
+                                          )
+                                      ))}
+                                  </div>
+                              </div>
+                          </>
+                      )}
+                  </div>
+
+                  <div className="p-4 bg-gray-50 flex justify-center gap-4">
+                      <button onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))} className="p-2 hover:bg-gray-200 rounded"><ChevronLeft /></button>
+                      <button onClick={() => setIsReplaying(!isReplaying)} className="p-2 bg-blue-600 text-white rounded-full shadow hover:bg-blue-700">
+                          {isReplaying ? <PauseCircle size={24} /> : <PlayCircle size={24} />}
+                      </button>
+                      <button onClick={() => setReplayIndex(Math.min(replayData.events.length - 1, replayIndex + 1))} className="p-2 hover:bg-gray-200 rounded"><ChevronRight /></button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* EDIT PROFILE MODAL */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
