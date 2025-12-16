@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
 import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint } from '../types';
-import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 interface GameEvent {
     timestamp: string; // "05:30"
     seconds: number;   // 330
+    period: 1 | 2;     // 1st or 2nd half
     zone: 'DEF' | 'MID' | 'ATT';
     location: { x: number; y: number };
     stats: any; // The specific stats modified in this event
@@ -22,9 +23,12 @@ const RealTimeEvaluation: React.FC = () => {
   const [athlete, setAthlete] = useState<Athlete | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Timer State
+  // Timer & Game State
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [gamePeriod, setGamePeriod] = useState<1 | 2>(1); // 1 = 1st Half, 2 = 2nd Half
+  const [isHalftime, setIsHalftime] = useState(false);
+  
   const timerRef = useRef<number | null>(null);
   const [startTime, setStartTime] = useState<string | null>(null);
 
@@ -35,6 +39,9 @@ const RealTimeEvaluation: React.FC = () => {
   const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: Pick Location, 2: Rate Stats
   const [capturedTime, setCapturedTime] = useState<string>('');
   const [capturedSeconds, setCapturedSeconds] = useState<number>(0);
+  
+  // Custom Modal States
+  const [showFinishModal, setShowFinishModal] = useState(false);
   
   // Temp Data for Current Action
   const [fieldClick, setFieldClick] = useState<{x: number, y: number} | null>(null);
@@ -89,7 +96,35 @@ const RealTimeEvaluation: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleToggleTimer = () => setIsRunning(!isRunning);
+  // Game Control Logic
+  const handleMainButton = () => {
+      if (!isRunning && timer === 0) {
+          // START GAME (1st Half)
+          setIsRunning(true);
+      } else if (isRunning && gamePeriod === 1) {
+          // END 1st HALF -> PAUSE
+          setIsRunning(false);
+          setIsHalftime(true);
+      } else if (!isRunning && isHalftime) {
+          // START 2nd HALF
+          setIsHalftime(false);
+          setGamePeriod(2);
+          setIsRunning(true);
+      } else {
+          // PAUSE / RESUME (Standard)
+          setIsRunning(!isRunning);
+      }
+  };
+
+  const getButtonLabel = () => {
+      if (!isRunning && timer === 0) return { text: "Iniciar Jogo", icon: <Play size={20} />, color: "bg-green-600 hover:bg-green-700" };
+      if (isRunning && gamePeriod === 1) return { text: "Encerrar 1º Tempo", icon: <Flag size={20} />, color: "bg-yellow-500 hover:bg-yellow-600" };
+      if (isHalftime) return { text: "Iniciar 2º Tempo", icon: <Play size={20} />, color: "bg-green-600 hover:bg-green-700" };
+      if (isRunning && gamePeriod === 2) return { text: "Pausar", icon: <Pause size={20} />, color: "bg-yellow-500 hover:bg-yellow-600" };
+      return { text: "Retomar", icon: <Play size={20} />, color: "bg-blue-600 hover:bg-blue-700" };
+  };
+
+  const btnState = getButtonLabel();
 
   // Step 1: Capture Time
   const handleInsertAction = () => {
@@ -124,6 +159,7 @@ const RealTimeEvaluation: React.FC = () => {
       const newEvent: GameEvent = {
           timestamp: capturedTime,
           seconds: capturedSeconds,
+          period: gamePeriod,
           zone: zone,
           location: fieldClick,
           stats: { ...currentStats }, // Copy values
@@ -148,19 +184,10 @@ const RealTimeEvaluation: React.FC = () => {
 
   // --- FINISH SESSION ---
   const handleFinishSession = async () => {
-      if (!athlete || eventsLog.length === 0) {
-          if (window.confirm("Nenhuma ação registrada. Deseja sair sem salvar?")) {
-              navigate(-1);
-          }
-          return;
-      }
-
-      if (!window.confirm(`Deseja encerrar a análise com ${eventsLog.length} ações registradas?`)) return;
-
+      setShowFinishModal(false);
       setLoading(true);
 
       // 1. Calculate Averages
-      // We need to average only the non-zero stats across all events
       const finalStats: any = getEmptyStats();
       const counts: any = getEmptyStats();
 
@@ -192,17 +219,17 @@ const RealTimeEvaluation: React.FC = () => {
 
       await saveTrainingSession({
           id: sessionId,
-          teamId: athlete.teamId,
-          categoryId: athlete.categoryId,
+          teamId: athlete!.teamId,
+          categoryId: athlete!.categoryId,
           date: sessionDate,
-          description: 'Análise em Tempo Real' // This tag is important for the icon
+          description: 'Análise em Tempo Real' 
       });
 
       // 3. Create Single Entry with Log in Notes
       const entry: TrainingEntry = {
           id: uuidv4(),
           sessionId,
-          athleteId: athlete.id,
+          athleteId: athlete!.id,
           // Map calculated averages to structure
           technical: {
             controle_bola: finalStats.controle_bola, conducao: finalStats.conducao, passe: finalStats.passe,
@@ -235,7 +262,7 @@ const RealTimeEvaluation: React.FC = () => {
       };
 
       await saveTrainingEntry(entry);
-      navigate(`/athletes/${athlete.id}`);
+      navigate(`/athletes/${athlete!.id}`);
   };
 
   const handleAbort = () => {
@@ -258,20 +285,23 @@ const RealTimeEvaluation: React.FC = () => {
               <div>
                   <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{athlete.name}</h1>
                   <span className="text-xs text-gray-500 font-mono flex items-center gap-1">
-                      {startTime ? <span className="text-green-600 flex items-center gap-1"><Clock size={10}/> Iniciado</span> : 'Aguardando início'}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isHalftime ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                          {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
+                      </span>
                   </span>
               </div>
           </div>
           
           <div className="flex items-center gap-2">
-              <div className={`font-mono text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
+              <div className={`font-mono text-xl md:text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
                   {formatTime(timer)}
               </div>
               <button 
-                onClick={handleToggleTimer}
-                className={`p-3 rounded-full shadow-lg transition-all transform active:scale-95 ${isRunning ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                onClick={handleMainButton}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold shadow-md transition-all active:scale-95 ${btnState.color}`}
               >
-                  {isRunning ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+                  {btnState.icon}
+                  <span className="hidden md:inline">{btnState.text}</span>
               </button>
           </div>
       </div>
@@ -283,10 +313,10 @@ const RealTimeEvaluation: React.FC = () => {
               <div className="flex justify-center">
                   <button 
                     onClick={handleInsertAction}
-                    disabled={!isRunning && timer === 0}
+                    disabled={!isRunning}
                     className={`
                         w-full py-6 rounded-2xl font-black text-xl shadow-xl transform transition-all active:scale-95 flex items-center justify-center gap-3 border-b-4
-                        ${(isRunning || timer > 0) ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700' : 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'}
+                        ${isRunning ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700' : 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'}
                     `}
                   >
                       <MapPin size={28} /> REGISTRAR AÇÃO
@@ -457,13 +487,43 @@ const RealTimeEvaluation: React.FC = () => {
           </button>
           
           <button 
-            onClick={handleFinishSession}
+            onClick={() => setShowFinishModal(true)}
             disabled={eventsLog.length === 0}
             className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
               <StopCircle size={20} /> ENCERRAR E SALVAR
           </button>
       </div>
+
+      {/* CUSTOM FINISH MODAL */}
+      {showFinishModal && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <CheckCircle className="text-blue-600" size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Encerrar Análise?</h3>
+                 <p className="text-gray-500 mb-6">
+                     Foram registradas <strong>{eventsLog.length} ações</strong>. 
+                     Os dados serão compilados em uma média geral para o perfil do atleta.
+                 </p>
+                 <div className="flex gap-3">
+                     <button 
+                        onClick={() => setShowFinishModal(false)} 
+                        className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200"
+                     >
+                         Voltar
+                     </button>
+                     <button 
+                        onClick={handleFinishSession} 
+                        className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg"
+                     >
+                         Salvar
+                     </button>
+                 </div>
+             </div>
+         </div>
+      )}
 
     </div>
   );

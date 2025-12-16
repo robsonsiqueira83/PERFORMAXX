@@ -745,8 +745,8 @@ const AthleteProfile: React.FC = () => {
       {/* REPLAY MODAL */}
       {showReplayModal && replayData && (
           <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative">
-                  <div className="p-4 bg-gray-900 text-white flex justify-between items-center">
+              <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
+                  <div className="p-4 bg-gray-900 text-white flex justify-between items-center shrink-0">
                       <div>
                           <h3 className="font-bold flex items-center gap-2"><PlayCircle size={18} /> Replay da Sessão</h3>
                           <p className="text-xs text-gray-400">{new Date(replayData.startTime).toLocaleString()} • {replayData.events.length} ações</p>
@@ -754,7 +754,8 @@ const AthleteProfile: React.FC = () => {
                       <button onClick={() => setShowReplayModal(false)}><X className="text-gray-400 hover:text-white" /></button>
                   </div>
                   
-                  <div className="relative aspect-[16/9] bg-green-600 border-b-4 border-green-800">
+                  {/* FIELD AREA */}
+                  <div className="relative aspect-[16/9] bg-green-600 border-b-4 border-green-800 shrink-0">
                       {/* Field Background (Static Lines) */}
                       <div className="absolute inset-0 pointer-events-none opacity-50">
                           <div className="absolute inset-4 border-2 border-white rounded-sm"></div>
@@ -764,43 +765,65 @@ const AthleteProfile: React.FC = () => {
 
                       {/* Animated Marker */}
                       {replayData.events[replayIndex] && (
-                          <>
-                              <div 
-                                className="absolute w-6 h-6 bg-yellow-400 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-10"
-                                style={{ left: `${replayData.events[replayIndex].location.x}%`, top: `${replayData.events[replayIndex].location.y}%` }}
-                              >
-                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                      {replayData.events[replayIndex].timestamp}
+                          <div 
+                            className="absolute w-6 h-6 bg-yellow-400 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-10"
+                            style={{ left: `${replayData.events[replayIndex].location.x}%`, top: `${replayData.events[replayIndex].location.y}%` }}
+                          >
+                              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-mono">
+                                  {replayData.events[replayIndex].timestamp}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* DETAILS AREA (Below Field) */}
+                  <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+                      {replayData.events[replayIndex] ? (
+                          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm animate-fade-in">
+                              <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                                  <div className="flex items-center gap-2">
+                                      <span className={`px-2 py-1 rounded text-xs font-bold text-white
+                                          ${replayData.events[replayIndex].zone === 'DEF' ? 'bg-purple-600' : replayData.events[replayIndex].zone === 'MID' ? 'bg-blue-600' : 'bg-orange-600'}
+                                      `}>
+                                          {replayData.events[replayIndex].zone === 'DEF' ? 'DEFESA' : replayData.events[replayIndex].zone === 'MID' ? 'MEIO' : 'ATAQUE'}
+                                      </span>
+                                      <span className="text-gray-400 text-xs font-bold uppercase">{replayData.events[replayIndex].period}º Tempo</span>
                                   </div>
+                                  <span className="text-blue-600 font-bold text-sm">Ação {replayIndex + 1} de {replayData.events.length}</span>
                               </div>
                               
-                              {/* Stats Overlay */}
-                              <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg text-sm border-l-4 border-blue-600 transition-all">
-                                  <div className="flex justify-between font-bold text-gray-800 mb-1">
-                                      <span>{replayData.events[replayIndex].zone === 'DEF' ? 'Defesa' : replayData.events[replayIndex].zone === 'MID' ? 'Meio-Campo' : 'Ataque'}</span>
-                                      <span className="text-blue-600">Ação {replayIndex + 1}/{replayData.events.length}</span>
-                                  </div>
-                                  <p className="text-gray-600 italic mb-2">"{replayData.events[replayIndex].note || 'Sem observações'}"</p>
-                                  <div className="flex flex-wrap gap-2">
+                              <div className="mb-4">
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Observação</h4>
+                                  <p className="text-gray-800 text-sm italic bg-gray-50 p-2 rounded border border-gray-100">
+                                      "{replayData.events[replayIndex].note || 'Sem observações registradas.'}"
+                                  </p>
+                              </div>
+
+                              <div>
+                                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Indicadores Avaliados</h4>
+                                  <div className="grid grid-cols-2 gap-2">
                                       {Object.entries(replayData.events[replayIndex].stats).map(([k, v]: any) => (
                                           v > 0 && (
-                                              <span key={k} className="text-xs bg-gray-100 px-2 py-1 rounded border border-gray-200 font-medium">
-                                                  {k.replace('_', ' ').substring(0, 15)}: <span className={v>=8?'text-green-600':v<4?'text-red-600':'text-gray-600'}>{v}</span>
-                                              </span>
+                                              <div key={k} className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded border border-gray-100">
+                                                  <span className="text-xs text-gray-600 font-medium capitalize">{k.replace(/_/g, ' ')}</span>
+                                                  <span className={`text-sm font-bold ${v>=8?'text-green-600':v<4?'text-red-600':'text-gray-700'}`}>{v}</span>
+                                              </div>
                                           )
                                       ))}
                                   </div>
                               </div>
-                          </>
+                          </div>
+                      ) : (
+                          <div className="text-center text-gray-400 py-10">Carregando dados da ação...</div>
                       )}
                   </div>
 
-                  <div className="p-4 bg-gray-50 flex justify-center gap-4">
-                      <button onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))} className="p-2 hover:bg-gray-200 rounded"><ChevronLeft /></button>
-                      <button onClick={() => setIsReplaying(!isReplaying)} className="p-2 bg-blue-600 text-white rounded-full shadow hover:bg-blue-700">
-                          {isReplaying ? <PauseCircle size={24} /> : <PlayCircle size={24} />}
+                  <div className="p-4 bg-white border-t border-gray-200 flex justify-center gap-4 shrink-0">
+                      <button onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))} className="p-3 hover:bg-gray-100 rounded-full transition-colors text-gray-600"><ChevronLeft size={24}/></button>
+                      <button onClick={() => setIsReplaying(!isReplaying)} className="p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform active:scale-95">
+                          {isReplaying ? <PauseCircle size={28} /> : <PlayCircle size={28} />}
                       </button>
-                      <button onClick={() => setReplayIndex(Math.min(replayData.events.length - 1, replayIndex + 1))} className="p-2 hover:bg-gray-200 rounded"><ChevronRight /></button>
+                      <button onClick={() => setReplayIndex(Math.min(replayData.events.length - 1, replayIndex + 1))} className="p-3 hover:bg-gray-100 rounded-full transition-colors text-gray-600"><ChevronRight size={24}/></button>
                   </div>
               </div>
           </div>
