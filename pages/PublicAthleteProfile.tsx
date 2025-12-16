@@ -12,7 +12,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, PlayCircle, PauseCircle, X } from 'lucide-react';
+import { ArrowLeft, User, TrendingUp, TrendingDown, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, PlayCircle, PauseCircle, X, RefreshCcw } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 import PublicHeader from '../components/PublicHeader';
 
@@ -97,6 +97,23 @@ const PublicAthleteProfile: React.FC = () => {
       return () => { if (replayTimerRef.current) clearInterval(replayTimerRef.current); };
   }, [isReplaying, replayData]);
 
+  // Handle Select Change
+  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      setSelectedPeriod(val);
+      if (val === 'custom') {
+          setIsCalendarOpen(true);
+      } else {
+          setIsCalendarOpen(false);
+          setCustomDate('');
+      }
+  };
+
+  const handleResetFilter = () => {
+      setSelectedPeriod('all');
+      setCustomDate('');
+  };
+
   // Full History Data
   const historyData = useMemo(() => {
     return entries.map(entry => {
@@ -150,6 +167,12 @@ const PublicAthleteProfile: React.FC = () => {
         }
     });
   }, [entries, sessions, selectedPeriod, customDate]);
+
+  // Filtered History List (Syncs with Calendar)
+  const displayedHistory = useMemo(() => {
+      const filteredIds = new Set(filteredEntries.map(e => e.id));
+      return historyData.filter(h => h && filteredIds.has(h.id));
+  }, [historyData, filteredEntries]);
 
   // Overall Score
   const overallScore = useMemo(() => {
@@ -305,18 +328,6 @@ const PublicAthleteProfile: React.FC = () => {
       setCalendarMonth(newDate);
   };
 
-  // Handle Select Change
-  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const val = e.target.value;
-      setSelectedPeriod(val);
-      if (val === 'custom') {
-          setIsCalendarOpen(true);
-      } else {
-          setIsCalendarOpen(false);
-          setCustomDate('');
-      }
-  };
-
   const handleHistoryItemClick = (item: any) => {
       if (item.isRealTime && item.entry.notes) {
           try {
@@ -392,9 +403,20 @@ const PublicAthleteProfile: React.FC = () => {
                       })}
                   </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-4 justify-center shrink-0">
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                  {selectedPeriod === 'custom' && customDate ? (
+                      <button 
+                          onClick={handleResetFilter}
+                          className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 py-2 rounded-lg transition-colors"
+                      >
+                          <RefreshCcw size={12} /> Limpar Data ({new Date(customDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})})
+                      </button>
+                  ) : (
+                      <div className="flex gap-4 justify-center shrink-0">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
+                      </div>
+                  )}
               </div>
           </div>
       );
@@ -650,11 +672,16 @@ const PublicAthleteProfile: React.FC = () => {
 
         {/* --- HISTORY LIST (READ ONLY) --- */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                 <h3 className="font-bold text-gray-800">Histórico de Atuações</h3>
+                {selectedPeriod === 'custom' && customDate && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold border border-blue-200">
+                        Filtro: {new Date(customDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})}
+                    </span>
+                )}
             </div>
             <div className="divide-y divide-gray-100">
-                {historyData.map((item) => (
+                {displayedHistory.map((item) => (
                     <div key={item!.id} onClick={() => handleHistoryItemClick(item)} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-3">
@@ -665,6 +692,11 @@ const PublicAthleteProfile: React.FC = () => {
                         </div>
                     </div>
                 ))}
+                {displayedHistory.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 italic">
+                        {selectedPeriod === 'custom' ? 'Nenhuma atuação nesta data.' : 'Nenhuma atuação registrada no período.'}
+                    </div>
+                )}
             </div>
         </div>
 

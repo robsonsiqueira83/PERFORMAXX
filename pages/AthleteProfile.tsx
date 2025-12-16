@@ -16,7 +16,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, SkipForward, ArrowRightLeft, Search, AlertTriangle } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, SkipForward, ArrowRightLeft, Search, AlertTriangle, RefreshCcw } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -146,7 +146,12 @@ const AthleteProfile: React.FC = () => {
       }
   };
 
-  // Full History Data (Always needed for the Line Chart and List)
+  const handleResetFilter = () => {
+      setSelectedPeriod('all');
+      setCustomDate('');
+  };
+
+  // Full History Data (Always needed for the Line Chart)
   const historyData = useMemo(() => {
     return entries.map(entry => {
       const session = sessions.find(s => s.id === entry.sessionId);
@@ -170,7 +175,7 @@ const AthleteProfile: React.FC = () => {
     }).filter(Boolean).sort((a, b) => new Date(a!.fullDate).getTime() - new Date(b!.fullDate).getTime());
   }, [entries, sessions]);
 
-  // --- FILTERED DATA ---
+  // --- FILTERED DATA (For Stats and List) ---
   const filteredEntries = useMemo(() => {
     const now = new Date();
     
@@ -203,6 +208,14 @@ const AthleteProfile: React.FC = () => {
         }
     });
   }, [entries, sessions, selectedPeriod, customDate]);
+
+  // Filtered History List (Syncs with Calendar)
+  const displayedHistory = useMemo(() => {
+      // Create a set of IDs that are in the filtered Entries
+      const filteredIds = new Set(filteredEntries.map(e => e.id));
+      // Filter the formatted history data to match
+      return historyData.filter(h => h && filteredIds.has(h.id));
+  }, [historyData, filteredEntries]);
 
   // Calculate Overall Average Score
   const overallScore = useMemo(() => {
@@ -523,9 +536,20 @@ const AthleteProfile: React.FC = () => {
                       })}
                   </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-4 justify-center shrink-0">
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                  {selectedPeriod === 'custom' && customDate ? (
+                      <button 
+                          onClick={handleResetFilter}
+                          className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 py-2 rounded-lg transition-colors"
+                      >
+                          <RefreshCcw size={12} /> Limpar Data ({new Date(customDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})})
+                      </button>
+                  ) : (
+                      <div className="flex gap-4 justify-center shrink-0">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Atuação</div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium"><div className="w-2.5 h-2.5 bg-purple-100 border border-purple-200 rounded"></div> Tempo Real</div>
+                      </div>
+                  )}
               </div>
           </div>
       );
@@ -724,11 +748,16 @@ const AthleteProfile: React.FC = () => {
 
       {/* --- HISTORY LIST --- */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <h3 className="font-bold text-gray-800">Histórico de Atuações</h3>
+              {selectedPeriod === 'custom' && customDate && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold border border-blue-200">
+                      Filtro: {new Date(customDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})}
+                  </span>
+              )}
           </div>
           <div className="divide-y divide-gray-100">
-              {historyData.map((item) => (
+              {displayedHistory.map((item) => (
                   <div key={item!.id} 
                        onClick={() => handleHistoryItemClick(item)}
                        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between items-center gap-4 group"
@@ -752,7 +781,11 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
               ))}
-              {historyData.length === 0 && <div className="p-8 text-center text-gray-400 italic">Nenhuma atuação registrada no período.</div>}
+              {displayedHistory.length === 0 && (
+                  <div className="p-8 text-center text-gray-400 italic">
+                      {selectedPeriod === 'custom' ? 'Nenhuma atuação nesta data.' : 'Nenhuma atuação registrada no período.'}
+                  </div>
+              )}
           </div>
       </div>
       
