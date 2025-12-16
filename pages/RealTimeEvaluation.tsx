@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
-import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint } from '../types';
+import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint, getCalculatedCategory } from '../types';
 import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag, Mic } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
@@ -319,25 +319,33 @@ const RealTimeEvaluation: React.FC = () => {
               </button>
               <div>
                   <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{athlete.name}</h1>
-                  <span className="text-xs text-gray-500 font-mono flex items-center gap-1">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isHalftime ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                          {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
+                  <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                          {athlete.position}
                       </span>
-                  </span>
+                      <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
+                          {getCalculatedCategory(athlete.birthDate)}
+                      </span>
+                  </div>
               </div>
           </div>
           
-          <div className="flex items-center gap-2">
-              <div className={`font-mono text-xl md:text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
-                  {formatTime(timer)}
+          <div className="flex flex-col items-end">
+              <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isHalftime ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
+              </span>
+              <div className="flex items-center gap-2">
+                  <div className={`font-mono text-xl md:text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
+                      {formatTime(timer)}
+                  </div>
+                  <button 
+                    onClick={handleMainButton}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold shadow-md transition-all active:scale-95 ${btnState.color}`}
+                  >
+                      {btnState.icon}
+                      <span className="hidden md:inline">{btnState.text}</span>
+                  </button>
               </div>
-              <button 
-                onClick={handleMainButton}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold shadow-md transition-all active:scale-95 ${btnState.color}`}
-              >
-                  {btnState.icon}
-                  <span className="hidden md:inline">{btnState.text}</span>
-              </button>
           </div>
       </div>
 
