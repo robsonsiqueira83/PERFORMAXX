@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
-import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint, getCalculatedCategory } from '../types';
-import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag, Mic, UserPlus, Users, X, Plus } from 'lucide-react';
+import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
+import { Athlete, TrainingEntry, HeatmapPoint, getCalculatedCategory, Team, Category, Position, User, UserRole } from '../types';
+import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,11 +23,22 @@ const RealTimeEvaluation: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   
+  // Data for Filters
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allAthletes, setAllAthletes] = useState<Athlete[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
   // Multi-Athlete State
-  const [teamAthletes, setTeamAthletes] = useState<Athlete[]>([]); // All available teammates
   const [activeAthletes, setActiveAthletes] = useState<Athlete[]>([]); // Currently being evaluated
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>(''); // Context focus
   
+  // Modal Filter States
+  const [selectedTeamIdForAdd, setSelectedTeamIdForAdd] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterPosition, setFilterPosition] = useState('');
+  const [filterName, setFilterName] = useState('');
+
   // Data Collection State (Keyed by Athlete ID)
   const [sessionLogs, setSessionLogs] = useState<Record<string, GameEvent[]>>({});
 
@@ -79,20 +90,64 @@ const RealTimeEvaluation: React.FC = () => {
       sessionLogs[selectedAthleteId] || [], 
   [sessionLogs, selectedAthleteId]);
 
+  // Filtered Athletes for Modal
+  const filteredAthletesList = useMemo(() => {
+      return allAthletes.filter(a => {
+          // 1. Must match selected team in modal
+          if (a.teamId !== selectedTeamIdForAdd) return false;
+          
+          // 2. Must NOT be already active
+          if (activeAthletes.some(active => active.id === a.id)) return false;
+
+          // 3. Category Filter
+          if (filterCategory && a.categoryId !== filterCategory) return false;
+
+          // 4. Position Filter
+          if (filterPosition && a.position !== filterPosition) return false;
+
+          // 5. Name Search
+          if (filterName && !a.name.toLowerCase().includes(filterName.toLowerCase())) return false;
+
+          return true;
+      });
+  }, [allAthletes, selectedTeamIdForAdd, activeAthletes, filterCategory, filterPosition, filterName]);
+
+  // Get User Allowed Teams
+  const userAllowedTeams = useMemo(() => {
+      if (!currentUser) return [];
+      if (currentUser.role === UserRole.GLOBAL) return allTeams;
+      
+      // Filter teams user has access to
+      const allowedIds = currentUser.teamIds || [];
+      return allTeams.filter(t => t.ownerId === currentUser.id || allowedIds.includes(t.id));
+  }, [currentUser, allTeams]);
+
   useEffect(() => {
     const load = async () => {
-      const allAthletes = await getAthletes();
-      const initialAthlete = allAthletes.find(a => a.id === id);
+      const uStr = localStorage.getItem('performax_current_user');
+      const u = uStr ? JSON.parse(uStr) : null;
+      setCurrentUser(u);
+
+      const [athletesData, teamsData, catsData] = await Promise.all([
+          getAthletes(),
+          getTeams(),
+          getCategories()
+      ]);
+
+      setAllAthletes(athletesData);
+      setAllTeams(teamsData);
+      setAllCategories(catsData);
+
+      const initialAthlete = athletesData.find(a => a.id === id);
       
       if (initialAthlete) {
-          // Filter to get only teammates
-          const teammates = allAthletes.filter(a => a.teamId === initialAthlete.teamId);
-          setTeamAthletes(teammates);
-          
           // Set Initial State
           setActiveAthletes([initialAthlete]);
           setSelectedAthleteId(initialAthlete.id);
           setSessionLogs({ [initialAthlete.id]: [] });
+          
+          // Set default add filter to current team
+          setSelectedTeamIdForAdd(initialAthlete.teamId);
       }
       setLoading(false);
     };
@@ -194,9 +249,14 @@ const RealTimeEvaluation: React.FC = () => {
       setActiveAthletes(prev => [...prev, newAthlete]);
       setSessionLogs(prev => ({ ...prev, [newAthlete.id]: [] }));
       
-      // Auto-switch to new athlete? Optional. Let's do it for feedback.
+      // Auto-switch to new athlete
       setSelectedAthleteId(newAthlete.id);
       setShowAddAthleteModal(false);
+      
+      // Reset filters
+      setFilterName('');
+      setFilterPosition('');
+      setFilterCategory('');
   };
 
   // Direct Field Click
@@ -334,18 +394,14 @@ const RealTimeEvaluation: React.FC = () => {
       await saveTrainingEntry(entry);
 
       // --- POST SAVE LOGIC ---
-      // Remove current athlete from active list
       const remainingAthletes = activeAthletes.filter(a => a.id !== selectedAthleteId);
       
       if (remainingAthletes.length === 0) {
-          // Everyone finished
           navigate(`/athletes/${currentAthlete.id}`);
       } else {
-          // Switch to next athlete
           setActiveAthletes(remainingAthletes);
           setSelectedAthleteId(remainingAthletes[0].id);
           
-          // Clear saved logs to free memory (optional but good practice)
           setSessionLogs(prev => {
               const newLogs = { ...prev };
               delete newLogs[selectedAthleteId];
@@ -359,7 +415,7 @@ const RealTimeEvaluation: React.FC = () => {
 
   const handleAbort = () => {
       setShowCancelModal(false);
-      navigate(`/athletes/${id}`); // Fallback to original ID
+      navigate(`/athletes/${id}`); 
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -411,10 +467,9 @@ const RealTimeEvaluation: React.FC = () => {
 
       <div className="max-w-3xl mx-auto p-4 flex flex-col gap-6">
           
-          {/* FIELD AREA - Always Visible */}
+          {/* FIELD AREA */}
           <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300`}>
               
-              {/* Overlay Prompt */}
               {isRunning && step === 0 && currentAthlete && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                       <div className="bg-white/30 backdrop-blur-[2px] px-4 py-2 rounded-full shadow-lg text-white font-bold text-sm border border-white/40 animate-pulse">
@@ -423,7 +478,6 @@ const RealTimeEvaluation: React.FC = () => {
                   </div>
               )}
 
-              {/* Not Running Overlay */}
               {!isRunning && timer === 0 && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
                       <div className="text-white font-bold text-lg text-center">
@@ -432,7 +486,6 @@ const RealTimeEvaluation: React.FC = () => {
                   </div>
               )}
 
-              {/* Interaction Layer */}
               <div 
                 className={`absolute inset-0 z-0 ${isRunning && step === 0 && currentAthlete ? 'cursor-crosshair' : 'cursor-default'}`}
                 onClick={handleFieldClick}
@@ -444,12 +497,10 @@ const RealTimeEvaluation: React.FC = () => {
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50 pointer-events-none"></div>
                   <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
                   
-                  {/* Helper Labels */}
                   <div className="absolute bottom-2 left-4 text-white/40 font-bold text-[10px] uppercase">Defesa</div>
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white/40 font-bold text-[10px] uppercase">Construção</div>
                   <div className="absolute bottom-2 right-4 text-white/40 font-bold text-[10px] uppercase">Ataque</div>
 
-                  {/* Marker for Current Action */}
                   {fieldClick && (
                       <div 
                         className="absolute w-8 h-8 bg-yellow-400 border-4 border-white rounded-full shadow-xl transform -translate-x-1/2 -translate-y-1/2 z-20 animate-ping-once"
@@ -458,7 +509,6 @@ const RealTimeEvaluation: React.FC = () => {
                       </div>
                   )}
 
-                  {/* Ghost Markers for Current Athlete Actions */}
                   {currentEvents.map((evt, idx) => (
                       <div 
                         key={idx}
@@ -469,7 +519,7 @@ const RealTimeEvaluation: React.FC = () => {
               </div>
           </div>
 
-          {/* DYNAMIC FORM (Step 2) */}
+          {/* DYNAMIC FORM */}
           {step === 2 && zone && (
               <div className="animate-slide-up bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden relative z-20">
                   <div className={`p-4 border-b text-white flex justify-between items-center shadow-md
@@ -486,8 +536,6 @@ const RealTimeEvaluation: React.FC = () => {
                   </div>
 
                   <div className="p-6 space-y-6 max-h-[50vh] overflow-y-auto">
-                      
-                      {/* 1. Zone Specific Stats - Only show 3-4 key stats for speed */}
                       {zone === 'DEF' && (
                           <div className="space-y-4">
                               <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
@@ -515,7 +563,6 @@ const RealTimeEvaluation: React.FC = () => {
                           </div>
                       )}
 
-                      {/* 2. Observations with Voice Input */}
                       <div>
                           <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
                               Observação (Opcional)
@@ -538,7 +585,6 @@ const RealTimeEvaluation: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* 3. Actions */}
                       <div className="flex gap-3 pt-2">
                           <button 
                             onClick={handleCancelAction}
@@ -559,7 +605,6 @@ const RealTimeEvaluation: React.FC = () => {
               </div>
           )}
 
-          {/* Event Log Preview */}
           {currentEvents.length > 0 && step === 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
                   <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 flex justify-between">
@@ -595,13 +640,13 @@ const RealTimeEvaluation: React.FC = () => {
               
               <button
                 onClick={() => setShowAddAthleteModal(true)}
-                className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-bold whitespace-nowrap"
+                className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-3 rounded-full md:rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm border border-blue-200"
+                title="Adicionar Atleta"
               >
-                  <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Atleta</span>
+                  <UserPlus size={20} />
               </button>
           </div>
 
-          {/* ATHLETE SWITCHER SCROLL */}
           <div className="flex-1 overflow-x-auto flex gap-3 pb-1 md:pb-0 hide-scrollbar px-1">
               {activeAthletes.map(ath => (
                   <button 
@@ -644,32 +689,96 @@ const RealTimeEvaluation: React.FC = () => {
       {/* ADD ATHLETE MODAL */}
       {showAddAthleteModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-                  <div className="flex justify-between items-center mb-4">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative flex flex-col max-h-[80vh]">
+                  <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
                       <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Adicionar à Análise</h3>
-                      <button onClick={() => setShowAddAthleteModal(false)}><X className="text-gray-400" /></button>
+                      <button onClick={() => setShowAddAthleteModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
-                      {teamAthletes.filter(ta => !activeAthletes.find(aa => aa.id === ta.id)).map(athlete => (
-                          <button
-                              key={athlete.id}
-                              onClick={() => handleAddAthlete(athlete)}
-                              className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors"
+                  
+                  {/* FILTERS SECTION */}
+                  <div className="space-y-3 mb-4">
+                      {/* Team Select */}
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">SELECIONAR TIME</label>
+                          <select 
+                              className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm font-semibold"
+                              value={selectedTeamIdForAdd}
+                              onChange={(e) => setSelectedTeamIdForAdd(e.target.value)}
                           >
-                              {athlete.photoUrl ? (
-                                  <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover" />
-                              ) : (
-                                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
-                              )}
-                              <div className="text-left">
-                                  <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
-                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{athlete.position}</span>
-                              </div>
-                              <Plus className="ml-auto text-green-600" size={20} />
-                          </button>
-                      ))}
-                      {teamAthletes.filter(ta => !activeAthletes.find(aa => aa.id === ta.id)).length === 0 && (
-                          <p className="text-center text-gray-500 py-4 text-sm">Todos os atletas do time já estão na análise.</p>
+                              {userAllowedTeams.map(t => (
+                                  <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                          </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">CATEGORIA</label>
+                              <select 
+                                  className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
+                                  value={filterCategory}
+                                  onChange={(e) => setFilterCategory(e.target.value)}
+                              >
+                                  <option value="">Todas</option>
+                                  {allCategories.filter(c => c.teamId === selectedTeamIdForAdd).map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">POSIÇÃO</label>
+                              <select 
+                                  className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
+                                  value={filterPosition}
+                                  onChange={(e) => setFilterPosition(e.target.value)}
+                              >
+                                  <option value="">Todas</option>
+                                  {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                          </div>
+                      </div>
+
+                      <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                          <input 
+                              type="text" 
+                              className="w-full bg-gray-100 border border-gray-300 rounded-lg pl-9 p-2 text-sm"
+                              placeholder="Buscar por nome..."
+                              value={filterName}
+                              onChange={(e) => setFilterName(e.target.value)}
+                          />
+                      </div>
+                  </div>
+
+                  {/* ATHLETE LIST */}
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[200px]">
+                      {filteredAthletesList.length > 0 ? (
+                          filteredAthletesList.map(athlete => (
+                              <button
+                                  key={athlete.id}
+                                  onClick={() => handleAddAthlete(athlete)}
+                                  className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors"
+                              >
+                                  {athlete.photoUrl ? (
+                                      <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover" />
+                                  ) : (
+                                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
+                                  )}
+                                  <div className="text-left">
+                                      <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
+                                      <div className="flex gap-2">
+                                          <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">{athlete.position}</span>
+                                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{getCalculatedCategory(athlete.birthDate)}</span>
+                                      </div>
+                                  </div>
+                                  <Plus className="ml-auto text-green-600" size={20} />
+                              </button>
+                          ))
+                      ) : (
+                          <div className="text-center py-8 text-gray-400 flex flex-col items-center gap-2">
+                              <Filter size={32} className="opacity-20"/>
+                              <p className="text-sm">Nenhum atleta encontrado com os filtros.</p>
+                          </div>
                       )}
                   </div>
               </div>
