@@ -240,7 +240,7 @@ const RealTimeEvaluation: React.FC = () => {
 
   const handleAbort = () => {
       if (window.confirm('Tem certeza que deseja cancelar? Todos os dados desta sessão serão perdidos.')) {
-          navigate(-1);
+          navigate(`/athletes/${athlete?.id}`);
       }
   };
 
@@ -252,7 +252,7 @@ const RealTimeEvaluation: React.FC = () => {
       {/* Header */}
       <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
-              <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-blue-600">
+              <button onClick={() => navigate(`/athletes/${athlete.id}`)} className="text-gray-500 hover:text-blue-600">
                   <ArrowLeft size={24} />
               </button>
               <div>

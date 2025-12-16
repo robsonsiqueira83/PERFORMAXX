@@ -5,9 +5,7 @@ import {
   getTrainingEntries, 
   getTrainingSessions, 
   deleteAthlete, 
-  saveTrainingEntry,
   saveAthlete,
-  saveTrainingSession,
   getCategories,
   deleteTrainingEntry,
   getTeams
@@ -19,7 +17,6 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 import { Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, SkipForward, ArrowRightLeft, Search, AlertTriangle } from 'lucide-react';
-import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -50,7 +47,6 @@ const AthleteProfile: React.FC = () => {
 
   // Local state for modals
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showTrainingModal, setShowTrainingModal] = useState(false);
   
   // Replay Modal State
   const [showReplayModal, setShowReplayModal] = useState(false);
@@ -71,27 +67,6 @@ const AthleteProfile: React.FC = () => {
 
   // UI Feedback
   const [copyFeedback, setCopyFeedback] = useState(false);
-
-  // Add/Edit Training State
-  const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  // Used for both New and Edit modes
-  const [currentStats, setCurrentStats] = useState({
-    // Condição Física
-    velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-    // Fundamentos
-    controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-    // Tático - Defendendo
-    def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-    // Tático - Construindo
-    const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-    // Tático - Último Terço
-    ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-  });
-  
-  const [currentHeatmapPoints, setCurrentHeatmapPoints] = useState<HeatmapPoint[]>([]);
-  const [currentNotes, setCurrentNotes] = useState('');
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null); // If null, it's a new entry
   
   const calendarRef = useRef<HTMLDivElement>(null);
   const replayTimerRef = useRef<number | null>(null);
@@ -448,7 +423,8 @@ const AthleteProfile: React.FC = () => {
               // Not JSON or legacy note
           }
       }
-      openEditTrainingModal(item.entry, item.fullDate);
+      // Navigate to Evaluation Page for Editing
+      navigate(`/athletes/${id}/evaluation/${item.entry.id}`);
   };
 
   // Calendar Logic
@@ -484,142 +460,6 @@ const AthleteProfile: React.FC = () => {
       setCalendarMonth(newDate);
   };
 
-  // --- MODALS FUNCTIONS ---
-  
-  const resetStats = () => ({
-        velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-        controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-        def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-        const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-        ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-  });
-
-  const openNewTrainingModal = () => {
-    setEditingEntryId(null);
-    setTrainingDate(new Date().toISOString().split('T')[0]);
-    
-    // --- CALCULATE AVERAGES FOR NEW ENTRY ---
-    if (entries.length > 0) {
-        const defaultKeys = resetStats();
-        const newStats: any = {};
-        
-        Object.keys(defaultKeys).forEach(key => {
-            let sum = 0;
-            let count = 0;
-            
-            entries.forEach(entry => {
-                const val = (entry.technical as any)[key] ?? (entry.physical as any)[key] ?? (entry.tactical as any)?.[key];
-                if (val !== undefined && val !== null) {
-                    sum += Number(val);
-                    count++;
-                }
-            });
-            
-            if (count > 0) {
-                newStats[key] = Math.round((sum / count) * 2) / 2;
-            } else {
-                newStats[key] = 5;
-            }
-        });
-        setCurrentStats(newStats);
-    } else {
-        setCurrentStats(resetStats());
-    }
-
-    setCurrentHeatmapPoints([]);
-    setCurrentNotes('');
-    setShowTrainingModal(true);
-  };
-
-  const openEditTrainingModal = (entry: TrainingEntry, date: string) => {
-    setEditingEntryId(entry.id);
-    const defaults = resetStats();
-    // Merge entry data with current structure
-    setCurrentStats({ 
-        ...defaults, // Base defaults
-        ...entry.technical, 
-        ...entry.physical, 
-        ...entry.tactical 
-    });
-    setCurrentHeatmapPoints(entry.heatmapPoints || []);
-    // Handle notes: if JSON, show a simple message, otherwise show text
-    let displayNotes = entry.notes || '';
-    try {
-        const parsed = JSON.parse(displayNotes);
-        if (parsed.type === 'REAL_TIME_LOG') displayNotes = `[Log de Tempo Real: ${parsed.totalEvents} ações]`;
-    } catch (e) {}
-    
-    setCurrentNotes(displayNotes);
-    setTrainingDate(date);
-    setShowTrainingModal(true);
-  };
-
-  const handleSaveTraining = async () => {
-     if (!athlete || !trainingDate) return;
-     
-     let sessionId = null;
-     
-     // Find or create session
-     const existingSession = sessions.find(s => s.date === trainingDate && s.teamId === athlete.teamId && s.categoryId === athlete.categoryId);
-     if (existingSession) {
-         sessionId = existingSession.id;
-     } else {
-         sessionId = uuidv4();
-         const newSession: TrainingSession = {
-             id: sessionId,
-             date: trainingDate,
-             teamId: athlete.teamId,
-             categoryId: athlete.categoryId,
-             description: 'Atuação (Perfil)'
-         };
-         await saveTrainingSession(newSession);
-     }
-
-     const entryId = editingEntryId || uuidv4();
-
-     // If editing a Real Time log, preserve the original notes if not modified by user to something else
-     // This is a simple check to avoid overwriting the JSON log with the "[Log...]" placeholder
-     let notesToSave = currentNotes;
-     if (editingEntryId) {
-         const originalEntry = entries.find(e => e.id === editingEntryId);
-         if (originalEntry && currentNotes.startsWith('[Log de Tempo Real')) {
-             notesToSave = originalEntry.notes || '';
-         }
-     }
-
-     const entry: TrainingEntry = {
-         id: entryId,
-         sessionId: sessionId,
-         athleteId: athlete.id,
-         technical: {
-            controle_bola: currentStats.controle_bola, conducao: currentStats.conducao, passe: currentStats.passe,
-            recepcao: currentStats.recepcao, drible: currentStats.drible, finalizacao: currentStats.finalizacao,
-            cruzamento: currentStats.cruzamento, desarme: currentStats.desarme, interceptacao: currentStats.interceptacao
-         },
-         physical: {
-            velocidade: currentStats.velocidade, agilidade: currentStats.agilidade, resistencia: currentStats.resistencia,
-            forca: currentStats.forca, coordenacao: currentStats.coordenacao, mobilidade: currentStats.mobilidade, estabilidade: currentStats.estabilidade
-         },
-         tactical: {
-            def_posicionamento: currentStats.def_posicionamento, def_pressao: currentStats.def_pressao, def_cobertura: currentStats.def_cobertura,
-            def_fechamento: currentStats.def_fechamento, def_temporizacao: currentStats.def_temporizacao, def_desarme_tatico: currentStats.def_desarme_tatico,
-            def_reacao: currentStats.def_reacao,
-            const_qualidade_passe: currentStats.const_qualidade_passe, const_visao: currentStats.const_visao, const_apoios: currentStats.const_apoios,
-            const_mobilidade: currentStats.const_mobilidade, const_circulacao: currentStats.const_circulacao, const_quebra_linhas: currentStats.const_quebra_linhas,
-            const_tomada_decisao: currentStats.const_tomada_decisao,
-            ult_movimentacao: currentStats.ult_movimentacao, ult_ataque_espaco: currentStats.ult_ataque_espaco, ult_1v1: currentStats.ult_1v1,
-            ult_ultimo_passe: currentStats.ult_ultimo_passe, ult_finalizacao_eficiente: currentStats.ult_finalizacao_eficiente,
-            ult_ritmo: currentStats.ult_ritmo, ult_bolas_paradas: currentStats.ult_bolas_paradas
-         },
-         heatmapPoints: currentHeatmapPoints,
-         notes: notesToSave
-     };
-     
-     await saveTrainingEntry(entry);
-     setShowTrainingModal(false);
-     setRefreshKey(prev => prev + 1);
-  };
-
   const formatBirthDate = (dateString: string) => {
      if (!dateString) return '';
      const datePart = dateString.split('T')[0];
@@ -638,8 +478,6 @@ const AthleteProfile: React.FC = () => {
 
   // Activity Mini Calendar Renderer
   const renderActivityCalendar = () => {
-      // Last 14 days or just a grid of filled dates?
-      // Let's make a grid for the current month
       const currentMonthDates = Array.from({length: daysInMonth}, (_, i) => {
           const d = i + 1;
           const full = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -784,7 +622,7 @@ const AthleteProfile: React.FC = () => {
                  {/* ACTION BUTTONS (PERMISSION GATED) */}
                  {currentUser && canEditData(currentUser.role) && (
                     <div className="flex flex-col gap-2 w-full sm:w-auto">
-                        <button onClick={openNewTrainingModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
+                        <button onClick={() => navigate(`/athletes/${id}/evaluation`)} className="bg-[#4ade80] hover:bg-green-500 text-white px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm w-full"><ClipboardList size={18} /> Nova Atuação</button>
                         <div className="flex gap-2 w-full">
                             <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors" title="Análise em Tempo Real">
                                 <Timer size={16} />
@@ -893,7 +731,7 @@ const AthleteProfile: React.FC = () => {
                           </div>
                       </div>
                       <div className="flex gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); openEditTrainingModal(item!.entry, item!.fullDate); }} className="text-blue-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded"><Edit size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`/athletes/${id}/evaluation/${item!.entry.id}`); }} className="text-blue-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded"><Edit size={16} /></button>
                           <button onClick={(e) => { e.stopPropagation(); setConfirmModal({ isOpen: true, type: 'entry', id: item!.id }); }} className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
                       </div>
                   </div>
@@ -1078,127 +916,6 @@ const AthleteProfile: React.FC = () => {
                      Salvar Alterações
                  </button>
               </form>
-           </div>
-        </div>
-      )}
-
-      {/* TRAINING MODAL (NEW / EDIT) */}
-      {showTrainingModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
-           <div className="bg-white rounded-xl w-full max-w-4xl p-6 shadow-2xl relative my-8">
-              <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-4 border-b">
-                 <div>
-                     <h3 className="text-xl font-bold text-gray-800">{editingEntryId ? 'Editar Atuação' : 'Nova Atuação'}</h3>
-                     <input type="date" value={trainingDate} onChange={(e) => setTrainingDate(e.target.value)} className="text-sm text-gray-500 border rounded px-2 py-1 mt-1" />
-                 </div>
-                 
-                 <div className="flex gap-2">
-                     {editingEntryId && (
-                         <button 
-                            onClick={() => setConfirmModal({ isOpen: true, type: 'entry', id: editingEntryId })}
-                            className="bg-red-50 text-red-600 px-3 py-1.5 rounded hover:bg-red-100 font-bold flex items-center gap-1"
-                         >
-                             <Trash2 size={16} /> Excluir
-                         </button>
-                     )}
-                     <button onClick={() => setShowTrainingModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
-                 </div>
-              </div>
-              
-              <div className="space-y-8">
-                  {/* Heatmap Input */}
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                       <HeatmapField 
-                          points={currentHeatmapPoints} 
-                          onChange={setCurrentHeatmapPoints} 
-                          label="Mapa de Calor (Toque para marcar)" 
-                       />
-                  </div>
-
-                  {/* Stats Sliders */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {/* Defendendo */}
-                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Defendendo</h4>
-                           <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
-                           <StatSlider label="Pressão" value={currentStats.def_pressao} onChange={v => setCurrentStats({...currentStats, def_pressao: v})} />
-                           <StatSlider label="Cobertura" value={currentStats.def_cobertura} onChange={v => setCurrentStats({...currentStats, def_cobertura: v})} />
-                           <StatSlider label="Fechamento" value={currentStats.def_fechamento} onChange={v => setCurrentStats({...currentStats, def_fechamento: v})} />
-                           <StatSlider label="Temporização" value={currentStats.def_temporizacao} onChange={v => setCurrentStats({...currentStats, def_temporizacao: v})} />
-                           <StatSlider label="Desarme Tát." value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
-                           <StatSlider label="Reação" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
-                      </div>
-
-                      {/* Construindo */}
-                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Construindo</h4>
-                           <StatSlider label="Qual. Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
-                           <StatSlider label="Visão" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
-                           <StatSlider label="Apoios" value={currentStats.const_apoios} onChange={v => setCurrentStats({...currentStats, const_apoios: v})} />
-                           <StatSlider label="Mobilidade" value={currentStats.const_mobilidade} onChange={v => setCurrentStats({...currentStats, const_mobilidade: v})} />
-                           <StatSlider label="Circulação" value={currentStats.const_circulacao} onChange={v => setCurrentStats({...currentStats, const_circulacao: v})} />
-                           <StatSlider label="Quebra Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
-                           <StatSlider label="Decisão" value={currentStats.const_tomada_decisao} onChange={v => setCurrentStats({...currentStats, const_tomada_decisao: v})} />
-                      </div>
-
-                      {/* Último Terço */}
-                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                           <h4 className="text-xs uppercase font-bold text-purple-700 mb-3 border-b border-purple-200 pb-1">Último Terço</h4>
-                           <StatSlider label="Movimentação" value={currentStats.ult_movimentacao} onChange={v => setCurrentStats({...currentStats, ult_movimentacao: v})} />
-                           <StatSlider label="Atq Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
-                           <StatSlider label="1v1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
-                           <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
-                           <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
-                           <StatSlider label="Ritmo" value={currentStats.ult_ritmo} onChange={v => setCurrentStats({...currentStats, ult_ritmo: v})} />
-                           <StatSlider label="Bolas Paradas" value={currentStats.ult_bolas_paradas} onChange={v => setCurrentStats({...currentStats, ult_bolas_paradas: v})} />
-                      </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Technical */}
-                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                           <h4 className="text-xs uppercase font-bold text-blue-700 mb-3 border-b border-blue-200 pb-1">Fundamentos</h4>
-                           <StatSlider label="Controle" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
-                           <StatSlider label="Condução" value={currentStats.conducao} onChange={v => setCurrentStats({...currentStats, conducao: v})} />
-                           <StatSlider label="Passe" value={currentStats.passe} onChange={v => setCurrentStats({...currentStats, passe: v})} />
-                           <StatSlider label="Recepção" value={currentStats.recepcao} onChange={v => setCurrentStats({...currentStats, recepcao: v})} />
-                           <StatSlider label="Drible" value={currentStats.drible} onChange={v => setCurrentStats({...currentStats, drible: v})} />
-                           <StatSlider label="Finalização" value={currentStats.finalizacao} onChange={v => setCurrentStats({...currentStats, finalizacao: v})} />
-                           <StatSlider label="Cruzamento" value={currentStats.cruzamento} onChange={v => setCurrentStats({...currentStats, cruzamento: v})} />
-                           <StatSlider label="Desarme" value={currentStats.desarme} onChange={v => setCurrentStats({...currentStats, desarme: v})} />
-                           <StatSlider label="Intercept." value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
-                      </div>
-
-                      {/* Physical */}
-                      <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
-                           <h4 className="text-xs uppercase font-bold text-orange-700 mb-3 border-b border-orange-200 pb-1">Físico</h4>
-                           <StatSlider label="Velocidade" value={currentStats.velocidade} onChange={v => setCurrentStats({...currentStats, velocidade: v})} />
-                           <StatSlider label="Agilidade" value={currentStats.agilidade} onChange={v => setCurrentStats({...currentStats, agilidade: v})} />
-                           <StatSlider label="Resistência" value={currentStats.resistencia} onChange={v => setCurrentStats({...currentStats, resistencia: v})} />
-                           <StatSlider label="Força" value={currentStats.forca} onChange={v => setCurrentStats({...currentStats, forca: v})} />
-                           <StatSlider label="Coordenação" value={currentStats.coordenacao} onChange={v => setCurrentStats({...currentStats, coordenacao: v})} />
-                           <StatSlider label="Mobilidade" value={currentStats.mobilidade} onChange={v => setCurrentStats({...currentStats, mobilidade: v})} />
-                           <StatSlider label="Estabilidade" value={currentStats.estabilidade} onChange={v => setCurrentStats({...currentStats, estabilidade: v})} />
-                      </div>
-                  </div>
-
-                  <div>
-                      <h4 className="text-sm font-bold text-gray-700 mb-2">Observações</h4>
-                      <textarea 
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-blue-500 h-24"
-                        value={currentNotes}
-                        onChange={(e) => setCurrentNotes(e.target.value)}
-                        placeholder="Notas sobre a atuação..."
-                      ></textarea>
-                  </div>
-
-                  <button 
-                    onClick={handleSaveTraining}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2"
-                  >
-                      <Save size={18} /> Salvar Atuação
-                  </button>
-              </div>
            </div>
         </div>
       )}
