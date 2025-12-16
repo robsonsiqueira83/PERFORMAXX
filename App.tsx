@@ -11,6 +11,7 @@ import UserManagement from './pages/UserManagement';
 import GlobalDashboard from './pages/GlobalDashboard';
 import PublicTeamDashboard from './pages/PublicTeamDashboard';
 import PublicAthleteProfile from './pages/PublicAthleteProfile';
+import RealTimeEvaluation from './pages/RealTimeEvaluation';
 import { User, UserRole } from './types';
 import { getTeams, getUsers } from './services/storageService';
 
@@ -195,6 +196,7 @@ const App: React.FC = () => {
                   <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
+                  <Route path="/athletes/:id/realtime" element={<RealTimeEvaluation />} />
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
                   
