@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
 import { Athlete, TrainingEntry, HeatmapPoint, getCalculatedCategory, Team, Category, Position, User, UserRole } from '../types';
-import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -60,6 +60,9 @@ const RealTimeEvaluation: React.FC = () => {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showAddAthleteModal, setShowAddAthleteModal] = useState(false);
+  
+  // System Feedback State
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info', title: string, message: string } | null>(null);
   
   // Voice Recognition State
   const [isListening, setIsListening] = useState(false);
@@ -211,7 +214,11 @@ const RealTimeEvaluation: React.FC = () => {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       
       if (!SpeechRecognition) {
-          alert("Seu navegador não suporta reconhecimento de voz.");
+          setFeedback({
+              type: 'error',
+              title: 'Não Suportado',
+              message: 'Seu navegador não suporta reconhecimento de voz.'
+          });
           return;
       }
 
@@ -409,7 +416,11 @@ const RealTimeEvaluation: React.FC = () => {
           });
           
           setLoading(false);
-          alert(`Dados de ${currentAthlete.name} salvos! Alternando para ${remainingAthletes[0].name}.`);
+          setFeedback({
+              type: 'success',
+              title: 'Dados Salvos!',
+              message: `Dados de ${currentAthlete.name} registrados. Alternando para ${remainingAthletes[0].name}.`
+          });
       }
   };
 
@@ -430,15 +441,24 @@ const RealTimeEvaluation: React.FC = () => {
                   <ArrowLeft size={24} />
               </button>
               {currentAthlete ? (
-                  <div>
-                      <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{currentAthlete.name}</h1>
-                      <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                              {currentAthlete.position}
-                          </span>
-                          <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
-                              {getCalculatedCategory(currentAthlete.birthDate)}
-                          </span>
+                  <div className="flex items-center gap-3">
+                      {currentAthlete.photoUrl ? (
+                          <img src={currentAthlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" alt={currentAthlete.name} />
+                      ) : (
+                          <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500 text-lg">
+                              {currentAthlete.name.charAt(0)}
+                          </div>
+                      )}
+                      <div>
+                          <h1 className="font-bold text-gray-900 text-xl leading-none truncate max-w-[200px]">{currentAthlete.name}</h1>
+                          <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                                  {currentAthlete.position}
+                              </span>
+                              <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
+                                  {getCalculatedCategory(currentAthlete.birthDate)}
+                              </span>
+                          </div>
                       </div>
                   </div>
               ) : (
@@ -535,7 +555,7 @@ const RealTimeEvaluation: React.FC = () => {
                       <div className="font-mono bg-black/20 px-3 py-1 rounded-lg text-sm font-bold border border-white/20">{capturedTime}</div>
                   </div>
 
-                  <div className="p-6 space-y-6 max-h-[50vh] overflow-y-auto">
+                  <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto pb-24">
                       {zone === 'DEF' && (
                           <div className="space-y-4">
                               <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
@@ -843,6 +863,23 @@ const RealTimeEvaluation: React.FC = () => {
                          Sim, Sair
                      </button>
                  </div>
+             </div>
+         </div>
+      )}
+
+      {/* SYSTEM FEEDBACK MODAL (Replaces Alerts) */}
+      {feedback && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
+                 <button onClick={() => setFeedback(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                    {feedback.type === 'success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">{feedback.title}</h3>
+                 <p className="text-gray-500 text-center mb-6">{feedback.message}</p>
+                 <button onClick={() => setFeedback(null)} className={`text-white font-bold py-3 px-6 rounded-xl transition-colors w-full shadow-lg ${feedback.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                     Continuar
+                 </button>
              </div>
          </div>
       )}
