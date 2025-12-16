@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTrainingSessions } from '../services/storageService';
 import { Athlete, TrainingSession, TrainingEntry, HeatmapPoint, getCalculatedCategory } from '../types';
-import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag, Mic } from 'lucide-react';
+import { ArrowLeft, Timer, Play, Pause, MapPin, Save, FileText, Loader2, XCircle, CheckCircle, StopCircle, Clock, AlertTriangle, Flag, Mic, UserPlus, Users, X, Plus } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -20,29 +20,35 @@ interface GameEvent {
 const RealTimeEvaluation: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [athlete, setAthlete] = useState<Athlete | null>(null);
+  
   const [loading, setLoading] = useState(true);
+  
+  // Multi-Athlete State
+  const [teamAthletes, setTeamAthletes] = useState<Athlete[]>([]); // All available teammates
+  const [activeAthletes, setActiveAthletes] = useState<Athlete[]>([]); // Currently being evaluated
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string>(''); // Context focus
+  
+  // Data Collection State (Keyed by Athlete ID)
+  const [sessionLogs, setSessionLogs] = useState<Record<string, GameEvent[]>>({});
 
-  // Timer & Game State
+  // Timer & Game State (Global for all athletes)
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const [gamePeriod, setGamePeriod] = useState<1 | 2>(1); // 1 = 1st Half, 2 = 2nd Half
+  const [gamePeriod, setGamePeriod] = useState<1 | 2>(1);
   const [isHalftime, setIsHalftime] = useState(false);
+  const [startTime, setStartTime] = useState<string | null>(null);
   
   const timerRef = useRef<number | null>(null);
-  const [startTime, setStartTime] = useState<string | null>(null);
 
-  // Data Collection State
-  const [eventsLog, setEventsLog] = useState<GameEvent[]>([]);
-  
   // Interaction State
-  const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: (Skipped), 2: Rate Stats
+  const [step, setStep] = useState<0 | 1 | 2>(0);
   const [capturedTime, setCapturedTime] = useState<string>('');
   const [capturedSeconds, setCapturedSeconds] = useState<number>(0);
   
   // Custom Modal States
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showAddAthleteModal, setShowAddAthleteModal] = useState(false);
   
   // Voice Recognition State
   const [isListening, setIsListening] = useState(false);
@@ -55,7 +61,6 @@ const RealTimeEvaluation: React.FC = () => {
 
   function getEmptyStats() {
       return {
-        // Init all to 0 (meaning "not rated" for this specific action)
         velocidade: 0, agilidade: 0, resistencia: 0, forca: 0, coordenacao: 0, mobilidade: 0, estabilidade: 0,
         controle_bola: 0, conducao: 0, passe: 0, recepcao: 0, drible: 0, finalizacao: 0, cruzamento: 0, desarme: 0, interceptacao: 0,
         def_posicionamento: 0, def_pressao: 0, def_cobertura: 0, def_fechamento: 0, def_temporizacao: 0, def_desarme_tatico: 0, def_reacao: 0,
@@ -64,11 +69,31 @@ const RealTimeEvaluation: React.FC = () => {
       };
   }
 
+  // Current Athlete Helper
+  const currentAthlete = useMemo(() => 
+      activeAthletes.find(a => a.id === selectedAthleteId) || null, 
+  [activeAthletes, selectedAthleteId]);
+
+  // Current Events Helper
+  const currentEvents = useMemo(() => 
+      sessionLogs[selectedAthleteId] || [], 
+  [sessionLogs, selectedAthleteId]);
+
   useEffect(() => {
     const load = async () => {
       const allAthletes = await getAthletes();
-      const found = allAthletes.find(a => a.id === id);
-      setAthlete(found || null);
+      const initialAthlete = allAthletes.find(a => a.id === id);
+      
+      if (initialAthlete) {
+          // Filter to get only teammates
+          const teammates = allAthletes.filter(a => a.teamId === initialAthlete.teamId);
+          setTeamAthletes(teammates);
+          
+          // Set Initial State
+          setActiveAthletes([initialAthlete]);
+          setSelectedAthleteId(initialAthlete.id);
+          setSessionLogs({ [initialAthlete.id]: [] });
+      }
       setLoading(false);
     };
     load();
@@ -77,7 +102,7 @@ const RealTimeEvaluation: React.FC = () => {
   // Timer Logic
   useEffect(() => {
     if (isRunning) {
-      if (!startTime) setStartTime(new Date().toISOString()); // Capture start Date/Time for DB
+      if (!startTime) setStartTime(new Date().toISOString()); 
       
       timerRef.current = window.setInterval(() => {
         setTimer((prev) => prev + 1);
@@ -103,19 +128,15 @@ const RealTimeEvaluation: React.FC = () => {
   // Game Control Logic
   const handleMainButton = () => {
       if (!isRunning && timer === 0) {
-          // START GAME (1st Half)
           setIsRunning(true);
       } else if (isRunning && gamePeriod === 1) {
-          // END 1st HALF -> PAUSE
           setIsRunning(false);
           setIsHalftime(true);
       } else if (!isRunning && isHalftime) {
-          // START 2nd HALF
           setIsHalftime(false);
           setGamePeriod(2);
           setIsRunning(true);
       } else {
-          // PAUSE / RESUME (Standard)
           setIsRunning(!isRunning);
       }
   };
@@ -139,7 +160,7 @@ const RealTimeEvaluation: React.FC = () => {
           return;
       }
 
-      if (isListening) return; // Already active
+      if (isListening) return; 
 
       const recognition = new SpeechRecognition();
       recognition.lang = 'pt-BR';
@@ -166,11 +187,22 @@ const RealTimeEvaluation: React.FC = () => {
       recognition.start();
   };
 
-  // Direct Field Click (Merge Step 1 & 2)
-  const handleFieldClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isRunning) return; // Only allow when running
+  // Add Athlete Logic
+  const handleAddAthlete = (newAthlete: Athlete) => {
+      if (activeAthletes.some(a => a.id === newAthlete.id)) return;
+      
+      setActiveAthletes(prev => [...prev, newAthlete]);
+      setSessionLogs(prev => ({ ...prev, [newAthlete.id]: [] }));
+      
+      // Auto-switch to new athlete? Optional. Let's do it for feedback.
+      setSelectedAthleteId(newAthlete.id);
+      setShowAddAthleteModal(false);
+  };
 
-    // Capture Time immediately
+  // Direct Field Click
+  const handleFieldClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isRunning) return; 
+
     setCapturedTime(formatTime(timer));
     setCapturedSeconds(timer);
 
@@ -180,7 +212,6 @@ const RealTimeEvaluation: React.FC = () => {
 
     setFieldClick({ x, y });
 
-    // Determine Zone
     if (x < 33.33) setZone('DEF');
     else if (x < 66.66) setZone('MID');
     else setZone('ATT');
@@ -188,9 +219,9 @@ const RealTimeEvaluation: React.FC = () => {
     setStep(2);
   };
 
-  // Step 3: Confirm Action (Push to Log)
+  // Confirm Action
   const handleConfirmAction = () => {
-      if (!zone || !fieldClick) return;
+      if (!zone || !fieldClick || !selectedAthleteId) return;
 
       const newEvent: GameEvent = {
           timestamp: capturedTime,
@@ -198,13 +229,16 @@ const RealTimeEvaluation: React.FC = () => {
           period: gamePeriod,
           zone: zone,
           location: fieldClick,
-          stats: { ...currentStats }, // Copy values
+          stats: { ...currentStats },
           note: currentNotes
       };
 
-      setEventsLog(prev => [...prev, newEvent]);
+      // Push to specific athlete log
+      setSessionLogs(prev => ({
+          ...prev,
+          [selectedAthleteId]: [...(prev[selectedAthleteId] || []), newEvent]
+      }));
 
-      // Reset UI for next action
       setStep(0);
       setFieldClick(null);
       setZone(null);
@@ -218,19 +252,22 @@ const RealTimeEvaluation: React.FC = () => {
       setZone(null);
   };
 
-  // --- FINISH SESSION ---
+  // --- FINISH SESSION (PARTIAL SAVE) ---
   const handleFinishSession = async () => {
+      if (!currentAthlete) return;
+      
       setShowFinishModal(false);
       setLoading(true);
+
+      const logsToSave = sessionLogs[selectedAthleteId] || [];
 
       // 1. Calculate Averages
       const finalStats: any = getEmptyStats();
       const counts: any = getEmptyStats();
 
-      // Initialize counts to 0
       Object.keys(counts).forEach(k => counts[k] = 0);
 
-      eventsLog.forEach(evt => {
+      logsToSave.forEach(evt => {
           Object.keys(evt.stats).forEach(key => {
               const val = evt.stats[key];
               if (val > 0) {
@@ -240,12 +277,11 @@ const RealTimeEvaluation: React.FC = () => {
           });
       });
 
-      // Divide by count
       Object.keys(finalStats).forEach(key => {
           if (counts[key] > 0) {
-              finalStats[key] = Math.round((finalStats[key] / counts[key]) * 2) / 2; // Round to 0.5
+              finalStats[key] = Math.round((finalStats[key] / counts[key]) * 2) / 2;
           } else {
-              finalStats[key] = 5; // Default average if no data points for this stat
+              finalStats[key] = 5;
           }
       });
 
@@ -255,18 +291,17 @@ const RealTimeEvaluation: React.FC = () => {
 
       await saveTrainingSession({
           id: sessionId,
-          teamId: athlete!.teamId,
-          categoryId: athlete!.categoryId,
+          teamId: currentAthlete.teamId,
+          categoryId: currentAthlete.categoryId,
           date: sessionDate,
-          description: 'Análise em Tempo Real' 
+          description: `Análise em Tempo Real (${logsToSave.length} ações)`
       });
 
-      // 3. Create Single Entry with Log in Notes
+      // 3. Create Entry
       const entry: TrainingEntry = {
           id: uuidv4(),
           sessionId,
-          athleteId: athlete!.id,
-          // Map calculated averages to structure
+          athleteId: currentAthlete.id,
           technical: {
             controle_bola: finalStats.controle_bola, conducao: finalStats.conducao, passe: finalStats.passe,
             recepcao: finalStats.recepcao, drible: finalStats.drible, finalizacao: finalStats.finalizacao,
@@ -287,26 +322,47 @@ const RealTimeEvaluation: React.FC = () => {
             ult_ultimo_passe: finalStats.ult_ultimo_passe, ult_finalizacao_eficiente: finalStats.ult_finalizacao_eficiente,
             ult_ritmo: finalStats.ult_ritmo, ult_bolas_paradas: finalStats.ult_bolas_paradas
           },
-          heatmapPoints: eventsLog.map(e => e.location), // All points
-          // STORE THE JSON LOG HERE
+          heatmapPoints: logsToSave.map(e => e.location),
           notes: JSON.stringify({
               type: 'REAL_TIME_LOG',
               startTime: startTime,
-              totalEvents: eventsLog.length,
-              events: eventsLog
+              totalEvents: logsToSave.length,
+              events: logsToSave
           })
       };
 
       await saveTrainingEntry(entry);
-      navigate(`/athletes/${athlete!.id}`);
+
+      // --- POST SAVE LOGIC ---
+      // Remove current athlete from active list
+      const remainingAthletes = activeAthletes.filter(a => a.id !== selectedAthleteId);
+      
+      if (remainingAthletes.length === 0) {
+          // Everyone finished
+          navigate(`/athletes/${currentAthlete.id}`);
+      } else {
+          // Switch to next athlete
+          setActiveAthletes(remainingAthletes);
+          setSelectedAthleteId(remainingAthletes[0].id);
+          
+          // Clear saved logs to free memory (optional but good practice)
+          setSessionLogs(prev => {
+              const newLogs = { ...prev };
+              delete newLogs[selectedAthleteId];
+              return newLogs;
+          });
+          
+          setLoading(false);
+          alert(`Dados de ${currentAthlete.name} salvos! Alternando para ${remainingAthletes[0].name}.`);
+      }
   };
 
   const handleAbort = () => {
       setShowCancelModal(false);
-      navigate(`/athletes/${athlete?.id}`);
+      navigate(`/athletes/${id}`); // Fallback to original ID
   };
 
-  if (loading || !athlete) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
@@ -314,20 +370,24 @@ const RealTimeEvaluation: React.FC = () => {
       {/* Header */}
       <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
-              <button onClick={() => navigate(`/athletes/${athlete.id}`)} className="text-gray-500 hover:text-blue-600">
+              <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-500 hover:text-blue-600">
                   <ArrowLeft size={24} />
               </button>
-              <div>
-                  <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{athlete.name}</h1>
-                  <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                          {athlete.position}
-                      </span>
-                      <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
-                          {getCalculatedCategory(athlete.birthDate)}
-                      </span>
+              {currentAthlete ? (
+                  <div>
+                      <h1 className="font-bold text-gray-800 leading-tight truncate max-w-[150px] md:max-w-none">{currentAthlete.name}</h1>
+                      <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                              {currentAthlete.position}
+                          </span>
+                          <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
+                              {getCalculatedCategory(currentAthlete.birthDate)}
+                          </span>
+                      </div>
                   </div>
-              </div>
+              ) : (
+                  <span className="text-gray-400 font-bold">Nenhum atleta selecionado</span>
+              )}
           </div>
           
           <div className="flex flex-col items-end">
@@ -354,8 +414,8 @@ const RealTimeEvaluation: React.FC = () => {
           {/* FIELD AREA - Always Visible */}
           <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300`}>
               
-              {/* Overlay Prompt when Running but not yet clicked */}
-              {isRunning && step === 0 && (
+              {/* Overlay Prompt */}
+              {isRunning && step === 0 && currentAthlete && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                       <div className="bg-white/30 backdrop-blur-[2px] px-4 py-2 rounded-full shadow-lg text-white font-bold text-sm border border-white/40 animate-pulse">
                           Toque no campo para registrar ação
@@ -374,7 +434,7 @@ const RealTimeEvaluation: React.FC = () => {
 
               {/* Interaction Layer */}
               <div 
-                className={`absolute inset-0 z-0 ${isRunning && step === 0 ? 'cursor-crosshair' : 'cursor-default'}`}
+                className={`absolute inset-0 z-0 ${isRunning && step === 0 && currentAthlete ? 'cursor-crosshair' : 'cursor-default'}`}
                 onClick={handleFieldClick}
               >
                   {/* Field Lines */}
@@ -398,8 +458,8 @@ const RealTimeEvaluation: React.FC = () => {
                       </div>
                   )}
 
-                  {/* Ghost Markers for Past Actions */}
-                  {eventsLog.map((evt, idx) => (
+                  {/* Ghost Markers for Current Athlete Actions */}
+                  {currentEvents.map((evt, idx) => (
                       <div 
                         key={idx}
                         className="absolute w-3 h-3 bg-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-0"
@@ -500,14 +560,14 @@ const RealTimeEvaluation: React.FC = () => {
           )}
 
           {/* Event Log Preview */}
-          {eventsLog.length > 0 && step === 0 && (
+          {currentEvents.length > 0 && step === 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
                   <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 flex justify-between">
                       <span>Timeline da Sessão</span>
-                      <span className="bg-gray-100 text-gray-600 px-2 rounded-full text-xs py-0.5">{eventsLog.length} ações</span>
+                      <span className="bg-gray-100 text-gray-600 px-2 rounded-full text-xs py-0.5">{currentEvents.length} ações</span>
                   </h3>
                   <div className="flex gap-2 overflow-x-auto pb-2">
-                      {eventsLog.slice().reverse().map((evt, i) => (
+                      {currentEvents.slice().reverse().map((evt, i) => (
                           <div key={i} className="flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg p-2 min-w-[100px] flex flex-col items-center">
                               <span className="text-xs font-mono text-gray-400 font-bold">{evt.timestamp}</span>
                               <span className={`text-[10px] font-bold px-1 rounded mt-1 
@@ -523,35 +583,113 @@ const RealTimeEvaluation: React.FC = () => {
 
       </div>
 
-      {/* FIXED FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex justify-between items-center md:px-8">
-          <button 
-            onClick={() => setShowCancelModal(true)}
-            className="text-red-500 font-bold text-sm flex items-center gap-2 px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
-          >
-              <XCircle size={20} /> <span className="hidden md:inline">Cancelar Análise</span>
-          </button>
+      {/* FIXED FOOTER - MULTI-ATHLETE BAR */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex flex-col md:flex-row gap-4 md:items-center md:px-8">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+              <button 
+                onClick={() => setShowCancelModal(true)}
+                className="text-red-500 font-bold text-sm flex items-center gap-2 px-3 py-2 hover:bg-red-50 rounded-lg transition-colors whitespace-nowrap"
+              >
+                  <XCircle size={20} /> Cancelar
+              </button>
+              
+              <button
+                onClick={() => setShowAddAthleteModal(true)}
+                className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-bold whitespace-nowrap"
+              >
+                  <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Atleta</span>
+              </button>
+          </div>
+
+          {/* ATHLETE SWITCHER SCROLL */}
+          <div className="flex-1 overflow-x-auto flex gap-3 pb-1 md:pb-0 hide-scrollbar px-1">
+              {activeAthletes.map(ath => (
+                  <button 
+                      key={ath.id}
+                      onClick={() => setSelectedAthleteId(ath.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg border transition-all min-w-[140px]
+                          ${selectedAthleteId === ath.id 
+                              ? 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-300' 
+                              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }
+                      `}
+                  >
+                      {ath.photoUrl ? (
+                          <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover border border-white/50" />
+                      ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${selectedAthleteId === ath.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                              {ath.name.charAt(0)}
+                          </div>
+                      )}
+                      <div className="flex flex-col items-start min-w-0">
+                          <span className="text-xs font-bold truncate w-full text-left">{ath.name.split(' ')[0]}</span>
+                          <span className={`text-[10px] ${selectedAthleteId === ath.id ? 'text-blue-100' : 'text-gray-400'}`}>
+                              {sessionLogs[ath.id]?.length || 0} ações
+                          </span>
+                      </div>
+                  </button>
+              ))}
+          </div>
           
           <button 
             onClick={() => setShowFinishModal(true)}
-            disabled={eventsLog.length === 0}
-            className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!currentEvents.length}
+            className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap w-full md:w-auto justify-center"
           >
-              <StopCircle size={20} /> ENCERRAR E SALVAR
+              <StopCircle size={20} /> 
+              <span>ENCERRAR E SALVAR</span>
           </button>
       </div>
 
+      {/* ADD ATHLETE MODAL */}
+      {showAddAthleteModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Adicionar à Análise</h3>
+                      <button onClick={() => setShowAddAthleteModal(false)}><X className="text-gray-400" /></button>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                      {teamAthletes.filter(ta => !activeAthletes.find(aa => aa.id === ta.id)).map(athlete => (
+                          <button
+                              key={athlete.id}
+                              onClick={() => handleAddAthlete(athlete)}
+                              className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors"
+                          >
+                              {athlete.photoUrl ? (
+                                  <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover" />
+                              ) : (
+                                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
+                              )}
+                              <div className="text-left">
+                                  <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{athlete.position}</span>
+                              </div>
+                              <Plus className="ml-auto text-green-600" size={20} />
+                          </button>
+                      ))}
+                      {teamAthletes.filter(ta => !activeAthletes.find(aa => aa.id === ta.id)).length === 0 && (
+                          <p className="text-center text-gray-500 py-4 text-sm">Todos os atletas do time já estão na análise.</p>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* CUSTOM FINISH MODAL */}
-      {showFinishModal && (
+      {showFinishModal && currentAthlete && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                      <CheckCircle className="text-blue-600" size={32} />
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Encerrar Análise?</h3>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Encerrar: {currentAthlete.name}?</h3>
                  <p className="text-gray-500 mb-6">
-                     Foram registradas <strong>{eventsLog.length} ações</strong>. 
-                     Os dados serão compilados em uma média geral para o perfil do atleta.
+                     Foram registradas <strong>{currentEvents.length} ações</strong> para este atleta.
+                     <br/><br/>
+                     <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                         Os outros atletas da sessão continuarão ativos.
+                     </span>
                  </p>
                  <div className="flex gap-3">
                      <button 
@@ -564,7 +702,7 @@ const RealTimeEvaluation: React.FC = () => {
                         onClick={handleFinishSession} 
                         className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg"
                      >
-                         Salvar
+                         Salvar & Próximo
                      </button>
                  </div>
              </div>
@@ -578,9 +716,9 @@ const RealTimeEvaluation: React.FC = () => {
                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                      <AlertTriangle className="text-red-600" size={32} />
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Cancelar Análise?</h3>
+                 <h3 className="text-xl font-bold text-gray-800 mb-2">Cancelar Sessão?</h3>
                  <p className="text-gray-500 mb-6">
-                     Tem certeza que deseja cancelar? Todos os dados desta sessão <strong>serão perdidos permanentemente</strong>.
+                     Todos os dados não salvos de <strong>todos os atletas ativos</strong> serão perdidos.
                  </p>
                  <div className="flex gap-3">
                      <button 
@@ -593,7 +731,7 @@ const RealTimeEvaluation: React.FC = () => {
                         onClick={handleAbort} 
                         className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 shadow-lg"
                      >
-                         Sim, Cancelar
+                         Sim, Sair
                      </button>
                  </div>
              </div>
