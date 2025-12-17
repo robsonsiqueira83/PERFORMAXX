@@ -38,6 +38,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [sortBy, setSortBy] = useState('registration'); 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false); // New Uploading State
 
   // Transfer Modal State (For Approval/Release)
   const [transferModal, setTransferModal] = useState<{ isOpen: boolean; athlete: Athlete | null }>({ isOpen: false, athlete: null });
@@ -181,12 +182,17 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   });
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploading(true);
       try {
-        const url = await processImageUpload(e.target.files[0]);
+        e.target.value = ''; // Reset input
+        const url = await processImageUpload(file);
         setPreviewUrl(url);
       } catch (error) {
         setFeedback({ type: 'error', message: 'Erro ao processar imagem' });
+      } finally {
+        setUploading(false);
       }
     }
   };
@@ -833,11 +839,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               <form onSubmit={handleSubmit} className="space-y-4">
                  <div className="flex flex-col items-center mb-4">
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                       {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={32} className="text-gray-400" />}
+                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={32} className="text-gray-400" />)}
                     </div>
-                    <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800">
-                       <Upload size={14} /> Carregar Foto
-                       <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                    <label className={`cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                       {uploading ? 'Enviando...' : <><Upload size={14} /> Carregar Foto</>}
+                       <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageChange} />
                     </label>
                     <span className="text-xs text-gray-400 mt-1">Max: 150x150px, 200kb</span>
                  </div>
@@ -900,8 +906,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    </div>
                  </div>
 
-                 <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-4 hover:bg-blue-700 transition-colors">
-                    Cadastrar
+                 <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-4 hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    {uploading ? 'Aguarde...' : 'Cadastrar'}
                  </button>
               </form>
            </div>

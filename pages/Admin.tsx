@@ -30,6 +30,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   };
 
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false); // New Uploading State
   const [viewingContextId, setViewingContextId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -148,12 +149,17 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   };
 
   const handleTeamLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploading(true);
       try {
-        const url = await processImageUpload(e.target.files[0]);
+        e.target.value = ''; // Reset input
+        const url = await processImageUpload(file);
         setFormData({ ...formData, logoUrl: url });
       } catch (error) {
         showAlert('alert_error', 'Erro ao processar imagem');
+      } finally {
+        setUploading(false);
       }
     }
   };
@@ -581,6 +587,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
+      {/* ... (Existing Tabs and List UI) ... */}
       <div className="p-6 border-b border-gray-100 flex items-center gap-2">
          <Settings className="text-blue-600" />
          <h2 className="text-2xl font-bold text-gray-800">Administração</h2>
@@ -667,7 +674,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
           </div>
         )}
 
-        {/* Categories Tab */}
+        {/* Categories Tab (Unchanged) */}
         {activeTab === 'categories' && (
            <div>
              <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -703,7 +710,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       </div>
 
       {/* --- MODALS --- */}
-      {/* ... (Existing modals logic same as before, no changes needed inside modals, just the triggers above are gated by canEdit/canDelete) ... */}
 
       {/* 1. EDIT TEAM MODAL */}
       {modalType === 'edit_team' && (
@@ -716,15 +722,17 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
               
               <div className="flex flex-col items-center mb-6">
                 <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                    {formData.logoUrl ? (
+                    {uploading ? (
+                        <Loader2 className="animate-spin text-blue-600" size={32} />
+                    ) : formData.logoUrl ? (
                         <img src={formData.logoUrl} className="w-full h-full object-contain p-1" alt="Logo" />
                     ) : (
                         <div className="text-gray-400 font-bold text-2xl">{formData.name ? formData.name.charAt(0).toUpperCase() : '?'}</div>
                     )}
                 </div>
-                <label className="cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800 transition-colors">
-                    <Upload size={14} /> Carregar Escudo
-                    <input type="file" className="hidden" accept="image/*" onChange={handleTeamLogoUpload} />
+                <label className={`cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {uploading ? 'Enviando...' : <><Upload size={14} /> Carregar Escudo</>}
+                    <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleTeamLogoUpload} />
                 </label>
                 <span className="text-xs text-gray-400 mt-1">Max: 150x150px, 200kb</span>
               </div>
@@ -759,6 +767,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         </div>
       )}
 
+      {/* ... (Existing Edit Category Modal and Delete Confirmation Modals) ... */}
       {/* 2. EDIT CATEGORY MODAL */}
       {modalType === 'edit_category' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">

@@ -11,6 +11,7 @@ const UserManagement: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false); // New uploading state
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -31,7 +32,6 @@ const UserManagement: React.FC = () => {
   // Selected Role for Invite
   const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.TECNICO);
 
-  // ... (rest of useEffect and loaders are same, skipping to handleAvatarUpload) ...
   useEffect(() => {
     const storedUser = localStorage.getItem('performax_current_user');
     const storedContext = localStorage.getItem('performax_context_id');
@@ -39,6 +39,7 @@ const UserManagement: React.FC = () => {
     if (storedUser) {
         const u = JSON.parse(storedUser);
         setCurrentUser(u);
+        // Determine context: Use stored context ID, fallback to user ID (if master), fallback to empty
         const ctx = storedContext || u.id;
         setCurrentContextId(ctx);
         loadData(ctx, u);
@@ -50,23 +51,32 @@ const UserManagement: React.FC = () => {
       const [allUsers, allTeams] = await Promise.all([getUsers(), getTeams()]);
       setAllSystemUsers(allUsers);
       
+      // 1. Filter Teams: Only show teams owned by the current Context (Master)
       const panelTeams = allTeams.filter(t => t.ownerId === contextId);
       setTeams(panelTeams);
       const panelTeamIds = panelTeams.map(t => t.id);
 
+      // 2. Filter Users: Show anyone connected to this panel's teams (Active OR Pending)
       const filteredUsers = allUsers.filter(u => {
+          // Rule A: Never show Global Users in a Master Panel list (unless viewing self)
           if (u.role === UserRole.GLOBAL) {
               if (loggedUser.role === UserRole.GLOBAL && contextId === loggedUser.id) return true;
               return false;
           }
+
+          // Rule B: Always show the Master/Owner of this panel
           if (u.id === contextId) return true;
+
+          // Rule C: Show anyone else (Staff or Guest Masters) who has a link to this panel's teams
           if (u.teamIds && u.teamIds.length > 0) {
               const hasAccessOrInvite = u.teamIds.some(tid => {
+                  // Clean the ID (remove 'pending:') to check if it matches one of our teams
                   const cleanId = tid.replace('pending:', '');
                   return panelTeamIds.includes(cleanId);
               });
               return hasAccessOrInvite;
           }
+
           return false;
       });
 
@@ -96,6 +106,7 @@ const UserManagement: React.FC = () => {
             return;
         }
 
+        // Check if email already exists in system (Global check)
         const existingUser = allSystemUsers.find(u => u.email === editingUser.email && u.id !== editingUser.id);
         
         if (existingUser) {
@@ -103,6 +114,7 @@ const UserManagement: React.FC = () => {
              return;
         }
 
+        // Security Check: Non-MASTER/GLOBAL users MUST have at least one team
         if (editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL && (!editingUser.teamIds || editingUser.teamIds.length === 0)) {
             setError("Para usuários com permissão restrita, é obrigatório selecionar pelo menos um time.");
             return;
@@ -138,10 +150,14 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // Helper to handle existing user logic (used by Email check)
   const processExistingUserInvite = (existingUser: User) => {
+     // INVITE FLOW
      if (editingUser?.role && editingUser.role !== UserRole.MASTER && editingUser.role !== UserRole.GLOBAL) {
          const selectedTeams = editingUser.teamIds || [];
          const newTeamsToInvite = selectedTeams.filter(tId => !existingUser.teamIds?.includes(tId) && !existingUser.teamIds?.includes(`pending:${tId}`));
+         
+         // If we are coming from the Create User form and found a match
          setInviteRole(editingUser.role as UserRole); 
          setInviteModal({ isOpen: true, user: existingUser, newTeams: newTeamsToInvite });
          setEditingUser(null); 
@@ -156,8 +172,11 @@ const UserManagement: React.FC = () => {
       setSearchingId(true);
 
       const term = guestIdInput.trim();
+
+      // 1. Try finding in loaded list (Faster)
       let foundUser = allSystemUsers.find(u => u.id === term);
 
+      // 2. If not found, try finding directly in DB (Reliable)
       if (!foundUser) {
           try {
               const freshUser = await getUserById(term);
@@ -170,15 +189,21 @@ const UserManagement: React.FC = () => {
       setSearchingId(false);
 
       if (foundUser) {
+          // Found! Directly open invite modal without "Create" context
           setInviteByIdModal(false);
           setGuestIdInput('');
+          
+          // Default role for new invite
           setInviteRole(UserRole.TECNICO);
+          
+          // Open modal with empty newTeams to force selection
           setInviteModal({ isOpen: true, user: foundUser, newTeams: [] });
       } else {
           setGuestIdError('Usuário não encontrado com este ID.');
       }
   };
 
+  // Improved Invite Modal confirmation logic to handle the team selection inside it
   const [inviteSelectedTeams, setInviteSelectedTeams] = useState<string[]>([]);
 
   useEffect(() => {
@@ -197,11 +222,15 @@ const UserManagement: React.FC = () => {
 
       const userToUpdate = { ...inviteModal.user };
       const currentTeamIds = userToUpdate.teamIds || [];
+      // Always add as pending for existing external users
       const pendingTeamIds = inviteSelectedTeams.map(id => `pending:${id}`);
+      
+      // Filter out duplicates and existing
       const uniqueNew = pendingTeamIds.filter(pid => !currentTeamIds.includes(pid) && !currentTeamIds.includes(pid.replace('pending:', '')));
       
       userToUpdate.teamIds = [...currentTeamIds, ...uniqueNew];
       
+      // Only update role if it's not a Master/Global (preserve hierarchy of invited user if they are high level elsewhere)
       if (userToUpdate.role !== UserRole.MASTER && userToUpdate.role !== UserRole.GLOBAL) {
           userToUpdate.role = inviteRole; 
       }
@@ -211,8 +240,10 @@ const UserManagement: React.FC = () => {
       setInviteModal({ isOpen: false, user: null, newTeams: [] });
       setSuccessMessage("Convite enviado com sucesso!");
       
+      // FORCE Refresh list to show pending
       if (currentUser) await loadData(currentContextId, currentUser);
   };
+
 
   const requestDelete = (user: User) => {
       const isGuestMaster = user.id !== currentContextId;
@@ -223,9 +254,11 @@ const UserManagement: React.FC = () => {
     if (!deleteConfirmation || !currentUser) return;
 
     if (deleteConfirmation.isGuestMaster) {
+        // Just remove access to THIS panel's teams
         const targetUser = users.find(u => u.id === deleteConfirmation.id);
         if (targetUser) {
             const panelTeamIds = teams.map(t => t.id);
+            // Keep IDs that do NOT belong to this panel
             const newTeamIds = (targetUser.teamIds || []).filter(tid => {
                 const cleanId = tid.replace('pending:', '');
                 return !panelTeamIds.includes(cleanId);
@@ -234,6 +267,7 @@ const UserManagement: React.FC = () => {
             setSuccessMessage("Colaborador removido deste painel com sucesso!");
         }
     } else {
+        // Full delete
         await deleteUser(deleteConfirmation.id);
     }
 
@@ -244,15 +278,17 @@ const UserManagement: React.FC = () => {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file && editingUser) {
-          // Reset input immediately
-          e.target.value = '';
-          
+          setUploading(true);
           try {
+              // Standardized Pattern: Reset value first, then upload
+              e.target.value = '';
               const url = await processImageUpload(file);
               setEditingUser(prev => prev ? ({ ...prev, avatarUrl: url }) : null);
           } catch (err) {
               console.error(err);
               setError("Erro ao fazer upload da foto. Verifique as permissões do Bucket.");
+          } finally {
+              setUploading(false);
           }
       }
   };
@@ -283,21 +319,29 @@ const UserManagement: React.FC = () => {
 
   if (loading && users.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
+  // Helper to check if a user is in Pending state for ALL teams in this panel
   const isUserPending = (u: User) => {
       const panelTeamIds = teams.map(t => t.id);
+      // Get all User IDs that relate to this panel (stripping 'pending:')
       const userPanelIds = (u.teamIds || []).filter(tid => panelTeamIds.includes(tid.replace('pending:', '')));
+      
       if (userPanelIds.length === 0) return false;
+      
+      // If ALL IDs related to this panel start with 'pending:', then the user is fully pending for this panel.
       return userPanelIds.every(tid => tid.startsWith('pending:'));
   };
 
+  // Organize Lists
   const internalUsers = users.filter(u => u.id === currentContextId);
   const externalCollaborators = users.filter(u => u.id !== currentContextId);
+  
+  // Split External into Active vs Pending
   const pendingInvites = externalCollaborators.filter(u => isUserPending(u));
   const activeCollaborators = externalCollaborators.filter(u => !isUserPending(u));
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
-       
+       {/* ... Header and Lists UI (Unchanged) ... */}
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                <ShieldCheck className="text-blue-600"/> Gestão de Usuários
@@ -472,13 +516,15 @@ const UserManagement: React.FC = () => {
                    <div className="grid grid-cols-1 gap-4">
                        {/* Form Fields ... */}
                        <div className="flex items-center gap-4 mb-2 p-4 bg-gray-50 rounded-lg">
-                            {editingUser.avatarUrl ? (
+                            {uploading ? (
+                                <Loader2 className="animate-spin text-blue-600" size={32} />
+                            ) : editingUser.avatarUrl ? (
                                 <img src={editingUser.avatarUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm" />
                             ) : <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-400">?</div>}
-                            <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors shadow-sm">
-                                Alterar Foto
+                            <label className={`cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {uploading ? 'Enviando...' : 'Alterar Foto'}
                                 {/* UPDATED INPUT: Added accept="image/*" */}
-                                <input type="file" onChange={handleAvatarUpload} className="hidden" accept="image/*" />
+                                <input type="file" onChange={handleAvatarUpload} className="hidden" accept="image/*" disabled={uploading} />
                             </label>
                        </div>
                        
@@ -554,9 +600,8 @@ const UserManagement: React.FC = () => {
 
                    <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
                        <button onClick={() => setEditingUser(null)} disabled={saving} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
-                       <button onClick={handleSave} disabled={saving} className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
-                           {saving && <Loader2 className="animate-spin" size={18} />}
-                           Salvar Usuário
+                       <button onClick={handleSave} disabled={saving || uploading} className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
+                           {saving ? <Loader2 className="animate-spin" size={18} /> : (uploading ? 'Enviando Foto...' : 'Salvar Usuário')}
                        </button>
                    </div>
                </div>
@@ -564,7 +609,6 @@ const UserManagement: React.FC = () => {
        )}
 
        {/* ... rest of modals (inviteById, inviteConfirm, success, deleteConfirm) ... */}
-       {/* ... (inviteByIdModal content omitted for brevity, logic unchanged) ... */}
        {inviteByIdModal && (
            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">

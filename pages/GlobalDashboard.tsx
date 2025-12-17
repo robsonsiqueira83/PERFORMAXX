@@ -22,6 +22,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false); // New uploading state
   const [search, setSearch] = useState('');
   
   // Create/Edit Global Modal State
@@ -66,9 +67,20 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          const url = await processImageUpload(e.target.files[0]);
-          setEditData({ ...editData, avatarUrl: url });
+      const file = e.target.files?.[0];
+      if (file) {
+          setUploading(true);
+          try {
+              // Standardize: Reset value then upload
+              e.target.value = '';
+              const url = await processImageUpload(file);
+              setEditData(prev => ({ ...prev, avatarUrl: url }));
+          } catch (err) {
+              console.error(err);
+              setModalError('Erro no upload da imagem.');
+          } finally {
+              setUploading(false);
+          }
       }
   };
 
@@ -454,15 +466,17 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                    <form onSubmit={handleSaveGlobal} className="space-y-4">
                       <div className="flex flex-col items-center mb-6">
                          <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-500">
-                             {editData.avatarUrl ? (
+                             {uploading ? (
+                                <Loader2 className="animate-spin text-blue-400" size={32} />
+                             ) : editData.avatarUrl ? (
                                  <img src={editData.avatarUrl} className="w-full h-full object-cover" />
                              ) : (
                                  <UserIcon size={32} className="text-gray-400" />
                              )}
                          </div>
-                         <label className="cursor-pointer text-blue-400 text-sm font-bold flex items-center gap-1 hover:text-blue-300">
-                             <Upload size={14} /> Alterar Foto
-                             <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                         <label className={`cursor-pointer text-blue-400 text-sm font-bold flex items-center gap-1 hover:text-blue-300 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                             {uploading ? 'Enviando...' : <><Upload size={14} /> Alterar Foto</>}
+                             <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleAvatarUpload} />
                          </label>
                       </div>
 
@@ -481,8 +495,8 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                       
                       {modalError && <p className="text-red-400 text-center text-sm font-bold bg-red-900/20 p-2 rounded">{modalError}</p>}
 
-                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md transition flex items-center justify-center gap-2 mt-2">
-                          <Save size={18}/> Salvar
+                      <button type="submit" disabled={uploading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md transition flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
+                          <Save size={18}/> {uploading ? 'Aguarde...' : 'Salvar'}
                       </button>
                    </form>
                 </div>
