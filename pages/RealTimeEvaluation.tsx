@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
 import { Athlete, TrainingEntry, HeatmapPoint, getCalculatedCategory, Team, Category, Position, User, UserRole } from '../types';
-import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle, RefreshCw } from 'lucide-react';
 import StatSlider from '../components/StatSlider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -48,6 +48,7 @@ const RealTimeEvaluation: React.FC = () => {
   const [gamePeriod, setGamePeriod] = useState<1 | 2>(1);
   const [isHalftime, setIsHalftime] = useState(false);
   const [startTime, setStartTime] = useState<string | null>(null);
+  const [fieldFlipped, setFieldFlipped] = useState(false); // New: field orientation
   
   const timerRef = useRef<number | null>(null);
 
@@ -190,6 +191,7 @@ const RealTimeEvaluation: React.FC = () => {
       } else if (isRunning && gamePeriod === 1) {
           setIsRunning(false);
           setIsHalftime(true);
+          setFieldFlipped(prev => !prev); // Auto Flip on Half Time
       } else if (!isRunning && isHalftime) {
           setIsHalftime(false);
           setGamePeriod(2);
@@ -279,9 +281,10 @@ const RealTimeEvaluation: React.FC = () => {
 
     setFieldClick({ x, y });
 
-    if (x < 33.33) setZone('DEF');
+    // Zone Logic with Flip Consideration
+    if (x < 33.33) setZone(fieldFlipped ? 'ATT' : 'DEF');
     else if (x < 66.66) setZone('MID');
-    else setZone('ATT');
+    else setZone(fieldFlipped ? 'DEF' : 'ATT');
 
     setStep(2);
   };
@@ -471,6 +474,17 @@ const RealTimeEvaluation: React.FC = () => {
                   {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
               </span>
               <div className="flex items-center gap-2">
+                  {/* Flip Button (Only before start) */}
+                  {!isRunning && timer === 0 && (
+                      <button 
+                        onClick={() => setFieldFlipped(!fieldFlipped)}
+                        className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors border border-gray-200 shadow-sm"
+                        title="Inverter Lado do Campo"
+                      >
+                          <RefreshCw size={18} className={fieldFlipped ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                      </button>
+                  )}
+
                   <div className={`font-mono text-xl md:text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
                       {formatTime(timer)}
                   </div>
@@ -500,8 +514,9 @@ const RealTimeEvaluation: React.FC = () => {
 
               {!isRunning && timer === 0 && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
-                      <div className="text-white font-bold text-lg text-center">
+                      <div className="text-white font-bold text-lg text-center flex flex-col items-center gap-2">
                           Inicie o cronômetro para avaliar
+                          {fieldFlipped && <span className="text-xs bg-white/20 px-2 py-1 rounded font-normal">Lado Invertido Ativado</span>}
                       </div>
                   </div>
               )}
@@ -512,14 +527,26 @@ const RealTimeEvaluation: React.FC = () => {
               >
                   {/* Field Lines */}
                   <div className="absolute inset-4 border-2 border-white/50 rounded-sm pointer-events-none"></div>
+                  
+                  {/* Penalty Areas */}
+                  <div className="absolute left-4 top-1/2 w-16 h-32 border-2 border-white/40 border-l-0 transform -translate-y-1/2 bg-transparent pointer-events-none"></div>
+                  <div className="absolute right-4 top-1/2 w-16 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2 bg-transparent pointer-events-none"></div>
+                  
                   <div className="absolute top-0 bottom-0 left-1/3 w-0.5 bg-white/20 pointer-events-none border-r border-dashed border-white/30"></div>
                   <div className="absolute top-0 bottom-0 left-2/3 w-0.5 bg-white/20 pointer-events-none border-r border-dashed border-white/30"></div>
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50 pointer-events-none"></div>
                   <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
                   
-                  <div className="absolute bottom-2 left-4 text-white/40 font-bold text-[10px] uppercase">Defesa</div>
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white/40 font-bold text-[10px] uppercase">Construção</div>
-                  <div className="absolute bottom-2 right-4 text-white/40 font-bold text-[10px] uppercase">Ataque</div>
+                  {/* Enhanced Watermarks */}
+                  <div className={`absolute bottom-3 left-6 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all`}>
+                      {fieldFlipped ? 'Ataque' : 'Defesa'}
+                  </div>
+                  <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all">
+                      Construção
+                  </div>
+                  <div className={`absolute bottom-3 right-6 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all`}>
+                      {fieldFlipped ? 'Defesa' : 'Ataque'}
+                  </div>
 
                   {fieldClick && (
                       <div 
@@ -555,7 +582,32 @@ const RealTimeEvaluation: React.FC = () => {
                       <div className="font-mono bg-black/20 px-3 py-1 rounded-lg text-sm font-bold border border-white/20">{capturedTime}</div>
                   </div>
 
-                  <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto pb-24">
+                  <div className="p-4 space-y-5 max-h-[60vh] overflow-y-auto pb-24">
+                      {/* MOVE NOTES BLOCK TO TOP AS REQUESTED */}
+                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
+                          <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
+                              Observação da Jogada (Opcional)
+                          </label>
+                          <div className="relative">
+                              <input 
+                                type="text"
+                                className="w-full bg-white border border-gray-300 rounded-lg p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-inner"
+                                placeholder="Descreva o que aconteceu..."
+                                value={currentNotes}
+                                onChange={(e) => setCurrentNotes(e.target.value)}
+                              />
+                              <button 
+                                onClick={handleVoiceInput}
+                                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100'}`}
+                                title="Falar anotação"
+                              >
+                                  <Mic size={18} />
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="h-px bg-gray-100 w-full"></div>
+
                       {zone === 'DEF' && (
                           <div className="space-y-4">
                               <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
@@ -583,29 +635,7 @@ const RealTimeEvaluation: React.FC = () => {
                           </div>
                       )}
 
-                      <div>
-                          <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
-                              Observação (Opcional)
-                          </label>
-                          <div className="relative">
-                              <input 
-                                type="text"
-                                className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                placeholder="Ex: Errou o passe mas recuperou..."
-                                value={currentNotes}
-                                onChange={(e) => setCurrentNotes(e.target.value)}
-                              />
-                              <button 
-                                onClick={handleVoiceInput}
-                                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100'}`}
-                                title="Falar anotação"
-                              >
-                                  <Mic size={18} />
-                              </button>
-                          </div>
-                      </div>
-
-                      <div className="flex gap-3 pt-2">
+                      <div className="flex gap-3 pt-4 sticky bottom-0 bg-white">
                           <button 
                             onClick={handleCancelAction}
                             className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
