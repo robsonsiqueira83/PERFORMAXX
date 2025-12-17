@@ -474,14 +474,15 @@ const RealTimeEvaluation: React.FC = () => {
                   {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
               </span>
               <div className="flex items-center gap-2">
-                  {/* Flip Button (Only before start) */}
+                  {/* Flip Button (Highly Visible) */}
                   {!isRunning && timer === 0 && (
                       <button 
                         onClick={() => setFieldFlipped(!fieldFlipped)}
-                        className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors border border-gray-200 shadow-sm"
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all border border-blue-700 shadow-md animate-pulse"
                         title="Inverter Lado do Campo"
                       >
                           <RefreshCw size={18} className={fieldFlipped ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                          <span className="text-xs font-bold uppercase hidden sm:inline">Trocar Lado</span>
                       </button>
                   )}
 
@@ -537,15 +538,15 @@ const RealTimeEvaluation: React.FC = () => {
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50 pointer-events-none"></div>
                   <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
                   
-                  {/* Enhanced Watermarks */}
-                  <div className={`absolute bottom-3 left-6 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all`}>
-                      {fieldFlipped ? 'Ataque' : 'Defesa'}
+                  {/* Highly Visible Watermarks */}
+                  <div className={`absolute bottom-6 left-10 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md`}>
+                      {fieldFlipped ? 'ATAQUE' : 'DEFESA'}
                   </div>
-                  <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all">
-                      Construção
+                  <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md">
+                      CONSTRUÇÃO
                   </div>
-                  <div className={`absolute bottom-3 right-6 text-white/60 font-black text-xs md:text-sm uppercase tracking-widest pointer-events-none transition-all`}>
-                      {fieldFlipped ? 'Defesa' : 'Ataque'}
+                  <div className={`absolute bottom-6 right-10 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md`}>
+                      {fieldFlipped ? 'DEFESA' : 'ATAQUE'}
                   </div>
 
                   {fieldClick && (
@@ -583,7 +584,28 @@ const RealTimeEvaluation: React.FC = () => {
                   </div>
 
                   <div className="p-4 space-y-5 max-h-[60vh] overflow-y-auto pb-24">
-                      {/* MOVE NOTES BLOCK TO TOP AS REQUESTED */}
+                      
+                      {/* ACTION BUTTONS (Moved to the top of the form, below the field) */}
+                      <div className="flex gap-3 pt-2">
+                          <button 
+                            onClick={handleCancelAction}
+                            className="flex-1 py-4 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition-colors shadow-sm"
+                          >
+                              Cancelar
+                          </button>
+                          <button 
+                            onClick={handleConfirmAction}
+                            className={`flex-[2] py-4 rounded-xl font-black text-white shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all
+                                ${zone === 'DEF' ? 'bg-purple-600 hover:bg-purple-700' : zone === 'MID' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}
+                            `}
+                          >
+                              <CheckCircle size={22} /> CONFIRMAR JOGADA
+                          </button>
+                      </div>
+
+                      <div className="h-px bg-gray-100 w-full"></div>
+
+                      {/* OBSERVATION BLOCK */}
                       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
                           <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
                               Observação da Jogada (Opcional)
@@ -606,50 +628,34 @@ const RealTimeEvaluation: React.FC = () => {
                           </div>
                       </div>
 
-                      <div className="h-px bg-gray-100 w-full"></div>
+                      {/* ATTRIBUTE SLIDERS */}
+                      <div className="space-y-4 pt-2">
+                          {zone === 'DEF' && (
+                              <div className="space-y-4">
+                                  <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
+                                  <StatSlider label="Desarme" value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
+                                  <StatSlider label="Interceptação" value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
+                                  <StatSlider label="Reação Pós-Perda" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
+                              </div>
+                          )}
 
-                      {zone === 'DEF' && (
-                          <div className="space-y-4">
-                              <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
-                              <StatSlider label="Desarme" value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
-                              <StatSlider label="Interceptação" value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
-                              <StatSlider label="Reação Pós-Perda" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
-                          </div>
-                      )}
+                          {zone === 'MID' && (
+                              <div className="space-y-4">
+                                  <StatSlider label="Qualidade Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
+                                  <StatSlider label="Visão de Jogo" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
+                                  <StatSlider label="Controle de Bola" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
+                                  <StatSlider label="Quebra de Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
+                              </div>
+                          )}
 
-                      {zone === 'MID' && (
-                          <div className="space-y-4">
-                              <StatSlider label="Qualidade Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
-                              <StatSlider label="Visão de Jogo" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
-                              <StatSlider label="Controle de Bola" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
-                              <StatSlider label="Quebra de Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
-                          </div>
-                      )}
-
-                      {zone === 'ATT' && (
-                          <div className="space-y-4">
-                              <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
-                              <StatSlider label="1 vs 1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
-                              <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
-                              <StatSlider label="Ataque ao Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
-                          </div>
-                      )}
-
-                      <div className="flex gap-3 pt-4 sticky bottom-0 bg-white">
-                          <button 
-                            onClick={handleCancelAction}
-                            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
-                          >
-                              Cancelar
-                          </button>
-                          <button 
-                            onClick={handleConfirmAction}
-                            className={`flex-[2] py-3 rounded-xl font-bold text-white shadow-md flex items-center justify-center gap-2 transform active:scale-95 transition-all
-                                ${zone === 'DEF' ? 'bg-purple-600 hover:bg-purple-700' : zone === 'MID' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}
-                            `}
-                          >
-                              <CheckCircle size={20} /> Confirmar Jogada
-                          </button>
+                          {zone === 'ATT' && (
+                              <div className="space-y-4">
+                                  <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
+                                  <StatSlider label="1 vs 1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
+                                  <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
+                                  <StatSlider label="Ataque ao Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
+                              </div>
+                          )}
                       </div>
                   </div>
               </div>
