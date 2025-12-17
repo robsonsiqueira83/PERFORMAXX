@@ -25,13 +25,12 @@ export const processImageUpload = (file: File): Promise<string> => {
     reader.onload = (event) => {
       const img = new Image();
       
-      img.onload = async () => {
+      img.onload = () => {
         try {
             // 2. Resize Logic (Canvas)
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Defined dimensions (Increased slightly from base64 version for better quality on buckets)
             const MAX_WIDTH = 500;
             const MAX_HEIGHT = 500;
             
@@ -61,43 +60,44 @@ export const processImageUpload = (file: File): Promise<string> => {
 
             // 3. Convert to Blob
             canvas.toBlob(async (blob) => {
-                if (!blob) {
-                    reject(new Error("Falha ao processar a imagem (Blob)"));
-                    return;
+                try {
+                    if (!blob) {
+                        throw new Error("Falha ao processar a imagem (Blob)");
+                    }
+
+                    // 4. Upload to Supabase Storage
+                    const fileExt = 'jpg';
+                    const fileName = `${uuidv4()}.${fileExt}`;
+                    const filePath = `${fileName}`; 
+
+                    // Ensure bucket exists first (handled by SQL usually, but upload fails if not)
+                    const { data, error: uploadError } = await supabase.storage
+                        .from('images')
+                        .upload(filePath, blob, {
+                            contentType: 'image/jpeg',
+                            cacheControl: '3600',
+                            upsert: true
+                        });
+
+                    if (uploadError) {
+                        console.error("Erro Supabase Storage:", uploadError);
+                        throw new Error(`Erro no upload: ${uploadError.message}`);
+                    }
+
+                    // 5. Get Public URL
+                    const { data: urlData } = supabase.storage
+                        .from('images')
+                        .getPublicUrl(filePath);
+
+                    if (!urlData || !urlData.publicUrl) {
+                        throw new Error("Erro ao obter URL pública da imagem");
+                    }
+
+                    resolve(urlData.publicUrl);
+                } catch (innerError: any) {
+                    console.error("Erro interno no upload:", innerError);
+                    reject(innerError);
                 }
-
-                // 4. Upload to Supabase Storage
-                // Clean filename to avoid issues
-                const fileExt = 'jpg';
-                const fileName = `${uuidv4()}.${fileExt}`;
-                const filePath = `${fileName}`; 
-
-                // Ensure bucket exists first (handled by SQL usually, but upload fails if not)
-                const { data, error: uploadError } = await supabase.storage
-                    .from('images')
-                    .upload(filePath, blob, {
-                        contentType: 'image/jpeg',
-                        cacheControl: '3600',
-                        upsert: true
-                    });
-
-                if (uploadError) {
-                    console.error("Erro Supabase Storage:", uploadError);
-                    reject(new Error(`Erro no upload: ${uploadError.message}`));
-                    return;
-                }
-
-                // 5. Get Public URL
-                const { data: urlData } = supabase.storage
-                    .from('images')
-                    .getPublicUrl(filePath);
-
-                if (!urlData || !urlData.publicUrl) {
-                    reject(new Error("Erro ao obter URL pública da imagem"));
-                    return;
-                }
-
-                resolve(urlData.publicUrl);
 
             }, 'image/jpeg', 0.85); // 85% quality JPEG
 
