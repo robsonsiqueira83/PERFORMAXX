@@ -5,17 +5,25 @@ import { v4 as uuidv4 } from 'uuid';
  * Processes an image file: Resizes it client-side (Canvas) and uploads to Supabase Storage.
  * Returns the public URL of the uploaded file.
  * 
- * PRE-REQUISITE: Create a public bucket named 'images' in Supabase.
+ * PRE-REQUISITE: Create a public bucket named 'images' in Supabase and set RLS policies.
  */
 export const processImageUpload = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // 1. Read file locally
+    // Basic validation
+    if (!file) {
+        reject(new Error("Nenhum arquivo fornecido"));
+        return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+        reject(new Error("O arquivo deve ser uma imagem"));
+        return;
+    }
+
     const reader = new FileReader();
-    reader.readAsDataURL(file);
     
     reader.onload = (event) => {
       const img = new Image();
-      img.src = event.target?.result as string;
       
       img.onload = async () => {
         try {
@@ -24,65 +32,94 @@ export const processImageUpload = (file: File): Promise<string> => {
             const ctx = canvas.getContext('2d');
             
             // Defined dimensions (Increased slightly from base64 version for better quality on buckets)
-            const MAX_WIDTH = 400;
-            const MAX_HEIGHT = 400;
+            const MAX_WIDTH = 500;
+            const MAX_HEIGHT = 500;
             
-            canvas.width = MAX_WIDTH;
-            canvas.height = MAX_HEIGHT;
+            if (!ctx) throw new Error("Falha ao inicializar contexto de imagem");
 
-            if (!ctx) throw new Error("Canvas Context Failed");
+            let width = img.width;
+            let height = img.height;
 
-            // Draw image to canvas (Center Crop / Cover logic)
-            const scale = Math.max(MAX_WIDTH / img.width, MAX_HEIGHT / img.height);
-            const x = (MAX_WIDTH / 2) - (img.width / 2) * scale;
-            const y = (MAX_HEIGHT / 2) - (img.height / 2) * scale;
+            // Maintain aspect ratio logic
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
             
-            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw image to canvas
+            ctx.drawImage(img, 0, 0, width, height);
 
             // 3. Convert to Blob
             canvas.toBlob(async (blob) => {
                 if (!blob) {
-                    reject(new Error("Blob conversion failed"));
+                    reject(new Error("Falha ao processar a imagem (Blob)"));
                     return;
                 }
 
                 // 4. Upload to Supabase Storage
-                // Assumes a bucket named 'images' exists
+                // Clean filename to avoid issues
                 const fileExt = 'jpg';
                 const fileName = `${uuidv4()}.${fileExt}`;
                 const filePath = `${fileName}`; 
 
-                const { error: uploadError } = await supabase.storage
+                // Ensure bucket exists first (handled by SQL usually, but upload fails if not)
+                const { data, error: uploadError } = await supabase.storage
                     .from('images')
                     .upload(filePath, blob, {
                         contentType: 'image/jpeg',
                         cacheControl: '3600',
-                        upsert: false
+                        upsert: true
                     });
 
                 if (uploadError) {
-                    console.error("Supabase Storage Upload Error:", uploadError);
-                    throw uploadError;
+                    console.error("Erro Supabase Storage:", uploadError);
+                    reject(new Error(`Erro no upload: ${uploadError.message}`));
+                    return;
                 }
 
                 // 5. Get Public URL
-                const { data } = supabase.storage
+                const { data: urlData } = supabase.storage
                     .from('images')
                     .getPublicUrl(filePath);
 
-                resolve(data.publicUrl);
+                if (!urlData || !urlData.publicUrl) {
+                    reject(new Error("Erro ao obter URL pública da imagem"));
+                    return;
+                }
+
+                resolve(urlData.publicUrl);
 
             }, 'image/jpeg', 0.85); // 85% quality JPEG
 
-        } catch (err) {
-            console.error("Image processing/upload error:", err);
-            reject(err);
+        } catch (err: any) {
+            console.error("Erro no processamento da imagem:", err);
+            reject(new Error(err.message || "Erro desconhecido ao processar imagem"));
         }
       };
       
-      img.onerror = (err) => reject(new Error("Image loading failed"));
+      img.onerror = () => reject(new Error("Falha ao carregar a imagem para processamento"));
+      
+      // Load image source
+      if (event.target?.result) {
+          img.src = event.target.result as string;
+      } else {
+          reject(new Error("Falha na leitura do arquivo"));
+      }
     };
     
-    reader.onerror = (err) => reject(err);
+    reader.onerror = () => reject(new Error("Erro ao ler o arquivo localmente"));
+    
+    // Start reading
+    reader.readAsDataURL(file);
   });
 };
