@@ -398,8 +398,16 @@ const AthleteProfile: React.FC = () => {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
-          const url = await processImageUpload(e.target.files[0]);
-          setEditFormData({ ...editFormData, photoUrl: url });
+          try {
+              const url = await processImageUpload(e.target.files[0]);
+              setEditFormData(prev => ({ ...prev, photoUrl: url }));
+          } catch (err) {
+              console.error(err);
+              alert("Erro ao fazer upload da imagem. Verifique se o banco de dados está configurado corretamente (Buckets).");
+          } finally {
+              // Reset input to allow re-upload of same file if needed
+              e.target.value = '';
+          }
       }
   };
 

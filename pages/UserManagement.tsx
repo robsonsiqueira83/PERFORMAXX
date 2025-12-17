@@ -276,8 +276,16 @@ const UserManagement: React.FC = () => {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && editingUser) {
-          const url = await processImageUpload(e.target.files[0]);
-          setEditingUser({ ...editingUser, avatarUrl: url });
+          try {
+              const url = await processImageUpload(e.target.files[0]);
+              setEditingUser(prev => prev ? ({ ...prev, avatarUrl: url }) : null);
+          } catch (err) {
+              console.error(err);
+              setError("Erro ao fazer upload da foto. Verifique as permissões do Bucket.");
+          } finally {
+              // Reset input
+              e.target.value = '';
+          }
       }
   };
 
