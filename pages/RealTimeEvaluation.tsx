@@ -443,9 +443,9 @@ const RealTimeEvaluation: React.FC = () => {
               {currentAthlete ? (
                   <div className="flex items-center gap-3">
                       {currentAthlete.photoUrl ? (
-                          <img src={currentAthlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" alt={currentAthlete.name} />
+                          <img src={currentAthlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md bg-gray-100" alt={currentAthlete.name} />
                       ) : (
-                          <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500 text-lg">
+                          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg border-2 border-white shadow-md">
                               {currentAthlete.name.charAt(0)}
                           </div>
                       )}
@@ -680,9 +680,9 @@ const RealTimeEvaluation: React.FC = () => {
                       `}
                   >
                       {ath.photoUrl ? (
-                          <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover border border-white/50" />
+                          <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover border border-white/50 bg-white" />
                       ) : (
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${selectedAthleteId === ath.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-white/20 ${selectedAthleteId === ath.id ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
                               {ath.name.charAt(0)}
                           </div>
                       )}
@@ -780,9 +780,9 @@ const RealTimeEvaluation: React.FC = () => {
                                   className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors"
                               >
                                   {athlete.photoUrl ? (
-                                      <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover" />
+                                      <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover bg-gray-100" />
                                   ) : (
-                                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500">{athlete.name.charAt(0)}</div>
+                                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">{athlete.name.charAt(0)}</div>
                                   )}
                                   <div className="text-left">
                                       <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
