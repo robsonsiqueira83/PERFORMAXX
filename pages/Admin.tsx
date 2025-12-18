@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, Athlete, User, TrainingSession, canEditData, canDeleteData, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck, RefreshCw } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, ExternalLink, Link as LinkIcon, Copy, AlertTriangle, X, ArrowRightLeft, CheckCircle, Info, Save, Upload, AlertCircle, Hash, LogOut, Mail, UserCheck, RefreshCw, Shirt } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -43,11 +43,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [targetName, setTargetName] = useState<string>('');
   const [modalMessage, setModalMessage] = useState<string>(''); 
   
-  const [dependencyCounts, setDependencyCounts] = useState({ athletes: 0, users: 0, categories: 0, sessions: 0 });
-  const [migrationDestTeamId, setMigrationDestTeamId] = useState<string>('');
-  const [newTeamName, setNewTeamName] = useState('');
-  const [isMigrating, setIsMigrating] = useState(false);
-
   const [formData, setFormData] = useState<{ name: string, logoUrl?: string }>({ name: '', logoUrl: '' });
 
   const canEdit = canEditData(userRole);
@@ -94,9 +89,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     setTargetId(null);
     setTargetName('');
     setFormData({ name: '', logoUrl: '' });
-    setMigrationDestTeamId('');
-    setNewTeamName('');
-    setIsMigrating(false);
     setModalMessage('');
   };
 
@@ -107,6 +99,10 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   const handleSaveTeam = async () => {
     if (!formData.name) return;
+    if (!viewingContextId) {
+        showAlert('alert_error', 'Erro de contexto: ID do proprietário não encontrado.');
+        return;
+    }
     setLoading(true);
     try {
         await saveTeam({ 
@@ -118,6 +114,8 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         closeModal();
         await refreshData(viewingContextId);
         showAlert('alert_success', 'Time salvo com sucesso!');
+        // Se for o primeiro time, recarrega para atualizar o seletor global
+        if (ownedTeams.length === 0) window.location.reload();
     } catch (err: any) {
         showAlert('alert_error', `Erro ao salvar: ${err.message || 'Falha de rede'}`);
     } finally { setLoading(false); }
@@ -125,12 +123,20 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   const handleSaveCategory = async () => {
     if (!formData.name) return;
+    
+    // CORREÇÃO CRÍTICA: Validar se existe um time selecionado antes de enviar ao Supabase
+    if (!currentTeamId || currentTeamId === '') {
+        showAlert('alert_error', 'Você precisa selecionar ou criar um time antes de cadastrar categorias.');
+        return;
+    }
+
     setLoading(true);
     try {
         const standardizedName = normalizeCategoryName(formData.name);
         const exists = categories.find(c => c.name === standardizedName && c.id !== targetId);
         if (exists) {
             showAlert('alert_error', `A categoria "${standardizedName}" já existe neste time.`);
+            setLoading(false);
             return;
         }
         await saveCategory({ id: targetId || uuidv4(), name: standardizedName, teamId: currentTeamId });
@@ -169,18 +175,27 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     )}
                 </div>
                 <div className="space-y-4">
-                    {ownedTeams.map(team => (
+                    {ownedTeams.length > 0 ? ownedTeams.map(team => (
                         <div key={team.id} className="p-4 border rounded-xl flex justify-between items-center bg-white shadow-sm hover:bg-gray-50 transition-all">
                             <div className="flex items-center gap-3">
                                 {team.logoUrl ? <img src={team.logoUrl} className="w-10 h-10 object-contain" /> : <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>}
-                                <span className="font-bold text-gray-800">{team.name}</span>
+                                <div>
+                                    <span className="font-bold text-gray-800 block">{team.name}</span>
+                                    <span className="text-[10px] text-gray-400 font-mono uppercase">ID: {team.id.substring(0,8)}...</span>
+                                </div>
                             </div>
                             <div className="flex gap-2">
                                 <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg"><Edit size={16}/></button>
                                 <button onClick={() => { setTargetId(team.id); setTargetName(team.name); setModalType('delete_confirm_simple'); }} className="text-red-600 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={16}/></button>
                             </div>
                         </div>
-                    ))}
+                    )) : (
+                        <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                            <Shirt size={40} className="mx-auto text-gray-300 mb-2" />
+                            <p className="text-gray-500 font-medium">Nenhum time cadastrado.</p>
+                            <p className="text-xs text-gray-400">Clique em "Novo Time" para começar.</p>
+                        </div>
+                    )}
                 </div>
             </div>
           </div>
@@ -191,13 +206,25 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
              <div className="mb-6 flex justify-between items-center">
                <h3 className="font-bold text-lg text-gray-800">Categorias</h3>
                {canEdit && (
-                   <button onClick={() => { setTargetId(null); setFormData({name:''}); setModalType('edit_category'); }} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                   <button 
+                     disabled={!currentTeamId}
+                     onClick={() => { setTargetId(null); setFormData({name:''}); setModalType('edit_category'); }} 
+                     className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${!currentTeamId ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#4ade80] hover:bg-green-500 text-white'}`}
+                   >
                        <Plus size={16}/> Nova Categoria
                    </button>
                )}
             </div>
+            
+            {!currentTeamId && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-center gap-3 mb-6 animate-pulse">
+                    <Info className="text-blue-500" />
+                    <p className="text-blue-700 text-sm font-bold">Selecione ou crie um time no topo da tela para gerenciar categorias.</p>
+                </div>
+            )}
+
             <div className="space-y-2">
-               {categories.map(cat => (
+               {categories.length > 0 ? categories.map(cat => (
                  <div key={cat.id} className="flex justify-between items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm">
                     <span className="font-medium text-gray-800">{cat.name}</span>
                     <div className="flex gap-2">
@@ -205,7 +232,12 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                        <button onClick={() => { setTargetId(cat.id); setTargetName(cat.name); setModalType('delete_category_confirm'); }} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>
                     </div>
                  </div>
-               ))}
+               )) : currentTeamId && (
+                   <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <Plus size={40} className="mx-auto text-gray-300 mb-2" />
+                        <p className="text-gray-500 font-medium">Nenhuma categoria neste time.</p>
+                   </div>
+               )}
             </div>
            </div>
         )}
@@ -216,10 +248,12 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
               <h3 className="text-xl font-bold mb-6">{targetId ? 'Editar Time' : 'Novo Time'}</h3>
-              <input type="text" className="w-full bg-gray-50 border rounded p-3 mb-4 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Time" />
+              <input type="text" autoFocus className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 mb-4 font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Time" />
               <div className="flex gap-2">
-                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg">Cancelar</button>
-                  <button onClick={handleSaveTeam} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar</button>
+                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+                  <button onClick={handleSaveTeam} disabled={loading} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-50">
+                      {loading ? 'Salvando...' : 'Salvar'}
+                  </button>
               </div>
            </div>
         </div>
@@ -229,11 +263,16 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       {modalType === 'edit_category' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-              <h3 className="text-xl font-bold mb-6">{targetId ? 'Editar Categoria' : 'Nova Categoria'}</h3>
-              <input type="text" className="w-full bg-gray-50 border rounded p-3 mb-4 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ex: Sub-15" />
+              <h3 className="text-xl font-bold mb-2">{targetId ? 'Editar Categoria' : 'Nova Categoria'}</h3>
+              <p className="text-xs text-gray-400 mb-6 uppercase font-bold">Time: {ownedTeams.find(t => t.id === currentTeamId)?.name || 'Nenhum'}</p>
+              
+              <input type="text" autoFocus className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 mb-4 font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ex: Sub-15" />
+              
               <div className="flex gap-2">
-                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg">Cancelar</button>
-                  <button onClick={handleSaveCategory} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar</button>
+                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+                  <button onClick={handleSaveCategory} disabled={loading} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-50">
+                      {loading ? 'Salvando...' : 'Salvar'}
+                  </button>
               </div>
            </div>
         </div>
@@ -241,7 +280,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
       {/* ALERTA FEEDBACK */}
       {(modalType === 'alert_success' || modalType === 'alert_error') && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${modalType === 'alert_success' ? 'bg-green-100' : 'bg-red-100'}`}>
                     {modalType === 'alert_success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}

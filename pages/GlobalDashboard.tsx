@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { 
   getUsers, saveUser, deleteUser, 
@@ -22,18 +23,15 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false); // New uploading state
+  const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   
-  // Create/Edit Global Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<User>>({ name: '', email: '', password: '', role: UserRole.GLOBAL });
   const [modalError, setModalError] = useState('');
 
-  // Delete Confirmation State
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, userId: string | null, userName: string }>({ isOpen: false, userId: null, userName: '' });
   
-  // Migration State
   const [userTeamsCount, setUserTeamsCount] = useState(0);
   const [wantToMigrate, setWantToMigrate] = useState(false);
   const [targetTeamIdInput, setTargetTeamIdInput] = useState('');
@@ -49,7 +47,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
        if (storedUserStr) setCurrentUser(JSON.parse(storedUserStr));
 
        const all = await getUsers();
-       // Filter Masters or other Globals
        setUsers(all.filter(u => u.role === UserRole.MASTER || u.role === UserRole.GLOBAL));
        setLoading(false);
   };
@@ -61,7 +58,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   };
 
   const openEditModal = (user: User) => {
-      setEditData({ ...user }); // Clone user data
+      setEditData({ ...user });
       setModalError('');
       setIsModalOpen(true);
   };
@@ -71,7 +68,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       if (file) {
           setUploading(true);
           try {
-              // Standardize: Reset value then upload
               e.target.value = '';
               const url = await processImageUpload(file);
               setEditData(prev => ({ ...prev, avatarUrl: url }));
@@ -93,7 +89,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
           return;
       }
       
-      // For new users, password is required
       if (!editData.id && !editData.password) {
           setModalError('Senha é obrigatória para novos usuários.');
           return;
@@ -103,13 +98,12 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
           id: editData.id || uuidv4(),
           name: editData.name,
           email: editData.email,
-          password: editData.password || undefined, // Keep existing if undefined in logic (backend handles usually, but here we assume upsert overrides if provided)
+          password: editData.password || undefined,
           role: UserRole.GLOBAL,
           avatarUrl: editData.avatarUrl || '',
           teamIds: editData.teamIds || []
       };
       
-      // If updating, preserve password if not changed (StorageService upsert overwrites whole object, need to ensure password persistence if logic requires)
       if (editData.id && !editData.password) {
           const existing = users.find(u => u.id === editData.id);
           if (existing) userToSave.password = existing.password;
@@ -129,7 +123,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
   };
 
   const requestDelete = async (user: User) => {
-      // Check for owned data
       const allTeams = await getTeams();
       const count = allTeams.filter(t => t.ownerId === user.id).length;
       
@@ -146,20 +139,17 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       try {
           const userIdToDelete = deleteConfirm.userId;
           const allTeams = await getTeams();
-          // Find teams owned by the user being deleted
           const userTeams = allTeams.filter(t => t.ownerId === userIdToDelete);
           const userTeamIds = userTeams.map(t => t.id);
 
           if (userTeamsCount > 0) {
               if (wantToMigrate) {
-                  // MIGRATION FLOW
                   if (!targetTeamIdInput) {
                       alert("Por favor, insira o ID do Time de Destino.");
                       setIsProcessingDelete(false);
                       return;
                   }
 
-                  // Verify Target TEAM
                   const targetTeam = allTeams.find(t => t.id === targetTeamIdInput);
                   if (!targetTeam) {
                       alert("Time de destino não encontrado. Verifique o ID.");
@@ -167,60 +157,42 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                       return;
                   }
 
-                  // --- EXECUTE MIGRATION ---
                   const [allCats, allAthletes, allSessions] = await Promise.all([
                       getCategories(),
                       getAthletes(),
                       getTrainingSessions()
                   ]);
 
-                  // Fetch current categories of destination team to prevent duplicates
                   const destCategories = allCats.filter(c => c.teamId === targetTeamIdInput);
 
-                  // 1. Move Categories (With Duplicate Check)
                   const catsToMove = allCats.filter(c => userTeamIds.includes(c.teamId));
                   
                   for (const cat of catsToMove) {
                       const normalizedOld = normalizeCategoryName(cat.name);
-                      // Check if destination already has this category
                       const existingDestCat = destCategories.find(dc => normalizeCategoryName(dc.name) === normalizedOld);
 
                       if (existingDestCat) {
-                          // TARGET EXISTS: Move children (Athletes/Sessions) to existing ID, then delete old category
-                          
-                          // Update Athletes in this category
                           const relatedAthletes = allAthletes.filter(a => a.categoryId === cat.id);
                           for (const ath of relatedAthletes) {
-                              await saveAthlete({ ...ath, categoryId: existingDestCat.id, teamId: targetTeamIdInput, pendingTransferTeamId: null });
+                              await saveAthlete({ ...ath, categoryId: existingDestCat.id, teamId: targetTeamIdInput, pendingTransferTeamId: undefined });
                           }
-
-                          // Update Sessions in this category
                           const relatedSessions = allSessions.filter(s => s.categoryId === cat.id);
                           for (const ses of relatedSessions) {
                               await saveTrainingSession({ ...ses, categoryId: existingDestCat.id, teamId: targetTeamIdInput });
                           }
-
-                          // Delete the old category row since we merged it
                           await deleteCategory(cat.id);
-
                       } else {
-                          // TARGET DOES NOT EXIST: Just update teamId and name (normalized)
                           await saveCategory({ ...cat, name: normalizedOld, teamId: targetTeamIdInput });
                       }
                   }
 
-                  // 2. Move Athletes (Remaining or general update)
-                  // We re-query or filter to ensure we catch anyone not covered by category loop (though unlikely)
-                  // It's safer to ensure all athletes from old teams are moved to new teamId regardless of category
                   const athletesToMove = allAthletes.filter(a => userTeamIds.includes(a.teamId));
                   for (const item of athletesToMove) {
-                      // Only update if teamId wasn't already updated in category loop above (check against old ids)
                       if (userTeamIds.includes(item.teamId)) {
-                          await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: null });
+                          await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: undefined });
                       }
                   }
 
-                  // 3. Move History (Sessions)
                   const sessionsToMove = allSessions.filter(s => userTeamIds.includes(s.teamId));
                   for (const item of sessionsToMove) {
                       if (userTeamIds.includes(item.teamId)) {
@@ -229,14 +201,11 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                   }
               }
               
-              // --- CLEANUP ---
-              // Delete the old teams (now empty of data if migrated, or deleting data if not)
               for (const team of userTeams) {
                   await deleteTeam(team.id);
               }
           }
 
-          // Finally delete the user
           await deleteUser(userIdToDelete);
           
           setDeleteConfirm({ isOpen: false, userId: null, userName: '' });
@@ -257,7 +226,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       });
   };
 
-  // Separate Lists
   const globalAdmins = users.filter(u => u.role === UserRole.GLOBAL);
   const masterTenants = users.filter(u => u.role === UserRole.MASTER && (
       u.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -269,7 +237,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-20">
-        {/* Header */}
         <div className="bg-gray-800 border-b border-gray-700 p-6 flex flex-col md:flex-row justify-between items-center shadow-lg gap-4">
             <div className="flex items-center gap-3">
                  <Globe className="text-purple-500" size={32} />
@@ -296,7 +263,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
         <div className="max-w-7xl mx-auto p-8 space-y-8">
             
-            {/* 1. CURRENT USER HIGHLIGHT */}
             {currentUser && (
                 <div className="bg-gradient-to-r from-blue-900 to-gray-800 rounded-xl border border-blue-700 p-6 flex items-center justify-between shadow-xl">
                     <div className="flex items-center gap-4">
@@ -325,7 +291,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                 </div>
             )}
 
-            {/* 2. GLOBAL ADMINS MANAGEMENT */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
                 <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
                     <h2 className="text-lg font-bold text-purple-400 flex items-center gap-2">
@@ -369,7 +334,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                 </div>
             </div>
 
-            {/* 3. MASTERS / TENANTS LIST */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
                 <div className="p-6 border-b border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4 bg-gray-800/50">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -449,9 +413,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
             </div>
         </div>
 
-        {/* --- MODALS --- */}
-
-        {/* 1. EDIT/CREATE GLOBAL USER MODAL */}
         {isModalOpen && (
              <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-700">
@@ -503,7 +464,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
              </div>
         )}
 
-        {/* 2. DELETE CONFIRMATION & MIGRATION MODAL */}
         {deleteConfirm.isOpen && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-center border border-red-900/50">
