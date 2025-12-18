@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -132,7 +133,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   // Evolução Técnica do Time
   const teamEvolutionData = useMemo(() => {
-      // Fix: Use Set<string> and explicitly type the map parameter to resolve the 'unknown' error with Date constructor.
       const dates = Array.from(new Set<string>(filteredEvalSessions.map(s => s.date))).sort();
       return dates.map((d: string) => {
           const dayEvals = filteredEvalSessions.filter(s => s.date === d);
@@ -145,18 +145,41 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       }).filter(d => d.tech !== null);
   }, [filteredEvalSessions, selectedCategory, athletes]);
 
-  // Seleção baseada em Média Técnica
+  // Lógica de Seleção Técnica do Momento (Formação 4-3-3)
   const bestXI = useMemo(() => {
-    const getTop = (pos: Position[]) => athletesWithMeta.find(a => pos.includes(a.position) && (selectedCategory === 'all' || a.categoryId === selectedCategory));
+    const selectedIds = new Set<string>();
+    
+    const getTopForSlot = (positions: Position[]) => {
+        const pool = athletesWithMeta
+            .filter(a => positions.includes(a.position) && !selectedIds.has(a.id) && (selectedCategory === 'all' || a.categoryId === selectedCategory))
+            .sort((a, b) => b.avgTech - a.avgTech);
+        
+        if (pool.length > 0) {
+            selectedIds.add(pool[0].id);
+            return pool[0];
+        }
+        return null;
+    };
+
     return [
-        { role: 'GK', player: getTop([Position.GOLEIRO]), style: { bottom: '5%', left: '50%' } }, 
-        { role: 'LE', player: getTop([Position.LATERAL]), style: { bottom: '22%', left: '15%' } }, 
-        { role: 'ZC', player: getTop([Position.ZAGUEIRO]), style: { bottom: '16%', left: '38%' } }, 
-        { role: 'LD', player: getTop([Position.LATERAL]), style: { bottom: '22%', left: '85%' } }, 
-        { role: 'VOL', player: getTop([Position.VOLANTE]), style: { bottom: '35%', left: '50%' } }, 
-        { role: 'MC', player: getTop([Position.MEIO_CAMPO]), style: { bottom: '50%', left: '30%' } }, 
-        { role: 'AT', player: getTop([Position.ATACANTE]), style: { bottom: '65%', left: '20%' } }, 
-        { role: 'CA', player: getTop([Position.CENTROAVANTE]), style: { bottom: '75%', left: '50%' } }, 
+        // Goleiro (1)
+        { role: 'GK', player: getTopForSlot([Position.GOLEIRO]), style: { bottom: '5%', left: '50%' } }, 
+        
+        // Defesa (4)
+        { role: 'LE', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '15%' } }, 
+        { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '38%' } }, 
+        { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '62%' } }, 
+        { role: 'LD', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '85%' } }, 
+        
+        // Meio-Campo (3)
+        { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '30%' } }, 
+        { role: 'VOL', player: getTopForSlot([Position.VOLANTE, Position.MEIO_CAMPO]), style: { bottom: '38%', left: '50%' } }, 
+        { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '70%' } }, 
+        
+        // Ataque (3)
+        { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '20%' } }, 
+        { role: 'CA', player: getTopForSlot([Position.CENTROAVANTE, Position.ATACANTE]), style: { bottom: '78%', left: '50%' } }, 
+        { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '80%' } }, 
     ];
   }, [athletesWithMeta, selectedCategory]);
 
@@ -174,11 +197,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Activity size={100} className="text-indigo-600"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Zap size={14} className="text-yellow-500"/> Impacto em Jogo (Média)</span><p className="text-5xl font-black text-indigo-600 tracking-tighter">{teamAverages.impact.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Basado em Scouts RealTime</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Zap size={14} className="text-yellow-500"/> Impacto em Jogo (Média)</span><p className="text-5xl font-black text-indigo-600 tracking-tighter">{teamAverages.impact.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Scouts RealTime</span></div>
           </div>
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Basado em Snapshots Estruturados</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Snapshots Estruturados</span></div>
           </div>
       </div>
 
@@ -201,8 +224,8 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       </div>
 
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600"/> Seleção Técnica do Momento</h3>
-         <div className="relative w-full aspect-[16/8] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
+         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600"/> Seleção Técnica do Momento (4-3-3)</h3>
+         <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
              <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
              <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
@@ -211,7 +234,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                 <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
                    {pos.player ? (
                       <Link to={`/athletes/${pos.player.id}`} className="flex flex-col items-center group">
-                          <div className="relative">{pos.player.photoUrl ? <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white" /> : <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">{pos.player.name.charAt(0)}</div>}<div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">{pos.player.avgTech.toFixed(1)}</div></div>
+                          <div className="relative">
+                            {pos.player.photoUrl ? <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white" /> : <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">{pos.player.name.charAt(0)}</div>}
+                            <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">{pos.player.avgTech.toFixed(1)}</div>
+                          </div>
                           <div className="mt-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] font-black uppercase tracking-tighter">{pos.player.name.split(' ')[0]}</div>
                       </Link>
                    ) : <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center text-white/40 text-[10px] font-black">{pos.role}</div>}
