@@ -112,6 +112,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       finally { setLoading(false); }
   };
 
+  // Fixed error in handleSaveCategory: Changed team_id to teamId to match Category interface
   const handleSaveCategory = async () => {
     if (!formData.name || !currentTeamId) return;
     setLoading(true);

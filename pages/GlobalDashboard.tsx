@@ -48,11 +48,12 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
            if (storedUserStr) setCurrentUser(JSON.parse(storedUserStr));
 
            const all = await getUsers();
-           // Filtro robusto para MASTER e GLOBAL independente de caixa ou espaços
-           setUsers(all.filter(u => {
+           // Filtro ultra-resiliente para MASTER e GLOBAL
+           const filtered = all.filter(u => {
                const r = (u.role || '').toString().toUpperCase().trim();
                return r === 'MASTER' || r === 'GLOBAL';
-           }));
+           });
+           setUsers(filtered);
        } catch (err) {
            console.error("Erro ao carregar dados globais:", err);
        } finally {
@@ -173,7 +174,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                   ]);
 
                   const destCategories = allCats.filter(c => c.teamId === targetTeamIdInput);
-
                   const catsToMove = allCats.filter(c => userTeamIds.includes(c.teamId));
                   
                   for (const cat of catsToMove) {
@@ -197,16 +197,12 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
                   const athletesToMove = allAthletes.filter(a => userTeamIds.includes(a.teamId));
                   for (const item of athletesToMove) {
-                      if (userTeamIds.includes(item.teamId)) {
-                          await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: undefined });
-                      }
+                      await saveAthlete({ ...item, teamId: targetTeamIdInput, pendingTransferTeamId: undefined });
                   }
 
                   const sessionsToMove = allSessions.filter(s => userTeamIds.includes(s.teamId));
                   for (const item of sessionsToMove) {
-                      if (userTeamIds.includes(item.teamId)) {
-                          await saveTrainingSession({ ...item, teamId: targetTeamIdInput });
-                      }
+                      await saveTrainingSession({ ...item, teamId: targetTeamIdInput });
                   }
               }
               
@@ -216,10 +212,8 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
           }
 
           await deleteUser(userIdToDelete);
-          
           setDeleteConfirm({ isOpen: false, userId: null, userName: '' });
           loadData();
-
       } catch (error) {
           console.error("Erro ao processar exclusão/migração", error);
           alert("Ocorreu um erro durante o processo.");
@@ -235,7 +229,6 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       });
   };
 
-  // Filtros com segurança contra nulos e case-insensitivity
   const globalAdmins = users.filter(u => (u.role || '').toString().toUpperCase() === 'GLOBAL');
   
   const masterTenants = users.filter(u => {
