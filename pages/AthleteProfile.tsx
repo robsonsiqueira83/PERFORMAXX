@@ -2,19 +2,20 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
-  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions, deleteAthlete, getTeams
+  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions, deleteAthlete, getTeams,
+  getTechnicalEvaluations, getPhysicalEvaluations
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { TrainingEntry, Athlete, Category, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe, Team, Position } from '../types';
+import { TrainingEntry, Athlete, Category, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe, Team, Position, TechnicalEvaluation, PhysicalEvaluation } from '../types';
 import { 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LineChart, Line
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LineChart, Line, Legend
 } from 'recharts';
 import { 
   Edit, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
   TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye,
   Plus, Trash2, ArrowRightLeft, CheckCircle, Upload, HelpCircle, Users, Rocket, Shield, ShieldAlert,
-  Info
+  Info, LayoutDashboard
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
@@ -28,11 +29,13 @@ const AthleteProfile: React.FC = () => {
   const [entries, setEntries] = useState<TrainingEntry[]>([]);
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
   const [evalSessions, setEvalSessions] = useState<EvaluationSession[]>([]);
+  const [allTechEvals, setAllTechEvals] = useState<TechnicalEvaluation[]>([]);
+  const [allPhysEvals, setAllPhysEvals] = useState<PhysicalEvaluation[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
 
-  // Aba inicial alterada para 'snapshots' (Avaliações) conforme solicitado
+  // Aba inicial: Avaliações
   const [activeTab, setActiveTab] = useState<'snapshots' | 'realtime'>('snapshots');
   
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -70,12 +73,21 @@ const AthleteProfile: React.FC = () => {
              setSessions(allSessions);
              setEvalSessions(allEvals);
              setAllTeams(teamsData);
+
+             // Busca detalhes de todas as avaliações para as médias da aba snapshots
+             const techPromises = allEvals.map(s => getTechnicalEvaluations(s.id));
+             const physPromises = allEvals.map(s => getPhysicalEvaluations(s.id));
+             const techResults = await Promise.all(techPromises);
+             const physResults = await Promise.all(physPromises);
+             setAllTechEvals(techResults.flat());
+             setAllPhysEvals(physResults.flat());
          }
          setLoading(false);
      };
      load();
   }, [id, refreshKey]);
 
+  // --- LOGICA DE SCOUT REALTIME ---
   const allEvents = useMemo(() => {
       let evts: any[] = [];
       entries.forEach(entry => {
@@ -117,7 +129,7 @@ const AthleteProfile: React.FC = () => {
       };
   }, [allEvents, filterDate]);
 
-  // Médias de Avaliações Estruturadas
+  // --- LOGICA DE AVALIAÇÕES AGREGADAS (Snapshot Tab) ---
   const avgStructuredTech = useMemo(() => {
     if (evalSessions.length === 0) return 0;
     return evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / evalSessions.length;
@@ -128,7 +140,33 @@ const AthleteProfile: React.FC = () => {
     return evalSessions.reduce((acc, curr) => acc + curr.scoreFisico, 0) / evalSessions.length;
   }, [evalSessions]);
 
-  // Normalização do Score Global 0-10 para o bloco EXECUTIVE
+  const radarAggregatedTech = useMemo(() => {
+    const groups = ['Passe', 'Domínio e Controle', 'Condução', 'Finalização', '1x1 Ofensivo', '1x1 Defensivo'];
+    return groups.map(g => {
+        const items = allTechEvals.filter(t => t.fundamento === g);
+        const score = items.length > 0 ? items.reduce((a, b) => a + b.nota, 0) / items.length : 0;
+        return { subject: g, A: score, fullMark: 5 };
+    });
+  }, [allTechEvals]);
+
+  const radarAggregatedPhys = useMemo(() => {
+    const groups = ['Força', 'Potência', 'Velocidade', 'Resistência', 'Mobilidade / Estabilidade'];
+    return groups.map(g => {
+        const items = allPhysEvals.filter(p => p.capacidade.includes(g));
+        const score = items.length > 0 ? items.reduce((a, b) => a + b.scoreNormalizado, 0) / items.length : 0;
+        return { subject: g, A: score, fullMark: 100 };
+    });
+  }, [allPhysEvals]);
+
+  const evolutionAggregatedData = useMemo(() => {
+    return [...evalSessions].reverse().map(s => ({
+        date: new Date(s.date).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
+        tech: s.scoreTecnico,
+        phys: s.scoreFisico / 20 
+    }));
+  }, [evalSessions]);
+
+  // Score Global 0-10 para o bloco EXECUTIVE
   const globalScore = useMemo(() => {
       const raw = layer1Stats?.avgGlobal || 0;
       return Math.max(0, Math.min(10, 5 + (raw * 3.33)));
@@ -142,6 +180,16 @@ const AthleteProfile: React.FC = () => {
       if (score >= 3.0) return "Abaixo do nível desejado para o contexto atual";
       return "Participação ainda em construção";
   };
+
+  const activityDates = useMemo(() => {
+      const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
+      sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
+      evalSessions.forEach(s => {
+          const current = map.get(s.date);
+          map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
+      });
+      return map;
+  }, [sessions, entries, evalSessions]);
 
   const dominantChartData = useMemo(() => {
       if (filteredEvents.length === 0) return [];
@@ -195,30 +243,6 @@ const AthleteProfile: React.FC = () => {
       if (mapToggle === 'negativa') pts = pts.filter(e => e.result === 'NEGATIVA');
       return pts.map(e => e.location);
   }, [filteredEvents, mapToggle]);
-
-  const activityDates = useMemo(() => {
-      const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
-      sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
-      evalSessions.forEach(s => {
-          const current = map.get(s.date);
-          map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
-      });
-      return map;
-  }, [sessions, entries, evalSessions]);
-
-  const handleTransferOut = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!transferTargetId || !athlete) return;
-    setTransferLoading(true);
-    try {
-        const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
-        if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
-        await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
-        setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
-        setTransferTargetId(''); setRefreshKey(prev => prev + 1);
-    } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
-    finally { setTransferLoading(false); }
-  };
 
   const handleDeleteAthlete = async () => {
       if (!athlete) return;
@@ -301,19 +325,17 @@ const AthleteProfile: React.FC = () => {
                     </div>
                     <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
                         <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
-                        {/* Botão Iniciar Avaliação Restaurado */}
-                        <button onClick={() => navigate(`/athletes/${id}/evaluation`)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Target size={16} /> Iniciar Avaliação</button>
+                        <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Target size={16} /> Iniciar Avaliação</button>
                     </div>
                   </div>
               </div>
 
-              {/* Bloco Score EXECUTIVE (Atualizado com sub-métricas) */}
+              {/* Bloco Score EXECUTIVE */}
               <div className="w-full md:w-64 bg-gray-50 dark:bg-darkInput/50 p-6 rounded-3xl border border-gray-100 dark:border-darkBorder flex flex-col items-center text-center shrink-0 shadow-inner">
                   <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Score do Atleta</span>
                   <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{globalScore.toFixed(1)}</span>
                   <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSemanticReading(globalScore, allEvents.length)}</p>
                   
-                  {/* Médias detalhadas em menor tamanho */}
                   <div className="mt-4 pt-4 border-t dark:border-darkBorder w-full space-y-2">
                       <div className="flex justify-between items-center">
                           <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Impacto Tático</span>
@@ -337,7 +359,7 @@ const AthleteProfile: React.FC = () => {
           <div className="lg:col-span-1">{renderCalendar()}</div>
       </div>
 
-      {/* SELETOR DE ABAS (Ordens e Status Inicial Trocados) */}
+      {/* SELETOR DE ABAS */}
       <div className="flex bg-white dark:bg-darkCard p-1.5 rounded-2xl border border-gray-100 dark:border-darkBorder shadow-sm max-w-md mx-auto">
           <button onClick={() => setActiveTab('snapshots')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'snapshots' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-darkInput'}`}>
               <ClipboardCheck size={16}/> Avaliações
@@ -349,7 +371,6 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'realtime' && (
           <div className="space-y-8 animate-fade-in">
-              {/* CAMADA 1: PERFIL TÁTICO (FIXO) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col md:flex-row items-center gap-10">
                       <div className="w-full md:w-1/2 h-[280px]">
@@ -371,7 +392,6 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
 
-                  {/* MOTOR DE FILTROS (INVISÍVEL/CONECTOR) */}
                   <div className="bg-indigo-900 dark:bg-darkInput p-8 rounded-3xl shadow-xl flex flex-col justify-between border dark:border-darkBorder">
                       <h3 className="text-[10px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Filter size={14}/> Motor de Contexto</h3>
                       <div className="space-y-4">
@@ -395,7 +415,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* CAMADA 2: CONTEXTO DE DESEMPENHO (REATIVO) */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   <div className="lg:col-span-3 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm relative min-h-[400px]">
                       <h3 className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter mb-8 flex items-center gap-3">
@@ -458,7 +477,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* CAMADA 3: ESPAÇO E TEMPO (DINÂMICA) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col">
                       <div className="flex justify-between items-center mb-6">
@@ -510,14 +528,73 @@ const AthleteProfile: React.FC = () => {
       )}
 
       {activeTab === 'snapshots' && (
-          <div className="space-y-6 animate-fade-in">
-              <div className="bg-white dark:bg-darkCard rounded-2xl border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-gray-100 dark:border-darkBorder flex justify-between items-center bg-gray-50/50 dark:bg-darkInput">
-                      <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações</h3>
+          <div className="space-y-12 animate-fade-in">
+              {/* SEÇÃO ANALÍTICA AGREGADA (ESTILO EVAL-VIEW) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Radar de Dominância Técnica Média */}
+                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col">
+                      <div className="flex items-center gap-3 mb-8">
+                          <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg"><Target size={20}/></div>
+                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Dominância Técnica Média</h3>
+                      </div>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarAggregatedTech}>
+                              <PolarGrid stroke="#334155" />
+                              <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
+                              <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                              <Radar name="Histórico" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.6} />
+                              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                          </RadarChart>
+                      </ResponsiveContainer>
+                  </div>
+
+                  {/* Radar de Equilíbrio Físico Médio */}
+                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col">
+                      <div className="flex items-center gap-3 mb-8">
+                          <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Activity size={20}/></div>
+                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Equilíbrio Físico Médio</h3>
+                      </div>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarAggregatedPhys}>
+                              <PolarGrid stroke="#334155" />
+                              <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
+                              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                              <Radar name="Histórico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.6} />
+                              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                          </RadarChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+
+              {/* Tendência de Evolução Temporal */}
+              <div className="bg-white dark:bg-darkCard p-10 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm">
+                  <div className="flex items-center gap-3 mb-10">
+                      <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg"><TrendingUp size={20}/></div>
+                      <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Tendência de Evolução Técnica e Física</h3>
+                  </div>
+                  <div className="h-[350px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={evolutionAggregatedData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 900}} />
+                              <YAxis domain={[0, 5]} hide />
+                              <Tooltip contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                              <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '30px' }} />
+                              <Line name="Técnica" type="monotone" dataKey="tech" stroke="#10b981" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#10b981' }} activeDot={{ r: 10, strokeWidth: 0 }} />
+                              <Line name="Física (Escala 1-5)" type="monotone" dataKey="phys" stroke="#2563eb" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#2563eb' }} activeDot={{ r: 10, strokeWidth: 0 }} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+
+              {/* HISTÓRICO DE AVALIAÇÕES (Lista) */}
+              <div className="bg-white dark:bg-darkCard rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden">
+                  <div className="p-8 border-b border-gray-100 dark:border-darkBorder flex justify-between items-center bg-gray-50/50 dark:bg-darkInput">
+                      <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações Registradas</h3>
                   </div>
                   <div className="divide-y divide-gray-50 dark:divide-darkBorder">
                       {evalSessions.length > 0 ? evalSessions.map(ev => (
-                          <div key={ev.id} className="p-5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-indigo-900/10 transition-all border-l-4 border-transparent hover:border-emerald-600">
+                          <div key={ev.id} className="p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-indigo-900/10 transition-all border-l-4 border-transparent hover:border-emerald-600">
                               <div className="flex items-center gap-5">
                                   <div className="bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-2xl text-emerald-600 dark:text-emerald-400 shadow-sm"><Target size={24}/></div>
                                   <div>
@@ -545,7 +622,7 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAIS */}
+      {/* MODAIS (MANTIDOS) */}
       {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
@@ -638,7 +715,19 @@ const AthleteProfile: React.FC = () => {
               <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
                   <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><ArrowRightLeft size={36} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir</h2>
-                  <form onSubmit={handleTransferOut} className="space-y-4">
+                  <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!transferTargetId || !athlete) return;
+                      setTransferLoading(true);
+                      try {
+                          const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
+                          if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
+                          await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
+                          setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
+                          setTransferTargetId(''); setRefreshKey(prev => prev + 1);
+                      } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
+                      finally { setTransferLoading(false); }
+                  }} className="space-y-4">
                       <input autoFocus type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="ID DO CLUBE" value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)} required />
                       <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
                          {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Solicitar Envio'}
