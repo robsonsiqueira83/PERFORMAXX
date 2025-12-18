@@ -4,56 +4,30 @@ import { Athlete, Category, Team, TrainingEntry, TrainingSession, User, UserRole
 import { v4 as uuidv4 } from 'uuid';
 
 // --- USERS ---
-
-/**
- * Fetches all users from the system.
- */
 export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');
-  if (error) {
-    console.error("Error fetching users:", error);
-    return [];
-  }
+  if (error) return [];
   return data || [];
 };
 
-/**
- * Fetches a single user by their unique ID.
- */
 export const getUserById = async (id: string): Promise<User | null> => {
     const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
-    if (error) {
-        console.error(`Error fetching user ${id}:`, error);
-        return null;
-    }
+    if (error) return null;
     return data;
 };
 
-/**
- * Saves or updates a user's information.
- */
 export const saveUser = async (user: User) => {
   return await supabase.from('users').upsert(user);
 };
 
-/**
- * Deletes a user from the system.
- */
 export const deleteUser = async (id: string) => {
   return await supabase.from('users').delete().eq('id', id);
 };
 
 // --- TEAMS ---
-
-/**
- * Fetches all teams from the system.
- */
 export const getTeams = async (): Promise<Team[]> => {
   const { data, error } = await supabase.from('teams').select('*');
-  if (error) {
-    console.error("Error fetching teams:", error);
-    return [];
-  }
+  if (error) return [];
   return (data || []).map(t => ({
       id: t.id,
       name: t.name,
@@ -62,9 +36,6 @@ export const getTeams = async (): Promise<Team[]> => {
   }));
 };
 
-/**
- * Saves or updates team information.
- */
 export const saveTeam = async (team: Team) => {
   return await supabase.from('teams').upsert({
       id: team.id,
@@ -74,24 +45,14 @@ export const saveTeam = async (team: Team) => {
   });
 };
 
-/**
- * Deletes a team and its associated data (handled via RLS or cascade in DB).
- */
 export const deleteTeam = async (id: string) => {
   return await supabase.from('teams').delete().eq('id', id);
 };
 
 // --- CATEGORIES ---
-
-/**
- * Fetches all categories across all teams.
- */
 export const getCategories = async (): Promise<Category[]> => {
   const { data, error } = await supabase.from('categories').select('*');
-  if (error) {
-    console.error("Error fetching categories:", error);
-    return [];
-  }
+  if (error) return [];
   return (data || []).map((c: any) => ({
       id: c.id,
       name: c.name,
@@ -99,9 +60,6 @@ export const getCategories = async (): Promise<Category[]> => {
   }));
 };
 
-/**
- * Saves or updates a category.
- */
 export const saveCategory = async (category: Category) => {
   return await supabase.from('categories').upsert({
       id: category.id,
@@ -110,24 +68,14 @@ export const saveCategory = async (category: Category) => {
   });
 };
 
-/**
- * Deletes a category.
- */
 export const deleteCategory = async (id: string) => {
   return await supabase.from('categories').delete().eq('id', id);
 };
 
 // --- ATHLETES ---
-
-/**
- * Fetches all athletes in the system.
- */
 export const getAthletes = async (): Promise<Athlete[]> => {
   const { data, error } = await supabase.from('athletes').select('*');
-  if (error) {
-    console.error("Error fetching athletes:", error);
-    return [];
-  }
+  if (error) return [];
   return (data || []).map((a: any) => ({
       id: a.id,
       rg: a.rg,
@@ -143,9 +91,6 @@ export const getAthletes = async (): Promise<Athlete[]> => {
   }));
 };
 
-/**
- * Saves or updates an athlete's profile.
- */
 export const saveAthlete = async (athlete: Athlete) => {
   return await supabase.from('athletes').upsert({
       id: athlete.id,
@@ -163,16 +108,9 @@ export const saveAthlete = async (athlete: Athlete) => {
 };
 
 // --- TRAINING SESSIONS ---
-
-/**
- * Fetches all training sessions.
- */
 export const getTrainingSessions = async (): Promise<TrainingSession[]> => {
   const { data, error } = await supabase.from('training_sessions').select('*');
-  if (error) {
-    console.error("Error fetching training sessions:", error);
-    return [];
-  }
+  if (error) return [];
   return (data || []).map((s: any) => ({
       id: s.id,
       date: s.date,
@@ -182,9 +120,6 @@ export const getTrainingSessions = async (): Promise<TrainingSession[]> => {
   }));
 };
 
-/**
- * Saves or updates a training session header.
- */
 export const saveTrainingSession = async (session: TrainingSession) => {
   return await supabase.from('training_sessions').upsert({
       id: session.id,
@@ -196,16 +131,9 @@ export const saveTrainingSession = async (session: TrainingSession) => {
 };
 
 // --- TRAINING ENTRIES ---
-
-/**
- * Fetches performance data entries for individual athletes across sessions.
- */
 export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
   const { data, error } = await supabase.from('training_entries').select('*');
-  if (error) {
-    console.error("Error fetching training entries:", error);
-    return [];
-  }
+  if (error) return [];
   return (data || []).map((e: any) => ({
       id: e.id,
       sessionId: e.session_id,
@@ -218,9 +146,6 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
   }));
 };
 
-/**
- * Saves or updates an individual athlete's performance metrics for a session.
- */
 export const saveTrainingEntry = async (entry: TrainingEntry) => {
   return await supabase.from('training_entries').upsert({
       id: entry.id,
@@ -234,15 +159,11 @@ export const saveTrainingEntry = async (entry: TrainingEntry) => {
   });
 };
 
-/**
- * Removes a specific performance entry.
- */
 export const deleteTrainingEntry = async (id: string) => {
   return await supabase.from('training_entries').delete().eq('id', id);
 };
 
-// --- NOVAS AVALIAÇÕES ESTRUTURADAS (Técnica & Física) ---
-
+// --- AVALIAÇÕES ESTRUTURADAS (SNAPSHOTS) ---
 export const getEvaluationSessions = async (athleteId?: string): Promise<EvaluationSession[]> => {
   let query = supabase.from('evaluations_sessions').select('*').order('date', { ascending: false });
   if (athleteId) query = query.eq('athlete_id', athleteId);
@@ -250,7 +171,7 @@ export const getEvaluationSessions = async (athleteId?: string): Promise<Evaluat
   if (error) return [];
   return data.map((s: any) => ({
     id: s.id, athleteId: s.athlete_id, date: s.date, type: s.type, evaluatorId: s.evaluator_id,
-    scoreTecnico: s.score_tecnico, scoreFisico: s.score_fisico, notes: s.notes, createdAt: s.created_at
+    scoreTecnico: Number(s.score_tecnico), scoreFisico: Number(s.score_fisico), notes: s.notes, createdAt: s.created_at
   }));
 };
 
@@ -267,7 +188,7 @@ export const getPhysicalEvaluations = async (sessionId: string): Promise<Physica
 };
 
 export const saveEvaluationSession = async (session: EvaluationSession, technicals: TechnicalEvaluation[], physicals: PhysicalEvaluation[]) => {
-  // 1. Gravar Cabeçalho da Sessão
+  // 1. Cabeçalho (Header)
   const { error: sessionError } = await supabase.from('evaluations_sessions').upsert({
     id: session.id, 
     athlete_id: session.athleteId, 
@@ -279,12 +200,9 @@ export const saveEvaluationSession = async (session: EvaluationSession, technica
     notes: session.notes
   });
   
-  if (sessionError) {
-      console.error("Erro ao salvar evaluations_sessions:", sessionError);
-      throw sessionError;
-  }
+  if (sessionError) throw sessionError;
 
-  // 2. Gravar Detalhes Técnicos (Deletar antigos e inserir novos para evitar duplicatas em edições)
+  // 2. Técnica (Delete old and insert new)
   if (technicals.length > 0) {
     await supabase.from('technical_evaluations').delete().eq('session_id', session.id);
     const { error: tError } = await supabase.from('technical_evaluations').insert(
@@ -298,7 +216,7 @@ export const saveEvaluationSession = async (session: EvaluationSession, technica
     if (tError) throw tError;
   }
 
-  // 3. Gravar Detalhes Físicos
+  // 3. Física (Delete old and insert new)
   if (physicals.length > 0) {
     await supabase.from('physical_evaluations').delete().eq('session_id', session.id);
     const { error: pError } = await supabase.from('physical_evaluations').insert(
