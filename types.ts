@@ -132,6 +132,44 @@ export interface TrainingEntry {
   notes?: string;
 }
 
+// --- NOVOS TIPOS DE AVALIAÇÃO ESTRUTURADA ---
+
+export enum EvaluationType {
+  PRE_TEMPORADA = 'Pré-temporada',
+  MENSUAL = 'Mensal',
+  POS_LESÃO = 'Pós-lesão',
+  REAVALIAÇÃO = 'Reavaliação',
+  OUTRO = 'Outro'
+}
+
+export interface EvaluationSession {
+  id: string;
+  athleteId: string;
+  date: string;
+  type: EvaluationType;
+  evaluatorId: string;
+  scoreTecnico: number;
+  scoreFisico: number;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface TechnicalEvaluation {
+  id?: string;
+  sessionId: string;
+  fundamento: string;
+  subfundamento: string;
+  nota: number; // 1-5
+}
+
+export interface PhysicalEvaluation {
+  id?: string;
+  sessionId: string;
+  capacidade: string;
+  valorBruto: string;
+  scoreNormalizado: number; // 0-100
+}
+
 // --- PERMISSION HELPERS ---
 
 // Can Create or Update data (Athletes, Training, etc.)

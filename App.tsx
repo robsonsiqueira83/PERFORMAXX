@@ -5,7 +5,8 @@ import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import AthletesList from './pages/AthletesList';
 import AthleteProfile from './pages/AthleteProfile';
-import AthleteEvaluation from './pages/AthleteEvaluation'; // New Page
+import AthleteEvaluation from './pages/AthleteEvaluation'; 
+import TechnicalPhysicalEvaluation from './pages/TechnicalPhysicalEvaluation'; // New Page
 import Training from './pages/Training';
 import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
@@ -30,7 +31,6 @@ const App: React.FC = () => {
             
             if (storedUserStr) {
                 const localUser = JSON.parse(storedUserStr);
-                // Attempt to fetch fresh user data, but fallback gracefully if DB fails or user deleted
                 try {
                     const allUsers = await getUsers();
                     const freshUser = allUsers.find(u => u.id === localUser.id);
@@ -46,16 +46,12 @@ const App: React.FC = () => {
                     setUser(currentUser);
                     localStorage.setItem('performax_current_user', JSON.stringify(currentUser));
                     
-                    // Restore Context if previously set, otherwise default to self
                     const storedContext = localStorage.getItem('performax_context_id');
                     if (storedContext && storedContext !== currentUser.id && currentUser.role === UserRole.GLOBAL) {
-                         // Keep impersonation context if Global
                          setViewingAsMasterId(storedContext);
                     } else if (storedContext && currentUser.role === UserRole.MASTER) {
-                         // Keep selected context for Masters (could be own or invited)
                          setViewingAsMasterId(storedContext);
                     } else {
-                        // Default to self
                         setViewingAsMasterId(currentUser.id);
                     }
                 } else {
@@ -63,7 +59,6 @@ const App: React.FC = () => {
                 }
             }
             
-            // Initial Team Load based on Context
             if (currentUser) {
                 await updateSelectedTeamForContext(viewingAsMasterId || currentUser.id, currentUser);
             }
@@ -80,20 +75,15 @@ const App: React.FC = () => {
   const updateSelectedTeamForContext = async (contextId: string, currentUser: User) => {
       try {
           const allTeams = await getTeams();
-          // Filter teams belonging to this Context (Master)
-          // AND that the current user has access to
           let contextTeams = allTeams.filter(t => t.ownerId === contextId);
           
           if (currentUser.role !== UserRole.GLOBAL && currentUser.role !== UserRole.MASTER) {
-              // Strict filter for non-admins
               contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
           } else if (currentUser.role === UserRole.MASTER && contextId !== currentUser.id) {
-              // Master viewing another panel they are invited to
               contextTeams = contextTeams.filter(t => currentUser.teamIds?.includes(t.id));
           }
 
           if (contextTeams.length > 0) {
-              // If current selection is valid for this context, keep it. Else pick first.
               setSelectedTeamId(prev => {
                   return contextTeams.find(t => t.id === prev) ? prev : contextTeams[0].id;
               });
@@ -114,7 +104,6 @@ const App: React.FC = () => {
     
     await updateSelectedTeamForContext(defaultContext, u);
     
-    // Global User Logic: Stay on Global Dashboard if logging in
     if (u.role === UserRole.GLOBAL) {
         window.location.hash = '/global';
     } else {
@@ -131,18 +120,15 @@ const App: React.FC = () => {
     window.location.hash = '/';
   };
 
-  // Change Context (Panel Switcher)
   const handleContextChange = async (newMasterId: string) => {
       setViewingAsMasterId(newMasterId);
       localStorage.setItem('performax_context_id', newMasterId);
       if (user) {
           await updateSelectedTeamForContext(newMasterId, user);
       }
-      // Force redirect to dashboard to avoid stale data on current page
       window.location.hash = '/';
   };
 
-  // Global Admin Accessing Specific Master
   const handleGlobalAccessMaster = async (masterId: string) => {
       setViewingAsMasterId(masterId);
       localStorage.setItem('performax_context_id', masterId);
@@ -152,10 +138,9 @@ const App: React.FC = () => {
       window.location.hash = '/';
   };
 
-  // Return to Global Dashboard
   const handleReturnToGlobal = () => {
       if (user?.role === UserRole.GLOBAL) {
-          setViewingAsMasterId(user.id); // Reset context to self (optional)
+          setViewingAsMasterId(user.id); 
           window.location.hash = '/global';
       }
   };
@@ -165,26 +150,24 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        {/* PUBLIC ROUTES */}
         <Route path="/p/team/:teamId" element={<PublicTeamDashboard />} />
         <Route path="/p/athlete/:athleteId" element={<PublicAthleteProfile />} />
 
-        {/* AUTH ROUTES */}
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
         
-        {/* GLOBAL DASHBOARD */}
         <Route path="/global" element={
             user && user.role === UserRole.GLOBAL ? (
                 <GlobalDashboard onAccessMaster={handleGlobalAccessMaster} onLogout={handleLogout} />
             ) : <Navigate to={user ? "/" : "/login"} />
         } />
 
-        {/* REAL TIME EVALUATION (NO LAYOUT) */}
         {user && (
-            <Route path="/athletes/:id/realtime" element={<RealTimeEvaluation />} />
+            <>
+                <Route path="/athletes/:id/realtime" element={<RealTimeEvaluation />} />
+                <Route path="/athletes/:id/tech-phys-eval" element={<TechnicalPhysicalEvaluation />} />
+            </>
         )}
 
-        {/* APP ROUTES (WITH LAYOUT) */}
         <Route path="*" element={
            !user ? (
              <Navigate to="/login" />
@@ -203,14 +186,12 @@ const App: React.FC = () => {
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
                   
-                  {/* Evaluation Page Routes (New/Edit) */}
                   <Route path="/athletes/:id/evaluation" element={<AthleteEvaluation />} />
                   <Route path="/athletes/:id/evaluation/:entryId" element={<AthleteEvaluation />} />
 
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
                   
-                  {/* Master & Global Route */}
                   {(user.role === UserRole.MASTER || user.role === UserRole.GLOBAL) && (
                     <Route path="/users" element={<UserManagement />} />
                   )}
