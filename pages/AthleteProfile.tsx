@@ -16,7 +16,7 @@ import {
   Edit, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
   TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye,
   Plus, Trash2, ArrowRightLeft, CheckCircle, Upload, HelpCircle, Users, Rocket, Shield, ShieldAlert,
-  Info
+  Info, LayoutDashboard
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
@@ -36,6 +36,7 @@ const AthleteProfile: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
 
+  // Aba inicial: Avaliações
   const [activeTab, setActiveTab] = useState<'snapshots' | 'realtime'>('snapshots');
   
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -74,7 +75,7 @@ const AthleteProfile: React.FC = () => {
              setEvalSessions(allEvals);
              setAllTeams(teamsData);
 
-             // Busca detalhes de todas as avaliações para calcular as médias agregadas
+             // Busca detalhes de todas as avaliações para as médias da aba snapshots
              const techPromises = allEvals.map(s => getTechnicalEvaluations(s.id));
              const physPromises = allEvals.map(s => getPhysicalEvaluations(s.id));
              const techResults = await Promise.all(techPromises);
@@ -129,59 +130,7 @@ const AthleteProfile: React.FC = () => {
       };
   }, [allEvents, filterDate]);
 
-  // Fix: Added missing dominantChartData useMemo hook to resolve "Cannot find name 'dominantChartData'" error
-  const dominantChartData = useMemo(() => {
-      if (filterPhase === 'all') {
-          return layer1Stats.radarData.map(d => ({ name: d.phase, score: d.A }));
-      } else {
-          const actions = filteredEvents.reduce((acc: any, curr) => {
-              if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
-              acc[curr.action].score += curr.eventScore;
-              acc[curr.action].count += 1;
-              return acc;
-          }, {});
-          return Object.values(actions).map((a: any) => ({ name: a.name, score: a.score / a.count }));
-      }
-  }, [filterPhase, filteredEvents, layer1Stats]);
-
-  // Fix: Added missing impactRanking useMemo hook to resolve "Cannot find name 'impactRanking'" error
-  const impactRanking = useMemo(() => {
-      const grouped = filteredEvents.reduce((acc: any, curr) => {
-          if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
-          acc[curr.action].score += curr.eventScore;
-          acc[curr.action].count += 1;
-          return acc;
-      }, {});
-      const list = Object.values(grouped).map((g: any) => ({ ...g, avg: g.score / g.count }));
-      return {
-          best: [...list].sort((a, b) => b.avg - a.avg).slice(0, 3),
-          worst: [...list].sort((a, b) => a.avg - b.avg).slice(0, 3)
-      };
-  }, [filteredEvents]);
-
-  // Fix: Added missing heatmapPoints useMemo hook to resolve "Cannot find name 'heatmapPoints'" error
-  const heatmapPoints = useMemo(() => {
-      let ds = filteredEvents;
-      if (mapToggle !== 'all') {
-          ds = ds.filter(e => mapToggle === 'positiva' ? e.result === 'POSITIVA' : e.result === 'NEGATIVA');
-      }
-      return ds.map(e => e.location);
-  }, [filteredEvents, mapToggle]);
-
-  // Fix: Added missing timelineData useMemo hook to resolve "Cannot find name 'timelineData'" error
-  const timelineData = useMemo(() => {
-      const baseEvents = filterDate ? allEvents.filter(e => e.sessionDate === filterDate) : allEvents;
-      const blocks: any[] = [];
-      const maxSeconds = baseEvents.length > 0 ? Math.max(...baseEvents.map(e => e.seconds)) : 0;
-      for (let i = 0; i <= maxSeconds; i += 60) {
-          const minEvents = baseEvents.filter(e => e.seconds >= i && e.seconds < i + 60);
-          const score = minEvents.length > 0 ? minEvents.reduce((acc, c) => acc + c.eventScore, 0) / minEvents.length : 0;
-          blocks.push({ time: `${Math.floor(i/60)}'`, score, raw: i });
-      }
-      return blocks;
-  }, [allEvents, filterDate]);
-
-  // --- LOGICA DE AVALIAÇÕES AGREGADAS (SNAPSHOTS) ---
+  // --- LOGICA DE AVALIAÇÕES AGREGADAS (Snapshot Tab) ---
   const avgStructuredTech = useMemo(() => {
     if (evalSessions.length === 0) return 0;
     return evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / evalSessions.length;
@@ -218,6 +167,7 @@ const AthleteProfile: React.FC = () => {
     }));
   }, [evalSessions]);
 
+  // Score Global 0-10 para o bloco EXECUTIVE
   const globalScore = useMemo(() => {
       const raw = layer1Stats?.avgGlobal || 0;
       return Math.max(0, Math.min(10, 5 + (raw * 3.33)));
@@ -232,19 +182,68 @@ const AthleteProfile: React.FC = () => {
       return "Participação ainda em construção";
   };
 
-  const handleTransferOut = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!transferTargetId || !athlete) return;
-    setTransferLoading(true);
-    try {
-        const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
-        if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
-        await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
-        setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
-        setTransferTargetId(''); setRefreshKey(prev => prev + 1);
-    } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
-    finally { setTransferLoading(false); }
-  };
+  const activityDates = useMemo(() => {
+      const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
+      sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
+      evalSessions.forEach(s => {
+          const current = map.get(s.date);
+          map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
+      });
+      return map;
+  }, [sessions, entries, evalSessions]);
+
+  const dominantChartData = useMemo(() => {
+      if (filteredEvents.length === 0) return [];
+      if (filterAction !== 'all') {
+          const results = ['POSITIVA', 'NEUTRA', 'NEGATIVA'];
+          return results.map(r => ({
+              name: r,
+              score: filteredEvents.filter(e => e.result === r).length
+          }));
+      }
+      if (filterPhase !== 'all') {
+          const actions = Array.from(new Set(filteredEvents.map(e => e.action)));
+          return actions.map(a => {
+              const ae = filteredEvents.filter(e => e.action === a);
+              return { name: a, score: ae.reduce((acc, c) => acc + c.eventScore, 0) / ae.length };
+          });
+      }
+      return layer1Stats?.radarData.map(d => ({ name: d.phase, score: d.A })) || [];
+  }, [filteredEvents, filterPhase, filterAction, layer1Stats]);
+
+  const impactRanking = useMemo(() => {
+      const grouped = filteredEvents.reduce((acc: any, curr) => {
+          if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
+          acc[curr.action].score += curr.eventScore;
+          acc[curr.action].count += 1;
+          return acc;
+      }, {});
+      const list = Object.values(grouped).map((g: any) => ({ ...g, avg: g.score / g.count }));
+      return {
+          best: [...list].sort((a, b) => b.avg - a.avg).slice(0, 3),
+          worst: [...list].sort((a, b) => a.avg - b.avg).slice(0, 3)
+      };
+  }, [filteredEvents]);
+
+  const timelineData = useMemo(() => {
+      const baseEvents = filterDate ? allEvents.filter(e => e.sessionDate === filterDate) : allEvents;
+      if (baseEvents.length === 0) return [];
+      const blocks: any[] = [];
+      const maxSec = Math.max(...baseEvents.map(e => e.seconds));
+      for (let i = 0; i <= maxSec; i += 60) {
+          const minEvents = baseEvents.filter(e => e.seconds >= i && e.seconds < i + 60);
+          const score = minEvents.length > 0 ? minEvents.reduce((acc, c) => acc + c.eventScore, 0) / minEvents.length : 0;
+          blocks.push({ time: `${Math.floor(i/60)}'`, score, raw: i });
+      }
+      return blocks;
+  }, [allEvents, filterDate]);
+
+  const heatmapPoints = useMemo(() => {
+      let pts = filteredEvents;
+      if (mapToggle === 'positiva') pts = pts.filter(e => e.result === 'POSITIVA');
+      if (mapToggle === 'negativa') pts = pts.filter(e => e.result === 'NEGATIVA');
+      return pts.map(e => e.location);
+  }, [filteredEvents, mapToggle]);
 
   const handleDeleteAthlete = async () => {
       if (!athlete) return;
@@ -258,37 +257,26 @@ const AthleteProfile: React.FC = () => {
   };
 
   const handleDeleteEvaluation = async () => {
-      if (!selectedEvalId) return;
-      setLoading(true);
-      try {
-          // Exclui dependências manualmente para garantir integridade
-          await supabase.from('technical_evaluations').delete().eq('session_id', selectedEvalId);
-          await supabase.from('physical_evaluations').delete().eq('session_id', selectedEvalId);
-          const { error } = await supabase.from('evaluations_sessions').delete().eq('id', selectedEvalId);
-          
-          if (error) throw error;
-          
-          setModalType('success'); 
-          setModalMessage('Avaliação excluída com sucesso.');
-          setRefreshKey(prev => prev + 1);
-      } catch (err: any) {
-          setModalType('error');
-          setModalMessage('Erro ao excluir avaliação: ' + err.message);
-      } finally {
-          setLoading(false);
-          setSelectedEvalId(null);
-      }
-  };
+    if (!selectedEvalId) return;
+    setLoading(true);
+    try {
+        // Exclusão recursiva de todos os dados da seção de avaliação
+        await supabase.from('technical_evaluations').delete().eq('session_id', selectedEvalId);
+        await supabase.from('physical_evaluations').delete().eq('session_id', selectedEvalId);
+        const { error } = await supabase.from('evaluations_sessions').delete().eq('id', selectedEvalId);
+        if (error) throw error;
 
-  const activityDates = useMemo(() => {
-    const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
-    sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
-    evalSessions.forEach(s => {
-        const current = map.get(s.date);
-        map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
-    });
-    return map;
-  }, [sessions, entries, evalSessions]);
+        setModalType('success');
+        setModalMessage('Sessão de avaliação excluída com sucesso.');
+        setRefreshKey(prev => prev + 1);
+    } catch (err: any) {
+        setModalType('error');
+        setModalMessage('Erro ao excluir avaliação: ' + err.message);
+    } finally {
+        setLoading(false);
+        setSelectedEvalId(null);
+    }
+  };
 
   const renderCalendar = () => {
     const month = calendarMonth.getMonth();
@@ -317,7 +305,7 @@ const AthleteProfile: React.FC = () => {
     return (
         <div className="bg-white dark:bg-darkCard p-4 rounded-xl border border-gray-100 dark:border-darkBorder shadow-sm w-full">
             <div className="flex justify-between items-center mb-4">
-                h3 className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2"><CalendarIcon size={12}/> Atividades</h3>
+                <h3 className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2"><CalendarIcon size={12}/> Atividades</h3>
                 <div className="flex items-center gap-2">
                     <button onClick={() => setCalendarMonth(new Date(year, month - 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-darkInput rounded text-gray-400"><ChevronLeft size={16}/></button>
                     <span className="text-[10px] font-black uppercase text-gray-800 dark:text-gray-100">{calendarMonth.toLocaleString('pt-BR', { month: 'short', year: 'numeric' })}</span>
@@ -406,7 +394,6 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'realtime' && (
           <div className="space-y-8 animate-fade-in">
-              {/* CAMADA 1: PERFIL TÁTICO (FIXO) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col md:flex-row items-center gap-10">
                       <div className="w-full md:w-1/2 h-[280px]">
@@ -451,7 +438,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* CAMADA 2: CONTEXTO DE DESEMPENHO (REATIVO) */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   <div className="lg:col-span-3 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm relative min-h-[400px]">
                       <h3 className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter mb-8 flex items-center gap-3">
@@ -566,10 +552,10 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'snapshots' && (
           <div className="space-y-12 animate-fade-in">
-              {/* BLOCOS ANALÍTICOS AGREGADOS (ESTILO EVAL-VIEW) */}
+              {/* SEÇÃO ANALÍTICA AGREGADA (ESTILO EVAL-VIEW) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Radar Técnico Médio */}
-                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
+                  {/* Radar Técnico Média */}
+                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg"><Target size={20}/></div>
                           <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Mapeamento Técnico de Fundamentos (Média)</h3>
@@ -579,14 +565,14 @@ const AthleteProfile: React.FC = () => {
                               <PolarGrid stroke="#334155" />
                               <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
                               <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
-                              <Radar name="Histórico" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.6} />
+                              <Radar name="Médias" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.6} />
                               <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
                           </RadarChart>
                       </ResponsiveContainer>
                   </div>
 
-                  {/* Radar Físico Médio */}
-                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
+                  {/* Radar Físico Média */}
+                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Activity size={20}/></div>
                           <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Perfil de Capacidades Físicas (Média)</h3>
@@ -596,7 +582,7 @@ const AthleteProfile: React.FC = () => {
                               <PolarGrid stroke="#334155" />
                               <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
                               <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                              <Radar name="Histórico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.6} />
+                              <Radar name="Médias" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.6} />
                               <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
                           </RadarChart>
                       </ResponsiveContainer>
@@ -604,7 +590,7 @@ const AthleteProfile: React.FC = () => {
               </div>
 
               {/* Tendência de Evolução Temporal */}
-              <div className="bg-white dark:bg-darkCard p-10 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm transition-colors">
+              <div className="bg-white dark:bg-darkCard p-10 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm">
                   <div className="flex items-center gap-3 mb-10">
                       <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg"><TrendingUp size={20}/></div>
                       <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Histórico e Tendências de Evolução</h3>
@@ -618,14 +604,14 @@ const AthleteProfile: React.FC = () => {
                               <Tooltip contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
                               <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '30px' }} />
                               <Line name="Técnica" type="monotone" dataKey="tech" stroke="#10b981" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#10b981' }} activeDot={{ r: 10, strokeWidth: 0 }} />
-                              <Line name="Física (Normalizada 1-5)" type="monotone" dataKey="phys" stroke="#2563eb" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#2563eb' }} activeDot={{ r: 10, strokeWidth: 0 }} />
+                              <Line name="Física (Normalizado 1-5)" type="monotone" dataKey="phys" stroke="#2563eb" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#2563eb' }} activeDot={{ r: 10, strokeWidth: 0 }} />
                           </LineChart>
                       </ResponsiveContainer>
                   </div>
               </div>
 
-              {/* HISTÓRICO DE AVALIAÇÕES (LISTA NO FINAL) */}
-              <div className="bg-white dark:bg-darkCard rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden transition-colors">
+              {/* HISTÓRICO DE AVALIAÇÕES (Lista) */}
+              <div className="bg-white dark:bg-darkCard rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden">
                   <div className="p-8 border-b border-gray-100 dark:border-darkBorder flex justify-between items-center bg-gray-50/50 dark:bg-darkInput">
                       <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações Registradas</h3>
                   </div>
@@ -637,9 +623,9 @@ const AthleteProfile: React.FC = () => {
                                   <div>
                                       <p className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">{ev.type}</p>
                                       <div className="flex items-center gap-4 mt-1.5 text-[9px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">
-                                          <div className="flex items-center gap-1.5"><CalendarIcon size={12}/> {formatDateSafe(ev.date)}</div>
-                                          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><TrendingUp size={12}/> TÉC: {ev.scoreTecnico.toFixed(1)}</div>
-                                          <div className="flex items-center gap-1.5 text-blue-500 dark:text-blue-400"><Activity size={12}/> FÍS: {ev.scoreFisico.toFixed(0)}%</div>
+                                          <div className="flex items-center gap-1"><CalendarIcon size={12}/> {formatDateSafe(ev.date)}</div>
+                                          <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><TrendingUp size={12}/> TÉC: {ev.scoreTecnico.toFixed(1)}</div>
+                                          <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400"><Activity size={12}/> FÍS: {ev.scoreFisico.toFixed(0)}%</div>
                                       </div>
                                   </div>
                               </div>
@@ -647,7 +633,7 @@ const AthleteProfile: React.FC = () => {
                                   <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="p-2.5 bg-gray-50 dark:bg-darkInput text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
                                       <Edit size={16}/>
                                   </button>
-                                  <button onClick={() => { setSelectedEvalId(ev.id); setModalType('confirm_delete_eval'); setModalMessage('Deseja excluir permanentemente esta avaliação e todos os seus dados vinculados?'); }} className="p-2.5 bg-gray-50 dark:bg-darkInput text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 transition-all shadow-sm">
+                                  <button onClick={() => { setSelectedEvalId(ev.id); setModalType('confirm_delete_eval'); setModalMessage('Deseja excluir permanentemente esta avaliação e todos os dados vinculados?'); }} className="p-2.5 bg-gray-50 dark:bg-darkInput text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 transition-all shadow-sm">
                                       <Trash2 size={16}/>
                                   </button>
                                   <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-all shadow-sm"><Eye size={16}/> Relatório</button>
@@ -660,24 +646,6 @@ const AthleteProfile: React.FC = () => {
       )}
 
       {/* MODAIS (MANTIDOS E ATUALIZADOS) */}
-      {modalType === 'confirm_delete_eval' && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center animate-slide-up">
-                  <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-400 shadow-inner">
-                      <AlertCircle size={40} />
-                  </div>
-                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Excluir Avaliação?</h2>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-8 font-bold uppercase tracking-widest leading-relaxed">{modalMessage}</p>
-                  <div className="space-y-3">
-                      <button onClick={handleDeleteEvaluation} disabled={loading} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-xl uppercase tracking-widest text-[11px] active:scale-95 border-b-4 border-red-900">
-                         {loading ? <Loader2 className="animate-spin" size={18}/> : <Trash2 size={18}/>} Confirmar Exclusão
-                      </button>
-                      <button onClick={() => { setModalType('none'); setSelectedEvalId(null); }} className="w-full bg-gray-50 dark:bg-darkInput text-gray-400 dark:text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-100 transition-all uppercase tracking-widest text-[11px]">Cancelar</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
       {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
@@ -765,12 +733,40 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
+      {modalType === 'confirm_delete_eval' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-400 shadow-inner"><AlertCircle size={40} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Apagar Dados?</h2>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-8 font-bold uppercase tracking-widest">{modalMessage}</p>
+                  <div className="space-y-3">
+                      <button onClick={handleDeleteEvaluation} disabled={loading} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-red-700 flex items-center justify-center gap-2 shadow-xl uppercase tracking-widest text-[11px] active:scale-95 border-b-4 border-red-900">
+                         {loading ? <Loader2 className="animate-spin" size={18}/> : <Trash2 size={18}/>} Confirmar Exclusão
+                      </button>
+                      <button onClick={() => { setModalType('none'); setSelectedEvalId(null); }} className="w-full bg-gray-50 dark:bg-darkInput text-gray-400 dark:text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-100 transition-all uppercase tracking-widest text-[11px]">Cancelar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {modalType === 'transfer_athlete' && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
               <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
                   <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><ArrowRightLeft size={36} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir</h2>
-                  <form onSubmit={handleTransferOut} className="space-y-4">
+                  <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!transferTargetId || !athlete) return;
+                      setTransferLoading(true);
+                      try {
+                          const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
+                          if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
+                          await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
+                          setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
+                          setTransferTargetId(''); setRefreshKey(prev => prev + 1);
+                      } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
+                      finally { setTransferLoading(false); }
+                  }} className="space-y-4">
                       <input autoFocus type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="ID DO CLUBE" value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)} required />
                       <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
                          {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Solicitar Envio'}
