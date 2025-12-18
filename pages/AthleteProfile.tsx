@@ -32,7 +32,8 @@ const AthleteProfile: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
+  // Aba inicial alterada para 'snapshots' (Avaliações) conforme solicitado
+  const [activeTab, setActiveTab] = useState<'snapshots' | 'realtime'>('snapshots');
   
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [filterPhase, setFilterPhase] = useState<string>('all');
@@ -115,6 +116,17 @@ const AthleteProfile: React.FC = () => {
           ]
       };
   }, [allEvents, filterDate]);
+
+  // Médias de Avaliações Estruturadas
+  const avgStructuredTech = useMemo(() => {
+    if (evalSessions.length === 0) return 0;
+    return evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / evalSessions.length;
+  }, [evalSessions]);
+
+  const avgStructuredPhys = useMemo(() => {
+    if (evalSessions.length === 0) return 0;
+    return evalSessions.reduce((acc, curr) => acc + curr.scoreFisico, 0) / evalSessions.length;
+  }, [evalSessions]);
 
   // Normalização do Score Global 0-10 para o bloco EXECUTIVE
   const globalScore = useMemo(() => {
@@ -289,15 +301,34 @@ const AthleteProfile: React.FC = () => {
                     </div>
                     <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
                         <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
+                        {/* Botão Iniciar Avaliação Restaurado */}
+                        <button onClick={() => navigate(`/athletes/${id}/evaluation`)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Target size={16} /> Iniciar Avaliação</button>
                     </div>
                   </div>
               </div>
 
-              {/* Bloco Score EXECUTIVE (Novo) */}
-              <div className="w-full md:w-56 bg-gray-50 dark:bg-darkInput/50 p-6 rounded-3xl border border-gray-100 dark:border-darkBorder flex flex-col items-center text-center shrink-0 shadow-inner">
+              {/* Bloco Score EXECUTIVE (Atualizado com sub-métricas) */}
+              <div className="w-full md:w-64 bg-gray-50 dark:bg-darkInput/50 p-6 rounded-3xl border border-gray-100 dark:border-darkBorder flex flex-col items-center text-center shrink-0 shadow-inner">
                   <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Score do Atleta</span>
                   <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{globalScore.toFixed(1)}</span>
                   <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSemanticReading(globalScore, allEvents.length)}</p>
+                  
+                  {/* Médias detalhadas em menor tamanho */}
+                  <div className="mt-4 pt-4 border-t dark:border-darkBorder w-full space-y-2">
+                      <div className="flex justify-between items-center">
+                          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Impacto Tático</span>
+                          <span className="text-[9px] font-mono font-black text-indigo-500">{(layer1Stats?.avgGlobal || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Média Técnica</span>
+                          <span className="text-[9px] font-mono font-black text-emerald-500">{avgStructuredTech.toFixed(1)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Condição Física</span>
+                          <span className="text-[9px] font-mono font-black text-blue-500">{avgStructuredPhys.toFixed(0)}%</span>
+                      </div>
+                  </div>
+
                   <div className="mt-4 flex items-center justify-center text-gray-300 dark:text-gray-700" title="Este score resume o impacto das ações do atleta no jogo.">
                       <HelpCircle size={14} />
                   </div>
@@ -306,17 +337,19 @@ const AthleteProfile: React.FC = () => {
           <div className="lg:col-span-1">{renderCalendar()}</div>
       </div>
 
+      {/* SELETOR DE ABAS (Ordens e Status Inicial Trocados) */}
       <div className="flex bg-white dark:bg-darkCard p-1.5 rounded-2xl border border-gray-100 dark:border-darkBorder shadow-sm max-w-md mx-auto">
-          <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-darkInput'}`}>
-              <Activity size={16}/> Scout RealTime
-          </button>
           <button onClick={() => setActiveTab('snapshots')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'snapshots' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-darkInput'}`}>
               <ClipboardCheck size={16}/> Avaliações
+          </button>
+          <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-darkInput'}`}>
+              <Activity size={16}/> Scout RealTime
           </button>
       </div>
 
       {activeTab === 'realtime' && (
           <div className="space-y-8 animate-fade-in">
+              {/* CAMADA 1: PERFIL TÁTICO (FIXO) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col md:flex-row items-center gap-10">
                       <div className="w-full md:w-1/2 h-[280px]">
@@ -338,6 +371,7 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
 
+                  {/* MOTOR DE FILTROS (INVISÍVEL/CONECTOR) */}
                   <div className="bg-indigo-900 dark:bg-darkInput p-8 rounded-3xl shadow-xl flex flex-col justify-between border dark:border-darkBorder">
                       <h3 className="text-[10px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Filter size={14}/> Motor de Contexto</h3>
                       <div className="space-y-4">
@@ -361,6 +395,7 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
+              {/* CAMADA 2: CONTEXTO DE DESEMPENHO (REATIVO) */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   <div className="lg:col-span-3 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm relative min-h-[400px]">
                       <h3 className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter mb-8 flex items-center gap-3">
@@ -423,6 +458,7 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
+              {/* CAMADA 3: ESPAÇO E TEMPO (DINÂMICA) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col">
                       <div className="flex justify-between items-center mb-6">
@@ -509,7 +545,7 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAIS (MANTIDOS) */}
+      {/* MODAIS */}
       {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
