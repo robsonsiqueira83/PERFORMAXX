@@ -85,13 +85,14 @@ const App: React.FC = () => {
       }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50 text-blue-600 font-bold">Carregando...</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-darkBase text-blue-600 font-bold transition-colors">Carregando...</div>;
 
   return (
     <Router>
       <Routes>
         <Route path="/p/team/:teamId" element={<PublicTeamDashboard />} />
         <Route path="/p/athlete/:athleteId" element={<PublicAthleteProfile />} />
+        <Route path="/p/athlete/:id/eval-view/:sessionId" element={<EvaluationView />} />
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
         <Route path="/global" element={user && user.role === UserRole.GLOBAL ? <GlobalDashboard onAccessMaster={handleAccessMaster} onLogout={handleLogout} /> : <Navigate to="/login" />} />
 
