@@ -12,7 +12,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName, UserRole, formatDateSafe } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, Loader2, Download, Rocket, PlayCircle, Edit, ArrowRightLeft, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Filter, Loader2, Download, Rocket, PlayCircle, Edit, ArrowRightLeft, CheckCircle, AlertCircle, XCircle, Mail, Phone, UserCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -24,8 +24,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [allSystemAthletes, setAllSystemAthletes] = useState<Athlete[]>([]);
   const [teams, setTeams] = useState<Team[]>([]); 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [entries, setEntries] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [filterCat, setFilterCat] = useState('all');
+  const [filterPos, setFilterPos] = useState('all');
   
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,7 +42,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<Partial<Athlete>>({
-    name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: ''
+    name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: ''
   });
 
   useEffect(() => {
@@ -50,65 +51,49 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
     const load = async () => {
         setLoading(true);
-        const [a, c, e, t] = await Promise.all([
+        const [a, c, t] = await Promise.all([
             getAthletes(),
             getCategories(),
-            getTrainingEntries(),
             getTeams()
         ]);
         setAllSystemAthletes(a);
         setAthletes(a.filter(item => item.teamId === teamId));
         setCategories(c.filter(item => item.teamId === teamId));
-        setEntries(e);
         setTeams(t);
         setLoading(false);
     };
     load();
   }, [teamId, showModal, refreshKey]);
 
-  const athletesWithMeta = useMemo(() => {
-    return athletes.map(athlete => {
-        const athleteEntries = entries.filter(e => e.athleteId === athlete.id);
-        let averageScore = 0;
-        if (athleteEntries.length > 0) {
-            const total = athleteEntries.reduce((acc, curr) => acc + calculateTotalScore(curr.technical, curr.physical, curr.tactical), 0);
-            averageScore = total / athleteEntries.length;
-        }
-        return { ...athlete, averageScore };
-    });
-  }, [athletes, entries]);
-
-  const filtered = athletesWithMeta.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = useMemo(() => {
+      let list = athletes.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+      if (filterCat !== 'all') list = list.filter(a => a.categoryId === filterCat);
+      if (filterPos !== 'all') list = list.filter(a => a.position === filterPos);
+      return list;
+  }, [athletes, search, filterCat, filterPos]);
 
   const handleTransferRequest = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!transferRg) return;
       setTransferLoading(true);
-      
       const targetAthlete = allSystemAthletes.find(a => a.rg === transferRg.trim());
-      
       if (!targetAthlete) {
           setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado no sistema.' });
           setTransferLoading(false);
           return;
       }
-      
       if (targetAthlete.teamId === teamId) {
           setFeedback({ type: 'error', message: 'Este atleta já pertence ao seu time.' });
           setTransferLoading(false);
           return;
       }
-
       try {
           await saveAthlete({ ...targetAthlete, pendingTransferTeamId: teamId });
-          setFeedback({ type: 'success', message: `Solicitação de transferência enviada para ${targetAthlete.name}!` });
+          setFeedback({ type: 'success', message: `Solicitação enviada para ${targetAthlete.name}!` });
           setShowTransferModal(false);
           setTransferRg('');
-      } catch (err) {
-          setFeedback({ type: 'error', message: 'Erro ao processar transferência.' });
-      } finally {
-          setTransferLoading(false);
-      }
+      } catch (err) { setFeedback({ type: 'error', message: 'Erro ao processar.' }); }
+      finally { setTransferLoading(false); }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,14 +101,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     if (file) {
       setUploading(true);
       try {
-        e.target.value = '';
         const url = await processImageUpload(file);
         setPreviewUrl(url);
-      } catch (error) {
-        setFeedback({ type: 'error', message: 'Erro na imagem' });
-      } finally {
-        setUploading(false);
-      }
+      } catch (error) { setFeedback({ type: 'error', message: 'Erro na imagem' }); }
+      finally { setUploading(false); }
     }
   };
 
@@ -132,41 +113,46 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     if (!formData.name || !formData.categoryId) return;
     setLoading(true);
     try {
-        const finalRg = formData.rg || `ID-${uuidv4().substring(0,6).toUpperCase()}`;
+        const finalRg = formData.rg || `ID-${uuidv4().substring(0,8).toUpperCase()}`;
         const newAthlete: Athlete = {
           id: formData.id || uuidv4(), teamId, rg: finalRg, name: formData.name, categoryId: formData.categoryId,
           position: formData.position as Position, photoUrl: previewUrl || formData.photoUrl, 
           birthDate: formData.birthDate || new Date().toISOString().split('T')[0],
-          responsibleName: formData.responsibleName || '', responsiblePhone: formData.responsiblePhone || ''
+          responsibleName: formData.responsibleName || '',
+          responsibleEmail: formData.responsibleEmail || '',
+          responsiblePhone: formData.responsiblePhone || ''
         };
         await saveAthlete(newAthlete);
         setShowModal(false);
-        setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsiblePhone: '', birthDate: '' });
+        setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: '' });
         setPreviewUrl('');
         setRefreshKey(prev => prev + 1);
         setFeedback({ type: 'success', message: 'Atleta salvo com sucesso!' });
-    } catch (err: any) {
-        setFeedback({ type: 'error', message: err.message });
-    } finally {
-        setLoading(false);
-    }
+    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); }
+    finally { setLoading(false); }
   };
-
-  if (loading && athletes.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6 relative">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2"><Users className="text-blue-600" /> Atletas</h2>
         <div className="flex flex-col md:flex-row gap-2 w-full xl:w-auto">
-          <div className="relative flex-1 md:min-w-[300px]">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-             <input type="text" placeholder="Buscar por nome..." className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 w-full bg-white text-sm font-bold" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="relative flex-1 md:min-w-[200px]">
+             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+             <input type="text" placeholder="Nome..." className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 w-full bg-white text-xs font-bold" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="all">Todas Categorias</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <select value={filterPos} onChange={e=>setFilterPos(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="all">Todas Posições</option>
+              {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           {currentUser && canEditData(currentUser.role) && (
             <div className="flex gap-2">
-                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 border border-indigo-200"><ArrowRightLeft size={16} /> Solicitar Transferência</button>
-                <button onClick={() => { setFormData({role: Position.MEIO_CAMPO}); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md"><Plus size={16} /> Novo Atleta</button>
+                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-2.5 rounded-xl border border-indigo-200" title="Solicitar Transferência"><ArrowRightLeft size={18} /></button>
+                <button onClick={() => { setFormData({position: Position.MEIO_CAMPO}); setPreviewUrl(''); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md"><Plus size={16} /> Novo Atleta</button>
             </div>
           )}
         </div>
@@ -175,9 +161,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
          {filtered.map(athlete => (
            <div key={athlete.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col items-center hover:shadow-xl transition-all group relative">
-               <div className={`absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded border ${athlete.averageScore >= 8 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-100'}`}>
-                   SCORE: {athlete.averageScore > 0 ? athlete.averageScore.toFixed(1) : '--'}
-               </div>
                <div className="absolute top-4 right-4 flex gap-2">
                    <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
                </div>
@@ -186,8 +169,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
                    <div className="flex flex-col items-center gap-1 mt-3">
-                       <span className="text-[10px] text-gray-400 font-bold">{getCalculatedCategory(athlete.birthDate)}</span>
-                       {athlete.rg && <span className="text-[9px] text-gray-300 font-mono">ID: {athlete.rg}</span>}
+                       <span className="text-[10px] text-gray-400 font-bold">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
+                       <span className="text-[9px] text-gray-300 font-mono">RG: {athlete.rg}</span>
                    </div>
                </Link>
            </div>
@@ -199,14 +182,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl text-center">
                   <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6"><ArrowRightLeft className="text-indigo-600" size={32} /></div>
-                  <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Central de Transferências</h2>
-                  <p className="text-xs text-gray-400 mb-6 font-bold uppercase tracking-widest">Informe o RG ou Identificador do Atleta</p>
+                  <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Transferência</h2>
+                  <p className="text-xs text-gray-400 mb-6 font-bold uppercase tracking-widest">Informe o RG do Atleta no Sistema</p>
                   <form onSubmit={handleTransferRequest} className="space-y-4">
                       <input autoFocus type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500" placeholder="EX: RG-123456" value={transferRg} onChange={e => setTransferRg(e.target.value)} required />
-                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[10px]">
-                          {transferLoading ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
-                          Solicitar Atleta
-                      </button>
+                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[10px]">Solicitar Atleta</button>
                   </form>
                   <button onClick={() => setShowTransferModal(false)} className="mt-6 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
               </div>
@@ -216,14 +196,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       {/* MODAL NOVO/EDITAR ATLETA */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-           <div className="bg-white rounded-3xl w-full max-w-lg p-8 max-h-[90vh] overflow-y-auto shadow-2xl">
+           <div className="bg-white rounded-3xl w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
               <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">{formData.id ? <Edit className="text-indigo-600"/> : <Plus className="text-emerald-500"/>} {formData.id ? 'Editar Atleta' : 'Cadastrar Atleta'}</h3>
+                <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">{formData.id ? <Edit className="text-indigo-600"/> : <Plus className="text-emerald-500"/>} {formData.id ? 'Editar Perfil' : 'Cadastrar Atleta'}</h3>
                 <button onClick={() => setShowModal(false)}><X size={24} className="text-gray-300 hover:text-red-500" /></button>
               </div>
               <form onSubmit={handleSubmit} className="space-y-6">
                  <div className="flex flex-col items-center">
-                    <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-dashed border-gray-200 shadow-inner">
+                    <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-dashed border-gray-200 shadow-inner relative">
                        {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={32} className="text-gray-200" />)}
                     </div>
                     <label className={`cursor-pointer text-blue-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:text-blue-800 ${uploading ? 'opacity-50' : ''}`}>
@@ -231,32 +211,66 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageChange} />
                     </label>
                  </div>
-                 <div>
-                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nome Completo</label>
-                   <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nascimento</label>
-                      <input type="date" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Dados do Atleta</h4>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nome Completo</label>
+                           <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nascimento</label>
+                                <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">RG / ID</label>
+                                <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Auto-gerado se vazio" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Posição</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value as Position})}>
+                                    {Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Categoria</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
+                                    <option value="">Selecione...</option>
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Categoria</label>
-                      <select required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
-                         <option value="">Selecione...</option>
-                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+
+                    <div className="space-y-4">
+                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Responsáveis</h4>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><UserCircle size={12}/> Nome do Responsável</label>
+                           <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} />
+                        </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Mail size={12}/> E-mail</label>
+                           <input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleEmail} onChange={e => setFormData({...formData, responsibleEmail: e.target.value})} />
+                        </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Phone size={12}/> Telefone</label>
+                           <input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsiblePhone} onChange={e => setFormData({...formData, responsiblePhone: e.target.value})} />
+                        </div>
                     </div>
                  </div>
+
                  <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] transition-all hover:bg-indigo-700 disabled:opacity-50">
-                    {loading ? 'Salvando...' : 'Salvar Alterações'}
+                    {loading ? 'Processando...' : 'Salvar Dados do Atleta'}
                  </button>
               </form>
            </div>
         </div>
       )}
 
-      {/* FEEDBACK */}
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
