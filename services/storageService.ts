@@ -1,10 +1,9 @@
 import { supabase } from './supabaseClient';
-import { Athlete, Category, Team, TrainingEntry, TrainingSession, User, UserRole, Position } from '../types';
+import { Athlete, Category, Team, TrainingEntry, TrainingSession, User, UserRole, Position, EvaluationSession, TechnicalEvaluation, PhysicalEvaluation } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // --- Users ---
 export const getUsers = async (): Promise<User[]> => {
-  // Add created_at sort for Global Dashboard chronology
   const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: true });
   if (error) {
     console.error('Error fetching users:', error);
@@ -25,7 +24,6 @@ export const getUsers = async (): Promise<User[]> => {
 export const getUserById = async (id: string): Promise<User | null> => {
   const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
   if (error || !data) {
-    // console.error('Error fetching user by id:', error); // Optional logging
     return null;
   }
   return {
@@ -46,9 +44,9 @@ export const saveUser = async (user: User) => {
     name: user.name,
     email: user.email,
     password: user.password,
-    role: user.role, // Ensure this is passed
+    role: user.role,
     avatar_url: user.avatarUrl,
-    team_ids: user.teamIds || [] // ALWAYS pass this, even if empty array, to ensure DB updates (e.g. clearing permissions)
+    team_ids: user.teamIds || [] 
   };
 
   const { error } = await supabase.from('users').upsert(dbUser);
@@ -68,12 +66,11 @@ export const getTeams = async (): Promise<Team[]> => {
     console.error('Error fetching teams:', error);
     return [];
   }
-  // Convert db columns to app types
   return data.map((t: any) => ({
       id: t.id,
       name: t.name,
       logoUrl: t.logo_url,
-      ownerId: t.owner_id // New column for Multi-Tenancy
+      ownerId: t.owner_id 
   }));
 };
 
@@ -131,7 +128,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
   }
   return data.map((a: any) => ({
       id: a.id,
-      rg: a.rg, // New RG field
+      rg: a.rg,
       name: a.name,
       photoUrl: a.photo_url,
       teamId: a.team_id,
@@ -140,26 +137,25 @@ export const getAthletes = async (): Promise<Athlete[]> => {
       birthDate: a.birth_date,
       responsibleName: a.responsible_name,
       responsiblePhone: a.responsible_phone,
-      pendingTransferTeamId: a.pending_transfer_team_id // New field
+      pendingTransferTeamId: a.pending_transfer_team_id
   }));
 };
 
 export const saveAthlete = async (athlete: Athlete) => {
   const dbAthlete = {
       id: athlete.id,
-      rg: athlete.rg, // New RG field
+      rg: athlete.rg,
       name: athlete.name,
       photo_url: athlete.photoUrl,
       team_id: athlete.teamId,
-      category_id: athlete.categoryId || null, // FIX: Send null if empty string to avoid uuid syntax error
+      category_id: athlete.categoryId || null,
       position: athlete.position,
       birth_date: athlete.birthDate,
       responsible_name: athlete.responsibleName,
       responsible_phone: athlete.responsiblePhone,
-      pending_transfer_team_id: athlete.pendingTransferTeamId || null // Ensure null if undefined/empty
+      pending_transfer_team_id: athlete.pendingTransferTeamId || null
   };
   
-  // Use .select() to force return of the saved row, which validates the 'WITH CHECK' policy immediately
   const { data, error } = await supabase.from('athletes').upsert(dbAthlete).select();
   
   if (error) console.error('Error saving athlete:', error);
@@ -197,10 +193,10 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
       id: e.id,
       sessionId: e.session_id,
       athleteId: e.athlete_id,
-      technical: e.technical, // JSONB auto-converts
-      physical: e.physical,   // JSONB auto-converts
-      tactical: e.tactical,   // Can be undefined/null
-      heatmapPoints: e.heatmap_points || [], // New column
+      technical: e.technical, 
+      physical: e.physical,   
+      tactical: e.tactical,   
+      heatmapPoints: e.heatmap_points || [], 
       notes: e.notes
   }));
 };
@@ -222,10 +218,10 @@ export const saveTrainingEntry = async (entry: TrainingEntry) => {
     id: entry.id,
     session_id: entry.sessionId,
     athlete_id: entry.athleteId,
-    technical: entry.technical, // stored as jsonb
-    physical: entry.physical,   // stored as jsonb
-    tactical: entry.tactical,   // stored as jsonb
-    heatmap_points: entry.heatmapPoints, // stored as jsonb
+    technical: entry.technical, 
+    physical: entry.physical,   
+    tactical: entry.tactical,   
+    heatmap_points: entry.heatmapPoints, 
     notes: entry.notes
   };
   const { error } = await supabase.from('training_entries').upsert(dbEntry);
@@ -233,7 +229,6 @@ export const saveTrainingEntry = async (entry: TrainingEntry) => {
 };
 
 export const deleteTrainingSession = async (id: string) => {
-  // Cascading delete should handle entries usually, but specific to this impl:
   const { error } = await supabase.from('training_sessions').delete().eq('id', id);
   if (error) console.error('Error deleting session:', error);
 };
@@ -241,4 +236,72 @@ export const deleteTrainingSession = async (id: string) => {
 export const deleteTrainingEntry = async (id: string) => {
   const { error } = await supabase.from('training_entries').delete().eq('id', id);
   if (error) console.error('Error deleting entry:', error);
+};
+
+// --- NOVAS AVALIAÇÕES ESTRUTURADAS (Técnica & Física) ---
+
+export const getEvaluationSessions = async (athleteId?: string): Promise<EvaluationSession[]> => {
+  let query = supabase.from('evaluations_sessions').select('*');
+  if (athleteId) query = query.eq('athlete_id', athleteId);
+  
+  const { data, error } = await query;
+  if (error) {
+    console.error('Error fetching evaluation sessions:', error);
+    return [];
+  }
+  return data.map((s: any) => ({
+    id: s.id,
+    athleteId: s.athlete_id,
+    date: s.date,
+    type: s.type,
+    evaluatorId: s.evaluator_id,
+    scoreTecnico: s.score_tecnico,
+    scoreFisico: s.score_fisico,
+    notes: s.notes,
+    createdAt: s.created_at
+  }));
+};
+
+export const saveEvaluationSession = async (session: EvaluationSession, technicals: TechnicalEvaluation[], physicals: PhysicalEvaluation[]) => {
+  const dbSession = {
+    id: session.id,
+    athlete_id: session.athleteId,
+    date: session.date,
+    type: session.type,
+    evaluator_id: session.evaluatorId,
+    score_tecnico: session.scoreTecnico,
+    score_fisico: session.scoreFisico,
+    notes: session.notes
+  };
+
+  const { error: sessionError } = await supabase.from('evaluations_sessions').upsert(dbSession);
+  if (sessionError) throw sessionError;
+
+  // Save technicals
+  if (technicals.length > 0) {
+    const dbTechnicals = technicals.map(t => ({
+      session_id: session.id,
+      fundamento: t.fundamento,
+      subfundamento: t.subfundamento,
+      nota: t.nota
+    }));
+    // Clear old ones first to ensure sync
+    await supabase.from('technical_evaluations').delete().eq('session_id', session.id);
+    const { error: techError } = await supabase.from('technical_evaluations').insert(dbTechnicals);
+    if (techError) throw techError;
+  }
+
+  // Save physicals
+  if (physicals.length > 0) {
+    const dbPhysicals = physicals.map(p => ({
+      session_id: session.id,
+      capacidade: p.capacidade,
+      valor_bruto: p.valorBruto,
+      score_normalizado: p.scoreNormalizado
+    }));
+    // Clear old ones first
+    await supabase.from('physical_evaluations').delete().eq('session_id', session.id);
+    const { error: physError } = await supabase.from('physical_evaluations').insert(dbPhysicals);
+    if (physError) throw physError;
+  }
 };
