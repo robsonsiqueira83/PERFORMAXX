@@ -45,20 +45,19 @@ export interface Category {
 
 export interface Athlete {
   id: string;
-  rg: string; // Agora obrigatório
+  rg: string; 
   name: string;
   photoUrl?: string;
   teamId: string;
-  categoryId: string;
+  categoryId: string | null; // Alterado para permitir null
   position: Position;
   birthDate: string;
   responsibleName: string;
-  responsibleEmail: string; // Novo campo
+  responsibleEmail: string; 
   responsiblePhone: string;
-  pendingTransferTeamId?: string; 
+  pendingTransferTeamId?: string | null; 
 }
 
-// Helper para evitar erro de fuso horário (Data retrocedendo 1 dia)
 export const formatDateSafe = (dateString: string): string => {
     if (!dateString) return '--/--/----';
     const [year, month, day] = dateString.split('T')[0].split('-').map(Number);
