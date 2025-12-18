@@ -46,13 +46,16 @@ const AthleteProfile: React.FC = () => {
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   
-  const [modalType, setModalType] = useState<'none' | 'edit' | 'confirm_delete' | 'confirm_delete_eval' | 'success' | 'error'>('none');
+  const [modalType, setModalType] = useState<'none' | 'edit' | 'confirm_delete' | 'confirm_delete_eval' | 'success' | 'error' | 'transfer_athlete'>('none');
   const [modalMessage, setModalMessage] = useState('');
   const [selectedEvalId, setSelectedEvalId] = useState<string | null>(null);
   
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
   const [showTransferField, setShowTransferField] = useState(false);
+  
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
 
   const [filterPhase, setFilterPhase] = useState<string>('all');
   const [filterResult, setFilterResult] = useState<string>('all');
@@ -81,6 +84,36 @@ const AthleteProfile: React.FC = () => {
      };
      load();
   }, [id, refreshKey]);
+
+  const handleTransferOut = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferTargetId || !athlete) return;
+    setTransferLoading(true);
+    try {
+        const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
+        if (!targetTeam) {
+            setModalType('error');
+            setModalMessage('ID do Clube receptor não localizado no sistema.');
+            return;
+        }
+        if (targetTeam.id === athlete.teamId) {
+            setModalType('error');
+            setModalMessage('O destino não pode ser o clube atual.');
+            return;
+        }
+
+        await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
+        setModalType('success');
+        setModalMessage(`Solicitação enviada! O clube ${targetTeam.name} agora pode aceitar a transferência.`);
+        setTransferTargetId('');
+        setRefreshKey(prev => prev + 1);
+    } catch (err) {
+        setModalType('error');
+        setModalMessage('Erro ao processar transferência.');
+    } finally {
+        setTransferLoading(false);
+    }
+  };
 
   const avgStructuredTech = useMemo(() => {
     if (evalSessions.length === 0) return 0;
@@ -404,10 +437,10 @@ const AthleteProfile: React.FC = () => {
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
               <div className="flex justify-between items-center mb-10 border-b border-gray-100 dark:border-darkBorder pb-5">
                 <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3 dark:text-gray-100">
-                    <div className="p-2.5 rounded-2xl text-white shadow-lg bg-indigo-600">
-                        <Edit size={24}/>
+                    <div className={`p-2 rounded-xl text-white ${formData.id ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
+                        {formData.id ? <Edit size={24}/> : <Plus size={24}/>}
                     </div>
-                    Editar Cadastro do Atleta
+                    {formData.id ? 'Editar Cadastro do Atleta' : 'Novo Atleta'}
                 </h3>
                 <button onClick={() => setModalType('none')} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors text-gray-300 hover:text-red-500"><X size={28}/></button>
               </div>
@@ -499,9 +532,12 @@ const AthleteProfile: React.FC = () => {
                     </div>
                  </div>
 
-                 <div className="flex gap-4 pt-6">
-                    <button type="button" onClick={() => setModalType('confirm_delete')} className="flex-1 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all flex items-center justify-center gap-2 border-b-4 border-red-200 dark:border-red-900/30"><Trash2 size={16}/> Excluir Perfil</button>
-                    <button type="submit" disabled={uploading || loading} className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border-b-4 border-indigo-900">
+                 <div className="flex flex-wrap gap-4 pt-6">
+                    <button type="button" onClick={() => setModalType('confirm_delete')} className="flex-1 min-w-[150px] bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all flex items-center justify-center gap-2 border-b-4 border-red-200 dark:border-red-900/30"><Trash2 size={16}/> Excluir Perfil</button>
+                    
+                    <button type="button" onClick={() => setModalType('transfer_athlete')} className="flex-1 min-w-[150px] bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 border-b-4 border-indigo-200 dark:border-indigo-900/30"><ArrowRightLeft size={16}/> Transferir Atleta</button>
+
+                    <button type="submit" disabled={uploading || loading} className="flex-[2] min-w-[250px] bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border-b-4 border-indigo-900">
                         {loading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
                         {loading ? 'Gravando...' : 'Salvar Alterações'}
                     </button>
@@ -509,6 +545,23 @@ const AthleteProfile: React.FC = () => {
               </form>
            </div>
         </div>
+      )}
+
+      {modalType === 'transfer_athlete' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><ArrowRightLeft size={36} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir Atleta</h2>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-8 font-black uppercase tracking-widest leading-relaxed">Informe o ID do Clube para onde deseja enviar o atleta.</p>
+                  <form onSubmit={handleTransferOut} className="space-y-4">
+                      <input autoFocus type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="UUID DO CLUBE" value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)} required />
+                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
+                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Solicitar Envio'}
+                      </button>
+                  </form>
+                  <button onClick={() => setModalType('edit')} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Voltar</button>
+              </div>
+          </div>
       )}
 
       {(modalType === 'success' || modalType === 'error') && (
