@@ -75,11 +75,9 @@ const Layout: React.FC<LayoutProps> = ({
       const freshUser = allUsers.find(u => u.id === user.id) || user;
       const userTeamIds = freshUser.teamIds || [];
 
-      // Convites de staff
       const pendingIds = userTeamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
       setPendingInvites(allTeams.filter(t => pendingIds.includes(t.id)));
 
-      // Transferências de atletas
       if (selectedTeamId) {
           const transfersIn = allAthletes.filter(a => a.pendingTransferTeamId === selectedTeamId);
           setPendingTransfersIn(transfersIn.length);
@@ -92,7 +90,6 @@ const Layout: React.FC<LayoutProps> = ({
           userAllowedTeams = allTeams.filter(t => t.ownerId === viewingAsMasterId);
       } else {
           const ownedTeams = allTeams.filter(t => t.ownerId === freshUser.id);
-          // Fix: Rename activeInvites to activeTeamIds to resolve 'Cannot find name activeTeamIds' error
           const activeTeamIds = userTeamIds.filter(id => !id.startsWith('pending:'));
           const invitedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
           userAllowedTeams = [...ownedTeams, ...invitedTeams];
@@ -140,7 +137,7 @@ const Layout: React.FC<LayoutProps> = ({
     { name: 'Atletas', href: '/athletes', icon: Users },
     { name: 'Admin', href: '/admin', icon: Settings },
   ];
-  if (canEditData(user.role)) navigation.splice(2, 0, { name: 'Atuações', href: '/training', icon: ClipboardList });
+  if (canEditData(user.role)) navigation.splice(2, 0, { name: 'Avaliação', href: '/training', icon: ClipboardList });
   
   const isActive = (path: string) => location.pathname === path;
 
@@ -173,7 +170,6 @@ const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Banner de Convites Pendentes */}
         {pendingInvites.length > 0 && (
             <div className="bg-indigo-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 animate-pulse-slow">
                 <div className="flex items-center gap-3">
