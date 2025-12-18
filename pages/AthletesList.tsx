@@ -10,7 +10,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -49,16 +49,22 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
     const load = async () => {
         setLoading(true);
-        const [a, c, ev] = await Promise.all([
-            getAthletes(),
-            getCategories(),
-            getEvaluationSessions()
-        ]);
-        setAllSystemAthletes(a);
-        setAthletes(a.filter(item => item.teamId === teamId));
-        setCategories(c.filter(item => item.teamId === teamId));
-        setEvaluations(ev);
-        setLoading(false);
+        try {
+            const [a, c, ev] = await Promise.all([
+                getAthletes(),
+                getCategories(),
+                getEvaluationSessions()
+            ]);
+            setAllSystemAthletes(a);
+            // Incluir atletas que já são do time OU que estão solicitando transferência para este time
+            setAthletes(a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId));
+            setCategories(c.filter(item => item.teamId === teamId));
+            setEvaluations(ev);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
     load();
   }, [teamId, showModal, refreshKey]);
@@ -68,7 +74,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       if (filterCat !== 'all') list = list.filter(a => a.categoryId === filterCat);
       if (filterPos !== 'all') list = list.filter(a => a.position === filterPos);
       
-      // PADRONIZAÇÃO POR ORDEM ALFABÉTICA
       return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [athletes, search, filterCat, filterPos]);
 
@@ -82,24 +87,55 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       e.preventDefault();
       if (!transferRg) return;
       setTransferLoading(true);
-      const targetAthlete = allSystemAthletes.find(a => a.rg === transferRg.trim());
-      if (!targetAthlete) {
-          setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado no sistema.' });
-          setTransferLoading(false);
-          return;
-      }
-      if (targetAthlete.teamId === teamId) {
-          setFeedback({ type: 'error', message: 'Este atleta já pertence ao seu time.' });
-          setTransferLoading(false);
-          return;
-      }
       try {
+          const targetAthlete = allSystemAthletes.find(a => a.rg === transferRg.trim());
+          if (!targetAthlete) {
+              setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado no sistema.' });
+              return;
+          }
+          if (targetAthlete.teamId === teamId) {
+              setFeedback({ type: 'error', message: 'Este atleta já pertence ao seu time.' });
+              return;
+          }
+          
           await saveAthlete({ ...targetAthlete, pendingTransferTeamId: teamId });
-          setFeedback({ type: 'success', message: `Solicitação enviada para ${targetAthlete.name}!` });
+          setFeedback({ type: 'success', message: `Solicitação de transferência enviada com sucesso para ${targetAthlete.name}!` });
           setShowTransferModal(false);
           setTransferRg('');
-      } catch (err) { setFeedback({ type: 'error', message: 'Erro ao processar.' }); }
-      finally { setTransferLoading(false); }
+          setRefreshKey(prev => prev + 1);
+      } catch (err) { 
+          setFeedback({ type: 'error', message: 'Erro ao processar solicitação de transferência.' }); 
+      } finally { 
+          setTransferLoading(false); 
+      }
+  };
+
+  const handleAcceptTransfer = async (athlete: Athlete) => {
+      setLoading(true);
+      try {
+          // Se o time destino não tiver categorias, o primeiro passo é garantir que uma seja selecionada ou criada
+          // Para simplificar aqui, movemos o atleta e limpamos a pendência.
+          await saveAthlete({ ...athlete, teamId: teamId, pendingTransferTeamId: undefined });
+          setFeedback({ type: 'success', message: `Atleta ${athlete.name} agora faz parte da sua equipe!` });
+          setRefreshKey(prev => prev + 1);
+      } catch (err) {
+          setFeedback({ type: 'error', message: 'Erro ao aceitar transferência.' });
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleDeclineTransfer = async (athlete: Athlete) => {
+      setLoading(true);
+      try {
+          await saveAthlete({ ...athlete, pendingTransferTeamId: undefined });
+          setFeedback({ type: 'success', message: 'Solicitação de transferência recusada.' });
+          setRefreshKey(prev => prev + 1);
+      } catch (err) {
+          setFeedback({ type: 'error', message: 'Erro ao recusar transferência.' });
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +145,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       try {
         const url = await processImageUpload(file);
         setPreviewUrl(url);
-      } catch (error) { setFeedback({ type: 'error', message: 'Erro na imagem' }); }
+      } catch (error) { setFeedback({ type: 'error', message: 'Erro no processamento da imagem.' }); }
       finally { setUploading(false); }
     }
   };
@@ -134,7 +170,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         setPreviewUrl('');
         setRefreshKey(prev => prev + 1);
         setFeedback({ type: 'success', message: 'Cadastro do atleta atualizado com sucesso!' });
-    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); }
+    } catch (err: any) { setFeedback({ type: 'error', message: 'Erro ao salvar atleta.' }); }
     finally { setLoading(false); }
   };
 
@@ -167,31 +203,59 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
          {filtered.map(athlete => {
            const score = getAthleteTechScore(athlete.id);
+           const isIncoming = athlete.pendingTransferTeamId === teamId;
+           const isOutgoing = athlete.pendingTransferTeamId && athlete.teamId === teamId;
+
            return (
-           <div key={athlete.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col items-center hover:shadow-xl transition-all group relative">
+           <div key={athlete.id} className={`bg-white rounded-3xl shadow-sm border p-6 flex flex-col items-center hover:shadow-xl transition-all group relative ${isIncoming ? 'border-emerald-200 bg-emerald-50/20' : isOutgoing ? 'border-amber-200 bg-amber-50/20' : 'border-gray-100'}`}>
+               
+               {/* Badges de Transferência */}
+               {isIncoming && (
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                       <ArrowRightLeft size={10}/> Solicitação de Vínculo
+                   </div>
+               )}
+               {isOutgoing && (
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                       <ArrowRightLeft size={10}/> Transferência em Saída
+                   </div>
+               )}
+
                <div className="absolute top-4 right-4 flex gap-2">
-                   <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
+                   {!isIncoming && (
+                       <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
+                   )}
                </div>
-               <Link to={`/athletes/${athlete.id}`} className="flex flex-col items-center w-full">
-                   {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-24 h-24 rounded-full object-cover mb-4 border-4 border-gray-50 shadow-sm" /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
+
+               <Link to={isIncoming ? '#' : `/athletes/${athlete.id}`} className={`flex flex-col items-center w-full ${isIncoming ? 'cursor-default' : ''}`}>
+                   {athlete.photoUrl ? <img src={athlete.photoUrl} className={`w-24 h-24 rounded-full object-cover mb-4 border-4 shadow-sm ${isIncoming ? 'border-emerald-200 grayscale' : 'border-gray-50'}`} /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
                    
-                   <div className="mt-4 flex flex-col items-center p-2 bg-gray-50 rounded-2xl w-full border border-gray-100 group-hover:bg-indigo-50/50 transition-colors">
+                   {!isIncoming && (
+                    <div className="mt-4 flex flex-col items-center p-2 bg-gray-50 rounded-2xl w-full border border-gray-100 group-hover:bg-indigo-50/50 transition-colors">
                         <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><Target size={10} className="text-emerald-500"/> Média Técnica</span>
                         <span className={`text-xl font-black ${score ? 'text-emerald-600' : 'text-gray-300'}`}>{score || '--'}</span>
-                   </div>
+                    </div>
+                   )}
 
                    <div className="flex flex-col items-center gap-1 mt-3">
                        <span className="text-[10px] text-gray-400 font-bold">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
                        <span className="text-[9px] text-gray-300 font-mono tracking-widest">RG: {athlete.rg}</span>
                    </div>
                </Link>
+
+               {/* Botões de Ação para Transferência Recebida */}
+               {isIncoming && (
+                   <div className="mt-6 flex gap-2 w-full">
+                       <button onClick={() => handleAcceptTransfer(athlete)} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition-all"><CheckCircle size={14}/> Aceitar</button>
+                       <button onClick={() => handleDeclineTransfer(athlete)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar</button>
+                   </div>
+               )}
            </div>
          )})}
       </div>
 
-      {/* MODAL TRANSFERÊNCIA PADRONIZADO */}
       {showTransferModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
@@ -209,7 +273,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </div>
       )}
 
-      {/* MODAL NOVO/EDITAR ATLETA (PADRONIZADO) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-[40px] w-full max-w-3xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
@@ -292,7 +355,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         </div>
       )}
 
-      {/* FEEDBACK PADRONIZADO */}
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
