@@ -122,7 +122,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
       position: a.position,
       birthDate: a.birth_date,
       responsibleName: a.responsible_name,
-      responsibleEmail: a.responsible_email, // Mapeado
+      responsibleEmail: a.responsible_email, 
       responsiblePhone: a.responsible_phone,
       pendingTransferTeamId: a.pending_transfer_team_id
   }));
@@ -139,12 +139,16 @@ export const saveAthlete = async (athlete: Athlete) => {
       position: athlete.position,
       birth_date: athlete.birthDate,
       responsible_name: athlete.responsibleName,
-      responsible_email: athlete.responsibleEmail, // Mapeado
+      responsible_email: athlete.responsibleEmail, 
       responsible_phone: athlete.responsiblePhone,
       pending_transfer_team_id: athlete.pendingTransferTeamId
   });
   if (error) throw error;
   return { data };
+};
+
+export const deleteAthlete = async (id: string) => {
+  return await supabase.from('athletes').delete().eq('id', id);
 };
 
 // --- TRAINING SESSIONS ---
