@@ -10,7 +10,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -246,8 +246,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </select>
           {currentUser && canEditData(currentUser.role) && (
             <div className="flex gap-2">
-                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors" title="Solicitar Transferência (Vincular Atleta Externo)"><ArrowRightLeft size={18} /></button>
-                <button onClick={() => setShowSendTransferModal(true)} className="bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 transition-colors" title="Transferir Atleta (Enviar para outro Time)"><ArrowRightLeft size={18} className="rotate-180" /></button>
+                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors" title="Solicitar Transferência (Vincular Atleta Externo)"><UserCheck size={18} /></button>
+                <button onClick={() => setShowSendTransferModal(true)} className="bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 transition-colors" title="Transferir Atleta (Enviar para outro Time)"><Send size={18} /></button>
                 <button onClick={() => { setFormData({position: Position.MEIO_CAMPO}); setPreviewUrl(''); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md transition-all"><Plus size={16} /> Novo</button>
             </div>
           )}
@@ -265,12 +265,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                
                {isRequestToRelease && (
                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-bounce">
-                       <ArrowRightLeft size={10}/> Solicitação de Saída
+                       <Send size={10}/> Solicitação de Saída
                    </div>
                )}
                {isWaitingForRelease && (
                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
-                       <ArrowRightLeft size={10}/> Aguardando Liberação
+                       <UserCheck size={10}/> Aguardando Liberação
                    </div>
                )}
 
@@ -321,7 +321,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       {showTransferModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
-                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><ArrowRightLeft size={36} /></div>
+                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><UserCheck size={36} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Vincular Atleta</h2>
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-8 font-black uppercase tracking-widest leading-relaxed">Informe o RG para solicitar a transferência.</p>
                   <form onSubmit={handleTransferRequest} className="space-y-4">
@@ -338,7 +338,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       {showSendTransferModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
-                  <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-600 dark:text-amber-400 shadow-inner"><ArrowRightLeft size={36} className="rotate-180" /></div>
+                  <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-600 dark:text-amber-400 shadow-inner"><Send size={36} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir Atleta</h2>
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-8 font-black uppercase tracking-widest leading-relaxed">Escolha um atleta do seu time e o ID da escola destino.</p>
                   <form onSubmit={handleSendTransfer} className="space-y-4">
