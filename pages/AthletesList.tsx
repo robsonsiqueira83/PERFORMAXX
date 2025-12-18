@@ -52,7 +52,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               getEvaluationSessions()
           ]);
           setAllSystemAthletes(a);
-          // Mostra atletas do time OU atletas de fora com transferência pendente para este time
           const localAthletes = a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId);
           setAthletes(localAthletes);
           setCategories(c.filter(item => item.teamId === teamId));
@@ -91,7 +90,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       try {
           const targetAthlete = allSystemAthletes.find(a => a.rg === transferRg.trim());
           if (!targetAthlete) {
-              setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado.' });
+              setFeedback({ type: 'error', message: 'Atleta não encontrado no sistema.' });
               return;
           }
           if (targetAthlete.teamId === teamId) {
@@ -106,7 +105,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           setRefreshKey(prev => prev + 1);
       } catch (err: any) { 
           console.error("Erro na solicitação:", err);
-          setFeedback({ type: 'error', message: 'Erro de permissão no banco de dados ao solicitar.' }); 
+          setFeedback({ type: 'error', message: `Erro de banco de dados: ${err.message || 'Verifique as políticas SQL'}` }); 
       } finally { 
           setTransferLoading(false); 
       }
@@ -115,26 +114,26 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const handleAcceptTransfer = async (athlete: Athlete) => {
       setLoading(true);
       try {
-          // Aceite: Troca o teamId e limpa os campos de transferência e categoria antiga
-          const updatedAthlete = { 
+          // Aceite: Importante usar null para categoryId e pendingTransferTeamId
+          const updatedAthlete: Athlete = { 
               ...athlete, 
               teamId: teamId, 
-              categoryId: '', // Limpa para evitar conflito de IDs de categorias de outros times
-              pendingTransferTeamId: null as any // Limpa a pendência
+              categoryId: null, // Crucial: null limpa o vínculo com a categoria antiga
+              pendingTransferTeamId: null // Limpa a pendência
           };
           
           await saveAthlete(updatedAthlete);
           
           setFeedback({ 
               type: 'success', 
-              message: `Sucesso! O atleta agora pertence à sua escola. Defina a categoria dele no botão editar.` 
+              message: `Transferência concluída! O atleta agora faz parte da sua escola. Clique em editar para definir a categoria.` 
           });
           setRefreshKey(prev => prev + 1);
       } catch (err: any) {
           console.error("Erro detalhado no aceite:", err);
           setFeedback({ 
             type: 'error', 
-            message: 'O banco de dados recusou a alteração. Verifique se o script SQL foi executado corretamente.' 
+            message: `Erro ao aceitar: ${err.message || 'Verifique o script SQL de correção.'}` 
           });
       } finally {
           setLoading(false);
@@ -144,7 +143,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const handleDeclineTransfer = async (athlete: Athlete) => {
       setLoading(true);
       try {
-          await saveAthlete({ ...athlete, pendingTransferTeamId: null as any });
+          await saveAthlete({ ...athlete, pendingTransferTeamId: null });
           setFeedback({ type: 'success', message: 'Transferência recusada.' });
           setRefreshKey(prev => prev + 1);
       } catch (err) {
@@ -178,7 +177,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           birthDate: formData.birthDate || new Date().toISOString().split('T')[0],
           responsibleName: formData.responsibleName || '',
           responsibleEmail: formData.responsibleEmail || '',
-          responsiblePhone: formData.responsiblePhone || ''
+          responsiblePhone: formData.responsiblePhone || '',
+          pendingTransferTeamId: null
         };
         await saveAthlete(newAthlete);
         setShowModal(false);
