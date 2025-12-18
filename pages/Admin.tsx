@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon, UserPlus, Search } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon, UserPlus, Search, AlertTriangle } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -124,6 +124,18 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     finally { setLoading(false); }
   };
 
+  const handleUpdateStaffRole = async (newRole: UserRole) => {
+      if (!selectedStaff) return;
+      setLoading(true);
+      try {
+          await saveUser({ ...selectedStaff, role: newRole });
+          setModalType('alert_success');
+          setModalMessage(`Cargo de ${selectedStaff.name} alterado.`);
+          refreshData();
+      } catch (err: any) { setModalType('alert_error'); setModalMessage(err.message); }
+      finally { setLoading(false); setSelectedStaff(null); }
+  };
+
   const executeDeletion = async () => {
       setLoading(true);
       try {
@@ -223,6 +235,12 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                                     <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter">{u.role}</span>
                                 </div>
                             </div>
+                            {isOwner && u.id !== currentUser?.id && (
+                                <div className="flex gap-1">
+                                    <button onClick={() => { setSelectedStaff(u); setModalType('edit_staff_role'); }} className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" title="Trocar Cargo"><UserCog size={12}/></button>
+                                    <button onClick={() => { setSelectedStaff(u); setSelectedTeamForStaff(team.id); setDeleteType('staff'); setModalMessage(`Remover acesso de ${u.name}?`); setModalType('confirm_delete'); }} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Remover Acesso"><UserMinus size={12}/></button>
+                                </div>
+                            )}
                         </div>
                     )})}
                 </div>
@@ -337,6 +355,93 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
               </div>
            </div>
         </div>
+      )}
+
+      {modalType === 'invite_staff' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-3xl w-full max-w-md p-8 shadow-2xl animate-slide-up">
+                  <div className="flex justify-between items-center mb-6 border-b dark:border-darkBorder pb-4">
+                      <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter flex items-center gap-2"><UserPlus className="text-indigo-600" /> Convidar Staff</h3>
+                      <button onClick={() => setModalType('none')} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"><X className="text-gray-300 hover:text-red-500"/></button>
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest mb-6 leading-relaxed">Informe o ID único (UUID) do profissional que deseja convidar para esta equipe.</p>
+                  <div className="space-y-4">
+                      <input 
+                          type="text" 
+                          className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder dark:text-gray-100 rounded-2xl p-4 text-center font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                          placeholder="Cole o ID do usuário..." 
+                          value={inviteStaffUserId}
+                          onChange={e => setInviteStaffUserId(e.target.value)}
+                      />
+                      <button onClick={handleInviteStaff} disabled={loading || !inviteStaffUserId} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">Enviar Convite</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {modalType === 'edit_staff_role' && selectedStaff && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-3xl w-full max-w-md p-8 shadow-2xl animate-slide-up">
+                  <div className="flex justify-between items-center mb-8 border-b dark:border-darkBorder pb-4">
+                      <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Alterar Cargo</h3>
+                      <button onClick={() => setModalType('none')} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"><X className="text-gray-300 hover:text-red-500"/></button>
+                  </div>
+                  <div className="space-y-2">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Escolha a função de <span className="text-indigo-600 dark:text-indigo-400">{selectedStaff.name}</span>:</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {[UserRole.TECNICO, UserRole.AUXILIAR, UserRole.SCOUT, UserRole.PREPARADOR, UserRole.MASSAGISTA].map(role => (
+                            <button 
+                                key={role} 
+                                onClick={() => handleUpdateStaffRole(role)}
+                                className={`w-full p-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all text-left flex items-center justify-between group
+                                    ${selectedStaff.role === role 
+                                        ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' 
+                                        : 'bg-gray-50 dark:bg-darkInput text-gray-600 dark:text-gray-400 border-gray-100 dark:border-darkBorder hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}
+                            >
+                                {role}
+                                {selectedStaff.role === role && <CheckCircle size={14} />}
+                            </button>
+                        ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {modalType === 'confirm_delete' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-400 shadow-inner">
+                      <AlertTriangle size={40} />
+                  </div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Confirmar Exclusão</h2>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-8 font-bold uppercase tracking-widest leading-relaxed">
+                      {modalMessage}
+                  </p>
+                  <div className="space-y-3">
+                      <button onClick={executeDeletion} disabled={loading} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-xl uppercase tracking-widest text-[11px] active:scale-95 border-b-4 border-red-900">
+                         {loading ? <Loader2 className="animate-spin" size={18}/> : <Trash2 size={18}/>}
+                         Confirmar
+                      </button>
+                      <button onClick={() => setModalType('none')} className="w-full bg-gray-50 dark:bg-darkInput text-gray-400 dark:text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-100 transition-all uppercase tracking-widest text-[11px]">
+                         Cancelar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {(modalType === 'alert_success' || modalType === 'alert_error') && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+                 <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner ${modalType === 'alert_success' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {modalType === 'alert_success' ? <CheckCircle size={40} /> : <AlertCircle size={40} />}
+                 </div>
+                 <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">{modalType === 'alert_success' ? 'Sucesso!' : 'Atenção'}</h3>
+                 <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed mb-8">{modalMessage}</p>
+                 <button onClick={() => setModalType('none')} className={`text-white font-black py-4 px-12 rounded-2xl transition-all w-full shadow-lg uppercase tracking-widest text-[11px] active:scale-95 ${modalType === 'alert_success' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-red-600 hover:bg-red-700'}`}>Entendido</button>
+             </div>
+         </div>
       )}
     </div>
   );
