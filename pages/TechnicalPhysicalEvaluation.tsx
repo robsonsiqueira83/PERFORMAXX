@@ -1,13 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   getAthletes, 
   saveEvaluationSession
 } from '../services/storageService';
-import { Athlete, EvaluationType, EvaluationSession, TechnicalEvaluation, PhysicalEvaluation, User } from '../types';
+import { Athlete, EvaluationType, EvaluationSession, TechnicalEvaluation, PhysicalEvaluation, User, UserRole } from '../types';
 import { 
-  ArrowLeft, Save, X, Loader2, Calendar as CalendarIcon, Info, ClipboardCheck, TrendingUp, Activity, User as UserIcon, CheckCircle, Target
+  ArrowLeft, Save, Loader2, Calendar as CalendarIcon, Info, ClipboardCheck, TrendingUp, Activity, User as UserIcon, CheckCircle, Target, AlertCircle
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -35,6 +35,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [athlete, setAthlete] = useState<Athlete | null>(null);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [errorModal, setErrorModal] = useState<string | null>(null);
 
     const [evalDate, setEvalDate] = useState(new Date().toISOString().split('T')[0]);
     const [evalType, setEvalType] = useState<EvaluationType>(EvaluationType.MENSUAL);
@@ -88,7 +89,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
 
     const handleSave = async () => {
         if (!athlete || !currentUser) {
-            alert("Sessão inválida ou usuário não autenticado.");
+            setErrorModal("Sessão inválida ou usuário não autenticado.");
             return;
         }
 
@@ -124,7 +125,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
             navigate(`/athletes/${athlete.id}`);
         } catch (err: any) { 
             console.error("Erro detalhado:", err);
-            alert(`Erro ao salvar: ${err.message || "Erro de RLS"}. Verifique o script SQL de permissões.`); 
+            setErrorModal(err.message || "Erro inesperado ao salvar os dados."); 
         } finally { 
             setSaving(false); 
         }
@@ -296,6 +297,20 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* ALERTA PADRONIZADO PARA ERROS */}
+            {errorModal && (
+                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+                     <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+                         <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-red-100 text-red-600">
+                            <AlertCircle size={32} />
+                         </div>
+                         <h3 className="text-xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Erro na Gravação</h3>
+                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">{errorModal}</p>
+                         <button onClick={() => setErrorModal(null)} className="text-white font-black py-3 px-8 rounded-2xl transition-all w-full mt-6 shadow-lg uppercase tracking-widest text-[10px] bg-indigo-600 hover:bg-indigo-700">Tentar Novamente</button>
+                     </div>
+                 </div>
+            )}
         </div>
     );
 };

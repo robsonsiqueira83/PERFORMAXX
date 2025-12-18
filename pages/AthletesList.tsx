@@ -5,14 +5,11 @@ import {
   getAthletes, 
   getCategories, 
   saveAthlete, 
-  getTrainingEntries, 
-  getTeams, 
-  saveCategory,
-  saveTeam
+  getTeams 
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, calculateTotalScore, User, canEditData, Team, normalizeCategoryName, UserRole, formatDateSafe } from '../types';
-import { Plus, Search, Upload, X, Users, Filter, Loader2, Download, Rocket, PlayCircle, Edit, ArrowRightLeft, CheckCircle, AlertCircle, XCircle, Mail, Phone, UserCircle } from 'lucide-react';
+import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team } from '../types';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -22,7 +19,6 @@ interface AthletesListProps {
 const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [allSystemAthletes, setAllSystemAthletes] = useState<Athlete[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]); 
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('all');
@@ -51,15 +47,13 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
     const load = async () => {
         setLoading(true);
-        const [a, c, t] = await Promise.all([
+        const [a, c] = await Promise.all([
             getAthletes(),
-            getCategories(),
-            getTeams()
+            getCategories()
         ]);
         setAllSystemAthletes(a);
         setAthletes(a.filter(item => item.teamId === teamId));
         setCategories(c.filter(item => item.teamId === teamId));
-        setTeams(t);
         setLoading(false);
     };
     load();
@@ -127,7 +121,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: '' });
         setPreviewUrl('');
         setRefreshKey(prev => prev + 1);
-        setFeedback({ type: 'success', message: 'Atleta salvo com sucesso!' });
+        setFeedback({ type: 'success', message: 'Cadastro do atleta atualizado com sucesso!' });
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); }
     finally { setLoading(false); }
   };
@@ -151,8 +145,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </select>
           {currentUser && canEditData(currentUser.role) && (
             <div className="flex gap-2">
-                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-2.5 rounded-xl border border-indigo-200" title="Solicitar Transferência"><ArrowRightLeft size={18} /></button>
-                <button onClick={() => { setFormData({position: Position.MEIO_CAMPO}); setPreviewUrl(''); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md"><Plus size={16} /> Novo Atleta</button>
+                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-2.5 rounded-xl border border-indigo-200 transition-colors" title="Solicitar Transferência"><ArrowRightLeft size={18} /></button>
+                <button onClick={() => { setFormData({position: Position.MEIO_CAMPO}); setPreviewUrl(''); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md transition-all"><Plus size={16} /> Novo Atleta</button>
             </div>
           )}
         </div>
@@ -160,85 +154,92 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
          {filtered.map(athlete => (
-           <div key={athlete.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col items-center hover:shadow-xl transition-all group relative">
+           <div key={athlete.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col items-center hover:shadow-xl transition-all group relative">
                <div className="absolute top-4 right-4 flex gap-2">
                    <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
                </div>
                <Link to={`/athletes/${athlete.id}`} className="flex flex-col items-center w-full">
-                   {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-24 h-24 rounded-full object-cover mb-4 border-2 border-gray-50 shadow-sm" /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
+                   {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-24 h-24 rounded-full object-cover mb-4 border-4 border-gray-50 shadow-sm" /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
                    <div className="flex flex-col items-center gap-1 mt-3">
                        <span className="text-[10px] text-gray-400 font-bold">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
-                       <span className="text-[9px] text-gray-300 font-mono">RG: {athlete.rg}</span>
+                       <span className="text-[9px] text-gray-300 font-mono tracking-widest">RG: {athlete.rg}</span>
                    </div>
                </Link>
            </div>
          ))}
       </div>
 
-      {/* MODAL TRANSFERÊNCIA */}
+      {/* MODAL TRANSFERÊNCIA PADRONIZADO */}
       {showTransferModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl text-center">
-                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6"><ArrowRightLeft className="text-indigo-600" size={32} /></div>
-                  <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Transferência</h2>
-                  <p className="text-xs text-gray-400 mb-6 font-bold uppercase tracking-widest">Informe o RG do Atleta no Sistema</p>
+              <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner"><ArrowRightLeft size={36} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Solicitar Transferência</h2>
+                  <p className="text-[10px] text-gray-400 mb-8 font-black uppercase tracking-widest leading-relaxed">Informe o código identificador (RG) do atleta para vinculá-lo à sua escola.</p>
                   <form onSubmit={handleTransferRequest} className="space-y-4">
-                      <input autoFocus type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500" placeholder="EX: RG-123456" value={transferRg} onChange={e => setTransferRg(e.target.value)} required />
-                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[10px]">Solicitar Atleta</button>
+                      <input autoFocus type="text" className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="RG-000000" value={transferRg} onChange={e => setTransferRg(e.target.value)} required />
+                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
+                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Pesquisar e Vincular Atleta'}
+                      </button>
                   </form>
-                  <button onClick={() => setShowTransferModal(false)} className="mt-6 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
+                  <button onClick={() => setShowTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar e Voltar</button>
               </div>
           </div>
       )}
 
-      {/* MODAL NOVO/EDITAR ATLETA */}
+      {/* MODAL NOVO/EDITAR ATLETA (PADRONIZADO) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-           <div className="bg-white rounded-3xl w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
-              <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">{formData.id ? <Edit className="text-indigo-600"/> : <Plus className="text-emerald-500"/>} {formData.id ? 'Editar Perfil' : 'Cadastrar Atleta'}</h3>
-                <button onClick={() => setShowModal(false)}><X size={24} className="text-gray-300 hover:text-red-500" /></button>
-              </div>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                 <div className="flex flex-col items-center">
-                    <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-dashed border-gray-200 shadow-inner relative">
-                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={32} className="text-gray-200" />)}
+           <div className="bg-white rounded-[40px] w-full max-w-3xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
+              <div className="flex justify-between items-center mb-10 border-b border-gray-100 pb-5">
+                <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
+                    <div className={`p-2 rounded-xl text-white ${formData.id ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
+                        {formData.id ? <Edit size={24}/> : <Plus size={24}/>}
                     </div>
-                    <label className={`cursor-pointer text-blue-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:text-blue-800 ${uploading ? 'opacity-50' : ''}`}>
-                       {uploading ? 'Enviando...' : <><Upload size={14} /> Carregar Foto</>}
+                    {formData.id ? 'Editar Cadastro Atleta' : 'Novo Cadastro Atleta'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-red-50 rounded-full transition-colors text-gray-300 hover:text-red-500"><X size={28}/></button>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-8">
+                 <div className="flex flex-col items-center">
+                    <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center mb-4 overflow-hidden border-4 border-dashed border-gray-200 shadow-inner relative">
+                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={48} className="text-gray-200" />)}
+                    </div>
+                    <label className={`cursor-pointer text-indigo-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-4 py-2 rounded-full hover:bg-indigo-100 transition-all ${uploading ? 'opacity-50' : ''}`}>
+                       {uploading ? 'Processando Imagem...' : <><Upload size={14} /> Enviar Foto</>}
                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageChange} />
                     </label>
                  </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Dados do Atleta</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-5">
+                        <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b pb-1">Identificação</h4>
                         <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nome Completo</label>
-                           <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome Completo</label>
+                           <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nascimento</label>
-                                <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nascimento</label>
+                                <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">RG / ID</label>
-                                <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Auto-gerado se vazio" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} />
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG / Identificador</label>
+                                <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Automático" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Posição</label>
-                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value as Position})}>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Posição</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value as Position})}>
                                     {Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Categoria</label>
-                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Categoria</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
                                     <option value="">Selecione...</option>
                                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
@@ -246,40 +247,41 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Responsáveis</h4>
+                    <div className="space-y-5">
+                        <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b pb-1">Responsáveis</h4>
                         <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><UserCircle size={12}/> Nome do Responsável</label>
-                           <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} />
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome do Responsável</label>
+                           <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Mail size={12}/> E-mail</label>
-                           <input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleEmail} onChange={e => setFormData({...formData, responsibleEmail: e.target.value})} />
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">E-mail</label>
+                           <input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsibleEmail} onChange={e => setFormData({...formData, responsibleEmail: e.target.value})} />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Phone size={12}/> Telefone</label>
-                           <input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsiblePhone} onChange={e => setFormData({...formData, responsiblePhone: e.target.value})} />
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Telefone</label>
+                           <input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.responsiblePhone} onChange={e => setFormData({...formData, responsiblePhone: e.target.value})} />
                         </div>
                     </div>
                  </div>
 
-                 <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] transition-all hover:bg-indigo-700 disabled:opacity-50">
-                    {loading ? 'Processando...' : 'Salvar Dados do Atleta'}
+                 <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-xs transition-all hover:bg-indigo-700 disabled:opacity-50 active:scale-95">
+                    {loading ? 'Processando Informações...' : 'Finalizar Cadastro do Atleta'}
                  </button>
               </form>
            </div>
         </div>
       )}
 
+      {/* FEEDBACK PADRONIZADO */}
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
-                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-emerald-100' : 'bg-red-100'}`}>
-                    {feedback.type === 'success' ? <CheckCircle className="text-emerald-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+             <div className="bg-white rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+                 <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner ${feedback.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {feedback.type === 'success' ? <CheckCircle size={40} /> : <AlertCircle size={40} />}
                  </div>
-                 <h3 className="text-xl font-black text-gray-800 mb-2 uppercase tracking-tighter">{feedback.type === 'success' ? 'Sucesso!' : 'Erro'}</h3>
-                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest leading-relaxed">{feedback.message}</p>
-                 <button onClick={() => setFeedback(null)} className={`text-white font-black py-3 px-8 rounded-2xl transition-all w-full mt-6 shadow-lg uppercase tracking-widest text-[10px] ${feedback.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>OK</button>
+                 <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">{feedback.type === 'success' ? 'Sucesso!' : 'Atenção'}</h3>
+                 <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed mb-8">{feedback.message}</p>
+                 <button onClick={() => setFeedback(null)} className={`text-white font-black py-4 px-12 rounded-2xl transition-all w-full shadow-lg uppercase tracking-widest text-[11px] active:scale-95 ${feedback.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>Entendido</button>
              </div>
          </div>
       )}
