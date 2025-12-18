@@ -52,6 +52,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               getEvaluationSessions()
           ]);
           setAllSystemAthletes(a);
+          // Mostra atletas que pertencem ao time OU atletas de fora que foram solicitados por este time
           const localAthletes = a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId);
           setAthletes(localAthletes);
           setCategories(c.filter(item => item.teamId === teamId));
@@ -99,7 +100,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           }
           
           await saveAthlete({ ...targetAthlete, pendingTransferTeamId: teamId });
-          setFeedback({ type: 'success', message: `Solicitação enviada para ${targetAthlete.name}.` });
+          setFeedback({ type: 'success', message: `Solicitação enviada. A escola de origem de ${targetAthlete.name} precisa autorizar a saída.` });
           setShowTransferModal(false);
           setTransferRg('');
           setRefreshKey(prev => prev + 1);
@@ -114,26 +115,26 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const handleAcceptTransfer = async (athlete: Athlete) => {
       setLoading(true);
       try {
-          // Aceite: Importante usar null para categoryId e pendingTransferTeamId
+          // Ação realizada pela ORIGEM: Transfere o atleta para o time que solicitou
           const updatedAthlete: Athlete = { 
               ...athlete, 
-              teamId: teamId, 
-              categoryId: null, // Crucial: null limpa o vínculo com a categoria antiga
-              pendingTransferTeamId: null // Limpa a pendência
+              teamId: athlete.pendingTransferTeamId!, // Assume o novo time
+              categoryId: null, // Limpa categoria pois pertence ao time antigo
+              pendingTransferTeamId: null // Limpa pendência
           };
           
           await saveAthlete(updatedAthlete);
           
           setFeedback({ 
               type: 'success', 
-              message: `Transferência concluída! O atleta agora faz parte da sua escola. Clique em editar para definir a categoria.` 
+              message: `Atleta liberado com sucesso! O vínculo agora pertence à nova unidade.` 
           });
           setRefreshKey(prev => prev + 1);
       } catch (err: any) {
           console.error("Erro detalhado no aceite:", err);
           setFeedback({ 
             type: 'error', 
-            message: `Erro ao aceitar: ${err.message || 'Verifique o script SQL de correção.'}` 
+            message: `Erro ao liberar: ${err.message || 'Verifique o script SQL de correção.'}` 
           });
       } finally {
           setLoading(false);
@@ -144,7 +145,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       setLoading(true);
       try {
           await saveAthlete({ ...athlete, pendingTransferTeamId: null });
-          setFeedback({ type: 'success', message: 'Transferência recusada.' });
+          setFeedback({ type: 'success', message: 'Solicitação de transferência recusada.' });
           setRefreshKey(prev => prev + 1);
       } catch (err) {
           setFeedback({ type: 'error', message: 'Erro ao recusar.' });
@@ -219,39 +220,41 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
          {filtered.map(athlete => {
            const score = getAthleteTechScore(athlete.id);
-           const isIncoming = athlete.pendingTransferTeamId === teamId;
-           const isOutgoing = athlete.pendingTransferTeamId && athlete.teamId === teamId;
+           // O Atleta está no meu time, mas outro time solicitou (SOU A ORIGEM)
+           const isRequestToRelease = athlete.teamId === teamId && athlete.pendingTransferTeamId && athlete.pendingTransferTeamId !== teamId;
+           // Eu solicitei um atleta que ainda está em outro time (SOU O DESTINO)
+           const isWaitingForRelease = athlete.pendingTransferTeamId === teamId && athlete.teamId !== teamId;
 
            return (
-           <div key={athlete.id} className={`bg-white rounded-3xl shadow-sm border p-6 flex flex-col items-center hover:shadow-xl transition-all group relative ${isIncoming ? 'border-emerald-200 bg-emerald-50/20' : isOutgoing ? 'border-amber-200 bg-amber-50/20' : 'border-gray-100'}`}>
+           <div key={athlete.id} className={`bg-white rounded-3xl shadow-sm border p-6 flex flex-col items-center hover:shadow-xl transition-all group relative ${isRequestToRelease ? 'border-amber-200 bg-amber-50/20' : isWaitingForRelease ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-100'}`}>
                
-               {isIncoming && (
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-bounce">
-                       <ArrowRightLeft size={10}/> Solicitação Pendente
+               {isRequestToRelease && (
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-bounce">
+                       <ArrowRightLeft size={10}/> Solicitação de Saída
                    </div>
                )}
-               {isOutgoing && (
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
-                       <ArrowRightLeft size={10}/> Transferência em Saída
+               {isWaitingForRelease && (
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
+                       <ArrowRightLeft size={10}/> Aguardando Liberação
                    </div>
                )}
 
                <div className="absolute top-4 right-4 flex gap-2">
-                   {!isIncoming && (
+                   {!isWaitingForRelease && (
                        <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
                    )}
                </div>
 
-               <Link to={isIncoming ? '#' : `/athletes/${athlete.id}`} className={`flex flex-col items-center w-full ${isIncoming ? 'cursor-default' : ''}`}>
+               <Link to={isWaitingForRelease ? '#' : `/athletes/${athlete.id}`} className={`flex flex-col items-center w-full ${isWaitingForRelease ? 'cursor-default' : ''}`}>
                    <div className="relative mb-4">
-                        {athlete.photoUrl ? <img src={athlete.photoUrl} className={`w-24 h-24 rounded-full object-cover border-4 shadow-sm ${isIncoming ? 'border-emerald-200 grayscale' : isOutgoing ? 'border-amber-200 opacity-50' : 'border-gray-50'}`} /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200">{athlete.name.charAt(0)}</div>}
-                        {isOutgoing && <div className="absolute inset-0 flex items-center justify-center"><Info className="text-amber-600" size={32} /></div>}
+                        {athlete.photoUrl ? <img src={athlete.photoUrl} className={`w-24 h-24 rounded-full object-cover border-4 shadow-sm ${isRequestToRelease ? 'border-amber-200 grayscale' : isWaitingForRelease ? 'border-emerald-200 opacity-50' : 'border-gray-50'}`} /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200">{athlete.name.charAt(0)}</div>}
+                        {isWaitingForRelease && <div className="absolute inset-0 flex items-center justify-center"><Info className="text-emerald-600" size={32} /></div>}
                    </div>
                    
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
                    
-                   {!isIncoming && (
+                   {!isWaitingForRelease && (
                     <div className="mt-4 flex flex-col items-center p-2 bg-gray-50 rounded-2xl w-full border border-gray-100 group-hover:bg-indigo-50/50 transition-colors">
                         <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><Target size={10} className="text-emerald-500"/> Média Técnica</span>
                         <span className={`text-xl font-black ${score ? 'text-emerald-600' : 'text-gray-300'}`}>{score || '--'}</span>
@@ -264,16 +267,16 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    </div>
                </Link>
 
-               {isIncoming && (
+               {isRequestToRelease && (
                    <div className="mt-6 flex flex-col gap-2 w-full">
-                       <button onClick={() => handleAcceptTransfer(athlete)} className="w-full bg-emerald-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition-all active:scale-95"><CheckCircle size={14}/> Aceitar Atleta</button>
-                       <button onClick={() => handleDeclineTransfer(athlete)} className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar</button>
+                       <button onClick={() => handleAcceptTransfer(athlete)} className="w-full bg-amber-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-amber-700 transition-all active:scale-95"><CheckCircle size={14}/> Liberar Atleta</button>
+                       <button onClick={() => handleDeclineTransfer(athlete)} className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar Saída</button>
                    </div>
                )}
                
-               {isOutgoing && (
-                   <div className="mt-4 p-2 bg-amber-50 rounded-xl border border-amber-100 text-center w-full animate-pulse">
-                       <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">Aguardando aceite...</span>
+               {isWaitingForRelease && (
+                   <div className="mt-4 p-2 bg-emerald-50 rounded-xl border border-emerald-100 text-center w-full animate-pulse">
+                       <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">Aguardando liberação...</span>
                    </div>
                )}
            </div>
@@ -387,7 +390,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                  </div>
                  <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">{feedback.type === 'success' ? 'Sucesso!' : 'Atenção'}</h3>
                  <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed mb-8">{feedback.message}</p>
-                 <button onClick={() => setFeedback(null)} className={`text-white font-black py-4 px-12 rounded-2xl transition-all w-full shadow-lg uppercase tracking-widest text-[11px] active:scale-95 ${feedback.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>Entendido</button>
+                 <button onClick={() => setFeedback(null)} className={`text-white font-black py-4 px-12 rounded-2xl transition-all w-full shadow-lg uppercase tracking-widest text-[11px] active:scale-95 ${feedback.type === 'success' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-red-600 hover:bg-red-700'}`}>Entendido</button>
              </div>
          </div>
       )}
