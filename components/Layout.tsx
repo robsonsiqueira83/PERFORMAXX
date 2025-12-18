@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
@@ -12,20 +13,24 @@ import {
   Globe,
   Briefcase,
   ChevronDown,
-  User as UserIcon
+  User as UserIcon,
+  Bell,
+  CheckCircle,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { Team, User, UserRole, canEditData } from '../types';
-import { getTeams, getUsers } from '../services/storageService';
+import { getTeams, getUsers, saveUser } from '../services/storageService';
 
 interface LayoutProps {
   children: React.ReactNode;
-  user: User; // The logged in user (could be Global)
-  viewingAsMasterId: string; // The ID of the Master context currently active
+  user: User;
+  viewingAsMasterId: string;
   onLogout: () => void;
   selectedTeamId: string;
   onTeamChange: (id: string) => void;
-  onContextChange: (masterId: string) => void; // To switch Panels
-  onReturnToGlobal: () => void; // For Global users to exit impersonation
+  onContextChange: (masterId: string) => void;
+  onReturnToGlobal: () => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ 
@@ -39,303 +44,146 @@ const Layout: React.FC<LayoutProps> = ({
     onReturnToGlobal
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // State for Navigation Logic
   const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [availableContexts, setAvailableContexts] = useState<{id: string, name: string}[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<Team[]>([]);
   const location = useLocation();
 
-  useEffect(() => {
-    const loadContext = async () => {
-        const [allTeams, allUsers] = await Promise.all([getTeams(), getUsers()]);
-        
-        // 1. Determine which teams the logged-in user can access
-        let userAllowedTeams: Team[] = [];
+  const loadContext = async () => {
+      const [allTeams, allUsers] = await Promise.all([getTeams(), getUsers()]);
+      
+      const freshUser = allUsers.find(u => u.id === user.id) || user;
+      const userTeamIds = freshUser.teamIds || [];
 
-        if (user.role === UserRole.GLOBAL) {
-            // Global sees ALL teams of the current viewing context (Master)
-            userAllowedTeams = allTeams.filter(t => t.ownerId === viewingAsMasterId);
-        } else if (user.role === UserRole.MASTER) {
-            // Master sees their own teams + teams they are invited to
-            // Teams owned by them
-            const ownedTeams = allTeams.filter(t => t.ownerId === user.id);
-            
-            // Teams they are invited to (via teamIds) - FILTER OUT PENDING INVITES
-            const activeTeamIds = (user.teamIds || []).filter(id => !id.startsWith('pending:'));
-            const invitedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
-            
-            userAllowedTeams = [...ownedTeams, ...invitedTeams];
-        } else {
-            // Regular user sees only invited teams - FILTER OUT PENDING INVITES
-            const activeTeamIds = (user.teamIds || []).filter(id => !id.startsWith('pending:'));
-            userAllowedTeams = allTeams.filter(t => activeTeamIds.includes(t.id));
-        }
+      // Detectar convites pendentes
+      const pendingIds = userTeamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
+      setPendingInvites(allTeams.filter(t => pendingIds.includes(t.id)));
 
-        // 2. Build Context List (Panel Selector)
-        // Group available teams by Owner
-        const ownerIds = Array.from(new Set(userAllowedTeams.map(t => t.ownerId).filter(Boolean))) as string[];
-        
-        // If I am a master, I should always see "My Panel" even if I have no teams yet
-        if (user.role === UserRole.MASTER && !ownerIds.includes(user.id)) {
-            ownerIds.push(user.id);
-        }
-        
-        // Global user sees the current viewing ID in the list to allow "selection" (though they switch via Dashboard usually)
-        if (user.role === UserRole.GLOBAL && viewingAsMasterId && !ownerIds.includes(viewingAsMasterId)) {
-            ownerIds.push(viewingAsMasterId);
-        }
+      let userAllowedTeams: Team[] = [];
+      if (freshUser.role === UserRole.GLOBAL) {
+          userAllowedTeams = allTeams.filter(t => t.ownerId === viewingAsMasterId);
+      } else {
+          const ownedTeams = allTeams.filter(t => t.ownerId === freshUser.id);
+          const activeInvites = userTeamIds.filter(id => !id.startsWith('pending:'));
+          const invitedTeams = allTeams.filter(t => activeInvites.includes(t.id));
+          userAllowedTeams = [...ownedTeams, ...invitedTeams];
+      }
 
-        const contexts = ownerIds.map(oId => {
-            const ownerUser = allUsers.find(u => u.id === oId);
-            
-            let label = '';
-            if (oId === user.id) {
-                label = 'Meu Painel Master';
-            } else {
-                // Show Name and ID as requested
-                const ownerName = ownerUser?.name || 'Desconhecido';
-                label = `${ownerName} (ID: ${oId})`;
-            }
+      const ownerIds = Array.from(new Set(userAllowedTeams.map(t => t.ownerId).filter(Boolean))) as string[];
+      if (freshUser.role === UserRole.MASTER && !ownerIds.includes(freshUser.id)) ownerIds.push(freshUser.id);
+      
+      const contexts = ownerIds.map(oId => {
+          const ownerUser = allUsers.find(u => u.id === oId);
+          return { id: oId, name: oId === freshUser.id ? 'Meu Painel Master' : `${ownerUser?.name || 'Desconhecido'} (ID: ${oId.substring(0,6)}...)` };
+      });
+      setAvailableContexts(contexts);
 
-            return {
-                id: oId,
-                name: label
-            };
-        });
+      const currentContextTeams = userAllowedTeams.filter(t => t.ownerId === viewingAsMasterId);
+      setAvailableTeams(currentContextTeams);
 
-        setAvailableContexts(contexts);
+      if (currentContextTeams.length > 0 && !currentContextTeams.find(t => t.id === selectedTeamId)) {
+          onTeamChange(currentContextTeams[0].id);
+      } else if (currentContextTeams.length === 0) {
+          onTeamChange('');
+      }
+  };
 
-        // 3. Filter Teams for CURRENT Context
-        const currentContextTeams = userAllowedTeams.filter(t => t.ownerId === viewingAsMasterId);
-        setAvailableTeams(currentContextTeams);
+  useEffect(() => { loadContext(); }, [user, viewingAsMasterId]);
 
-        // Auto-select first team if current selection is invalid for this context
-        if (currentContextTeams.length > 0 && !currentContextTeams.find(t => t.id === selectedTeamId)) {
-            if (onTeamChange) onTeamChange(currentContextTeams[0].id);
-        } else if (currentContextTeams.length === 0) {
-            onTeamChange('');
-        }
-    };
-    loadContext();
-  }, [user, viewingAsMasterId]);
+  const handleAcceptInvite = async (teamId: string) => {
+      const updatedIds = (user.teamIds || []).map(id => id === `pending:${teamId}` ? teamId : id);
+      await saveUser({ ...user, teamIds: updatedIds });
+      window.location.reload();
+  };
 
-  // Base navigation
+  const handleDeclineInvite = async (teamId: string) => {
+      const updatedIds = (user.teamIds || []).filter(id => id !== `pending:${teamId}`);
+      await saveUser({ ...user, teamIds: updatedIds });
+      loadContext();
+  };
+
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Atletas', href: '/athletes', icon: Users },
     { name: 'Admin', href: '/admin', icon: Settings },
   ];
-  
-  // Insert 'Atuações' if can edit
-  if (canEditData(user.role)) {
-      navigation.splice(2, 0, { name: 'Atuações', href: '/training', icon: ClipboardList });
-  }
+  if (canEditData(user.role)) navigation.splice(2, 0, { name: 'Atuações', href: '/training', icon: ClipboardList });
   
   const isActive = (path: string) => location.pathname === path;
-  
-  // Is this a Global User acting as a Master?
-  const isGlobalImpersonating = user.role === UserRole.GLOBAL && viewingAsMasterId !== user.id;
-
-  // Determine if we should show the Panel Switcher
-  // Show if Global OR if Master has access to other contexts (invited)
-  const showPanelSelector = user.role === UserRole.GLOBAL || (availableContexts.length > 1);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row relative">
       
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col
-        md:relative md:w-64 md:translate-x-0 md:shadow-xl
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        {/* Mobile Close Button */}
-        <button 
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="absolute top-4 right-4 text-blue-300 hover:text-white md:hidden p-2 bg-blue-900/50 rounded-full"
-        >
-            <X size={20} />
-        </button>
-
-        {/* Logo Area */}
-        <div className="p-6 flex flex-col items-center justify-center border-b border-blue-800 relative mt-8 md:mt-0">
-           <img 
-             src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" 
-             alt="PERFORMAXX" 
-             className="w-40 object-contain mb-4"
-           />
-           
-           {/* User Profile in Sidebar */}
-           <div className="flex flex-col items-center w-full">
-               <div className="w-16 h-16 rounded-full border-2 border-blue-400 bg-blue-800 flex items-center justify-center overflow-hidden mb-2">
-                   {user.avatarUrl ? (
-                       <img src={user.avatarUrl} alt="User" className="w-full h-full object-cover" />
-                   ) : (
-                       <UserIcon size={32} className="text-blue-300" />
-                   )}
-               </div>
-               <h3 className="font-bold text-sm text-center truncate w-full px-2">{user.name}</h3>
-               <span className="text-xs text-blue-300 bg-blue-900/50 px-2 py-0.5 rounded border border-blue-800 mt-1">{user.role}</span>
+      {/* Sidebar (Simplificada para foco no conteúdo) */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex flex-col items-center border-b border-blue-800">
+           <img src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" alt="PERFORMAXX" className="w-32 object-contain mb-4" />
+           <div className="w-14 h-14 rounded-full border-2 border-blue-400 bg-blue-800 flex items-center justify-center overflow-hidden mb-2">
+               {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <UserIcon size={24} className="text-blue-300" />}
            </div>
-
-           {isGlobalImpersonating && (
-               <div className="mt-4 bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded border border-blue-700 w-full text-center animate-pulse">
-                   Modo Visualização Global
-               </div>
-           )}
+           <h3 className="font-black text-[10px] uppercase tracking-widest text-center truncate w-full px-2">{user.name}</h3>
+           <span className="text-[8px] font-black text-blue-300 bg-blue-900/50 px-2 py-0.5 rounded border border-blue-800 mt-1 uppercase">{user.role}</span>
         </div>
-
-        <nav className="mt-6 px-4 space-y-2 flex-1 overflow-y-auto">
+        <nav className="mt-6 px-4 space-y-1 flex-1">
           {navigation.map((item) => (
-            <Link
-              key={item.name}
-              to={item.href}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
-                isActive(item.href)
-                  ? 'bg-blue-700 text-white shadow-sm'
-                  : 'text-blue-100 hover:bg-blue-800 hover:text-white'
-              }`}
-            >
+            <Link key={item.name} to={item.href} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive(item.href) ? 'bg-blue-700 text-white shadow-lg' : 'text-blue-100 hover:bg-blue-800'}`}>
               <item.icon className="h-5 w-5 mr-3" />
-              <span className="font-medium">{item.name}</span>
+              <span className="text-[11px] font-black uppercase tracking-widest">{item.name}</span>
             </Link>
           ))}
-           {/* Global/Master User Management */}
-           {(user.role === UserRole.MASTER || user.role === UserRole.GLOBAL) && (
-             <Link
-              to="/users"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
-                isActive('/users')
-                  ? 'bg-blue-700 text-white shadow-sm'
-                  : 'text-blue-100 hover:bg-blue-800 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="h-5 w-5 mr-3" />
-              <span className="font-medium">Usuários</span>
-            </Link>
-           )}
         </nav>
-
-        <div className="p-4 border-t border-blue-800 bg-[#1e3a8a]">
-            <button
-                onClick={onLogout}
-                className={`flex items-center justify-center w-full px-4 py-2 text-sm text-red-200 hover:text-red-100 hover:bg-red-900/30 rounded transition-colors`}
-                title="Sair"
-            >
-                <LogOut className="h-4 w-4 mr-2" />
-                <span>Sair</span>
-            </button>
-        </div>
+        <div className="p-4 border-t border-blue-800"><button onClick={onLogout} className="flex items-center justify-center w-full px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-900/20 rounded-xl transition-all"><LogOut className="h-4 w-4 mr-2" /> Sair</button></div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm z-30 px-4 py-3 md:px-6 md:py-4">
-            <div className="flex flex-col gap-4">
-                {/* Row 1: Mobile Toggle + Greeting + Global Link */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                         {/* Mobile Hamburger */}
-                         <button 
-                            onClick={() => setIsMobileMenuOpen(true)}
-                            className="md:hidden text-gray-700 hover:text-blue-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                         >
-                            <Menu size={24} />
-                         </button>
-                         
-                         <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
-                             <h2 className="text-sm md:text-lg text-gray-800 font-medium leading-tight">
-                                Olá, <span className="font-bold text-blue-900">{user.name}</span>.
-                             </h2>
-                             
-                             {/* Return to Global Dashboard Button in Header (Visible on Mobile) */}
-                             {user.role === UserRole.GLOBAL && (
-                                 <button
-                                     onClick={onReturnToGlobal}
-                                     className="flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-0.5 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors border border-purple-200 w-fit"
-                                 >
-                                     <Globe size={12} />
-                                     Voltar ao Painel Global
-                                 </button>
-                             )}
-                         </div>
-                    </div>
-                    
-                    {/* Desktop Role Badge (Right side) */}
-                    <div className="hidden md:block text-right">
-                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 uppercase font-bold">{user.role}</span>
-                    </div>
+        {/* Banner de Convites Pendentes (ROSA/AZUL) */}
+        {pendingInvites.length > 0 && (
+            <div className="bg-indigo-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 animate-pulse-slow">
+                <div className="flex items-center gap-3">
+                    <Bell className="animate-bounce" size={18} />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Você foi convidado para colaborar em {pendingInvites.length} {pendingInvites.length === 1 ? 'equipe' : 'equipes'}!</p>
+                </div>
+                <div className="flex gap-2">
+                    {pendingInvites.map(t => (
+                        <div key={t.id} className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full border border-white/20">
+                            <span className="text-[9px] font-black uppercase">{t.name}</span>
+                            <button onClick={() => handleAcceptInvite(t.id)} className="hover:text-emerald-400"><CheckCircle size={14}/></button>
+                            <button onClick={() => handleDeclineInvite(t.id)} className="hover:text-red-400"><XCircle size={14}/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        <header className="bg-white shadow-sm z-30 px-6 py-4">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-gray-500"><Menu size={24} /></button>
+                    <h2 className="text-sm font-medium text-gray-800">Olá, <span className="font-black text-indigo-900">{user.name.split(' ')[0]}</span>.</h2>
+                    {user.role === UserRole.GLOBAL && <button onClick={onReturnToGlobal} className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest hover:bg-purple-200">Painel Global</button>}
                 </div>
                 
-                {/* Row 2: Selectors with Specific Labels */}
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                     {/* 1. CONTEXT/PANEL SELECTOR (First) */}
-                     {showPanelSelector && (
-                         <div className="relative flex-1">
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                                Selecione o ambiente:
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Briefcase size={14} className="text-gray-500" />
-                                </div>
-                                <select 
-                                    value={viewingAsMasterId}
-                                    onChange={(e) => onContextChange(e.target.value)}
-                                    className="appearance-none w-full bg-gray-100 text-gray-700 pl-9 pr-10 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
-                                    disabled={isGlobalImpersonating} 
-                                >
-                                    {availableContexts.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-                            </div>
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto md:min-w-[500px]">
+                     {availableContexts.length > 1 && (
+                         <div className="flex-1 relative">
+                            <select value={viewingAsMasterId} onChange={(e) => onContextChange(e.target.value)} className="appearance-none w-full bg-gray-100 text-gray-700 pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                {availableContexts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                          </div>
                      )}
-
-                     {/* 2. TEAM SELECTOR (Second) */}
-                     <div className="relative flex-1">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                            Selecione o time:
-                        </label>
-                        <div className="relative">
-                            <select 
-                                value={selectedTeamId}
-                                onChange={(e) => onTeamChange(e.target.value)}
-                                className="appearance-none w-full bg-blue-50 text-blue-900 pl-4 pr-10 py-2.5 rounded-lg border border-blue-100 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm md:text-base"
-                            >
-                                {availableTeams.length > 0 ? (
-                                    availableTeams.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))
-                                ) : (
-                                    <option value="">Nenhum time disponível</option>
-                                )}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
-                        </div>
+                     <div className="flex-1 relative">
+                        <select value={selectedTeamId} onChange={(e) => onTeamChange(e.target.value)} className="appearance-none w-full bg-indigo-50 text-indigo-900 pl-4 pr-10 py-2.5 rounded-xl border border-indigo-100 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            {availableTeams.length > 0 ? availableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>) : <option value="">Sem times disponíveis</option>}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" size={16} />
                      </div>
                 </div>
             </div>
         </header>
 
-        {/* Scrollable Content Area */}
-        <main className="flex-1 overflow-y-auto p-3 md:p-6 bg-gray-50">
-          <div className="max-w-7xl mx-auto w-full">
-             {children}
-          </div>
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
+          <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
     </div>
