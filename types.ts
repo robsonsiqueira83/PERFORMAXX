@@ -45,7 +45,7 @@ export interface Category {
 
 export interface Athlete {
   id: string;
-  rg?: string;
+  rg: string; // Agora obrigatório
   name: string;
   photoUrl?: string;
   teamId: string;
@@ -53,6 +53,7 @@ export interface Athlete {
   position: Position;
   birthDate: string;
   responsibleName: string;
+  responsibleEmail: string; // Novo campo
   responsiblePhone: string;
   pendingTransferTeamId?: string; 
 }
