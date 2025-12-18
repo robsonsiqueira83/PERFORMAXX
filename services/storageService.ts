@@ -7,17 +7,44 @@ import { v4 as uuidv4 } from 'uuid';
 export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');
   if (error) return [];
-  return data || [];
+  // Mapeamento manual de snake_case para camelCase
+  return (data || []).map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      password: u.password,
+      role: u.role as UserRole,
+      avatarUrl: u.avatar_url,
+      teamIds: u.team_ids || [],
+      createdAt: u.created_at
+  }));
 };
 
 export const getUserById = async (id: string): Promise<User | null> => {
     const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
-    if (error) return null;
-    return data;
+    if (error || !data) return null;
+    return {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: data.role as UserRole,
+        avatarUrl: data.avatar_url,
+        teamIds: data.team_ids || [],
+        createdAt: data.created_at
+    };
 };
 
 export const saveUser = async (user: User) => {
-  return await supabase.from('users').upsert(user);
+  return await supabase.from('users').upsert({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      password: user.password,
+      role: user.role,
+      avatar_url: user.avatarUrl,
+      team_ids: user.teamIds || []
+  });
 };
 
 export const deleteUser = async (id: string) => {
@@ -37,12 +64,17 @@ export const getTeams = async (): Promise<Team[]> => {
 };
 
 export const saveTeam = async (team: Team) => {
-  return await supabase.from('teams').upsert({
+  const { data, error } = await supabase.from('teams').upsert({
       id: team.id,
       name: team.name,
       logo_url: team.logoUrl,
       owner_id: team.ownerId
   });
+  if (error) {
+      console.error("Erro Supabase saveTeam:", error);
+      throw error;
+  }
+  return { data };
 };
 
 export const deleteTeam = async (id: string) => {
@@ -61,11 +93,16 @@ export const getCategories = async (): Promise<Category[]> => {
 };
 
 export const saveCategory = async (category: Category) => {
-  return await supabase.from('categories').upsert({
+  const { data, error } = await supabase.from('categories').upsert({
       id: category.id,
       name: category.name,
       team_id: category.teamId
   });
+  if (error) {
+      console.error("Erro Supabase saveCategory:", error);
+      throw error;
+  }
+  return { data };
 };
 
 export const deleteCategory = async (id: string) => {
@@ -92,7 +129,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
 };
 
 export const saveAthlete = async (athlete: Athlete) => {
-  return await supabase.from('athletes').upsert({
+  const { data, error } = await supabase.from('athletes').upsert({
       id: athlete.id,
       rg: athlete.rg,
       name: athlete.name,
@@ -105,6 +142,8 @@ export const saveAthlete = async (athlete: Athlete) => {
       responsible_phone: athlete.responsiblePhone,
       pending_transfer_team_id: athlete.pendingTransferTeamId
   });
+  if (error) throw error;
+  return { data };
 };
 
 // --- TRAINING SESSIONS ---
