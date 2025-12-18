@@ -53,8 +53,6 @@ const Layout: React.FC<LayoutProps> = ({
   const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [availableContexts, setAvailableContexts] = useState<{id: string, name: string}[]>([]);
   const [pendingInvites, setPendingInvites] = useState<Team[]>([]);
-  const [pendingTransfersIn, setPendingTransfersIn] = useState(0);
-  const [pendingTransfersOut, setPendingTransfersOut] = useState(0);
   const location = useLocation();
 
   useEffect(() => {
@@ -71,19 +69,10 @@ const Layout: React.FC<LayoutProps> = ({
 
   const loadContext = async () => {
       const [allTeams, allUsers, allAthletes] = await Promise.all([getTeams(), getUsers(), getAthletes()]);
-      
       const freshUser = allUsers.find(u => u.id === user.id) || user;
       const userTeamIds = freshUser.teamIds || [];
-
       const pendingIds = userTeamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
       setPendingInvites(allTeams.filter(t => pendingIds.includes(t.id)));
-
-      if (selectedTeamId) {
-          const transfersIn = allAthletes.filter(a => a.pendingTransferTeamId === selectedTeamId);
-          setPendingTransfersIn(transfersIn.length);
-          const transfersOut = allAthletes.filter(a => a.teamId === selectedTeamId && a.pendingTransferTeamId && a.pendingTransferTeamId !== selectedTeamId);
-          setPendingTransfersOut(transfersOut.length);
-      }
 
       let userAllowedTeams: Team[] = [];
       if (freshUser.role === UserRole.GLOBAL) {
@@ -95,12 +84,9 @@ const Layout: React.FC<LayoutProps> = ({
           userAllowedTeams = [...ownedTeams, ...invitedTeams];
       }
 
-      const ownerIds = Array.from(new Set(userAllowedTeams.map(t => t.ownerId).filter(Boolean))) as string[];
-      if (freshUser.role === UserRole.MASTER && !ownerIds.includes(freshUser.id)) ownerIds.push(freshUser.id);
-      
-      const contexts = ownerIds.map(oId => {
+      const contexts = Array.from(new Set(userAllowedTeams.map(t => t.ownerId).filter(Boolean))).map(oId => {
           const ownerUser = allUsers.find(u => u.id === oId);
-          return { id: oId, name: oId === freshUser.id ? 'Meu Painel Master' : `${ownerUser?.name || 'Desconhecido'} (ID: ${oId.substring(0,6)}...)` };
+          return { id: oId as string, name: oId === freshUser.id ? 'Meu Painel Master' : `${ownerUser?.name || 'Desconhecido'}` };
       });
       setAvailableContexts(contexts);
 
@@ -109,8 +95,6 @@ const Layout: React.FC<LayoutProps> = ({
 
       if (currentContextTeams.length > 0 && !currentContextTeams.find(t => t.id === selectedTeamId)) {
           onTeamChange(currentContextTeams[0].id);
-      } else if (currentContextTeams.length === 0) {
-          onTeamChange('');
       }
   };
 
@@ -143,7 +127,6 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-darkBase flex flex-col md:flex-row relative transition-colors duration-300">
-      
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex flex-col items-center border-b border-blue-800">
            <img src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" alt="PERFORMAXX" className="w-32 object-contain mb-4" />
@@ -153,7 +136,7 @@ const Layout: React.FC<LayoutProps> = ({
            <h3 className="font-black text-[10px] uppercase tracking-widest text-center truncate w-full px-2">{user.name}</h3>
            <div className="flex items-center gap-2 mt-2">
               <span className="text-[8px] font-black text-blue-300 bg-blue-900/50 px-2 py-0.5 rounded border border-blue-800 uppercase">{user.role}</span>
-              <button onClick={toggleTheme} className="p-1.5 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors shadow-inner" title="Alternar Tema">
+              <button onClick={toggleTheme} className="p-1.5 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors shadow-inner">
                 {isDarkMode ? <Sun size={12} className="text-yellow-400" /> : <Moon size={12} className="text-blue-200" />}
               </button>
            </div>
@@ -170,41 +153,13 @@ const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {pendingInvites.length > 0 && (
-            <div className="bg-indigo-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 animate-pulse-slow">
-                <div className="flex items-center gap-3">
-                    <Bell className="animate-bounce" size={18} />
-                    <p className="text-[10px] font-black uppercase tracking-widest">Você foi convidado para colaborar!</p>
-                </div>
-                <div className="flex gap-2">
-                    {pendingInvites.map(t => (
-                        <div key={t.id} className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full border border-white/20">
-                            <span className="text-[9px] font-black uppercase">{t.name}</span>
-                            <button onClick={() => handleAcceptInvite(t.id)} className="hover:text-emerald-400"><CheckCircle size={14}/></button>
-                            <button onClick={() => handleDeclineInvite(t.id)} className="hover:text-red-400"><XCircle size={14}/></button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
         <header className="bg-white dark:bg-darkCard dark:border-darkBorder shadow-sm z-30 px-6 py-4 border-b border-gray-100 transition-colors duration-300">
             <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-gray-500 dark:text-gray-400"><Menu size={24} /></button>
                     <h2 className="text-sm font-medium text-gray-800 dark:text-gray-100">Olá, <span className="font-black text-indigo-900 dark:text-indigo-400">{user.name.split(' ')[0]}</span>.</h2>
-                    {user.role === UserRole.GLOBAL && <button onClick={onReturnToGlobal} className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest hover:bg-purple-200">Painel Global</button>}
                 </div>
-                
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto md:min-w-[500px]">
-                     {availableContexts.length > 1 && (
-                         <div className="flex-1 relative">
-                            <select value={viewingAsMasterId} onChange={(e) => onContextChange(e.target.value)} className="appearance-none w-full bg-gray-100 dark:bg-darkInput dark:text-gray-300 dark:border-darkBorder text-gray-700 pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
-                                {availableContexts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-                         </div>
-                     )}
                      <div className="flex-1 relative">
                         <select value={selectedTeamId} onChange={(e) => onTeamChange(e.target.value)} className="appearance-none w-full bg-indigo-50 dark:bg-darkInput dark:text-indigo-300 dark:border-darkBorder text-indigo-900 pl-4 pr-10 py-2.5 rounded-xl border border-indigo-100 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
                             {availableTeams.length > 0 ? availableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>) : <option value="">Sem times disponíveis</option>}
@@ -214,7 +169,6 @@ const Layout: React.FC<LayoutProps> = ({
                 </div>
             </div>
         </header>
-
         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50 dark:bg-darkBase transition-colors duration-300">
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
