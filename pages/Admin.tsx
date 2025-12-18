@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -156,8 +156,15 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       }
   };
 
+  const copyToClipboard = (text: string, message: string) => {
+      navigator.clipboard.writeText(text);
+      setModalType('alert_success');
+      setModalMessage(message);
+  };
+
   const renderTeamCard = (team: Team, isOwner: boolean) => {
     const members = allUsers.filter(u => u.teamIds?.some(tid => tid === team.id || tid === `pending:${team.id}`));
+    const publicUrl = `${window.location.origin}/#/p/team/${team.id}`;
     
     return (
         <div key={team.id} className="p-6 border border-gray-100 rounded-3xl bg-white shadow-sm hover:shadow-md transition-all space-y-6">
@@ -189,6 +196,29 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     }} className="flex-1 md:flex-none bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 font-black text-[10px] uppercase flex items-center justify-center gap-2"><LogOut size={16}/> Sair</button>
                 )}
             </div>
+
+            {/* SEÇÃO DE IDENTIFICAÇÃO E LINKS (EXCLUSIVO OWNER) */}
+            {isOwner && (
+                <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
+                    <div className="flex justify-between items-center">
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">ID da Equipe (UUID)</span>
+                            <span className="text-[9px] font-mono font-bold text-gray-500 select-all truncate max-w-[200px]">{team.id}</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(team.id, 'ID do time copiado!')} className="p-2 text-indigo-600 hover:bg-white rounded-lg transition-all" title="Copiar ID"><Copy size={14}/></button>
+                    </div>
+                    <div className="border-t border-indigo-100 pt-3 flex justify-between items-center">
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1"><Globe size={10}/> Link do Painel Público</span>
+                            <span className="text-[9px] font-mono font-bold text-indigo-600 truncate max-w-[200px]">{publicUrl}</span>
+                        </div>
+                        <div className="flex gap-1">
+                            <button onClick={() => copyToClipboard(publicUrl, 'Link público copiado!')} className="p-2 text-indigo-600 hover:bg-white rounded-lg transition-all" title="Copiar Link"><LinkIcon size={14}/></button>
+                            <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 hover:bg-white rounded-lg transition-all" title="Abrir Link"><ExternalLink size={14}/></a>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="space-y-3">
                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block border-b pb-1">Comissão Técnica / Staff</span>
