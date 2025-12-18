@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
-  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getTeams, getEvaluationSessions 
+  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions 
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, HeatmapPoint, User, canEditData, Team, UserRole, EvaluationSession } from '../types';
@@ -44,7 +44,7 @@ const AthleteProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [showCalendar, setShowCalendar] = useState(false); // Inicia recolhido
+  const [showCalendar, setShowCalendar] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
@@ -78,16 +78,21 @@ const AthleteProfile: React.FC = () => {
      load();
   }, [id, refreshKey]);
 
+  // --- CÁLCULOS DE SCORE ---
+  
+  // Score 1: Avaliação Estruturada (Média Técnica de snapshots)
+  const avgStructuredTech = useMemo(() => {
+    if (evalSessions.length === 0) return 0;
+    const sum = evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0);
+    return sum / evalSessions.length;
+  }, [evalSessions]);
+
+  // Score 2: Jogo em Tempo Real (Scout tático)
   const filteredEntries = useMemo(() => {
       if (!filterDate) return entries;
       const sessionIdsInDate = sessions.filter(s => s.date === filterDate).map(s => s.id);
       return entries.filter(e => sessionIdsInDate.includes(e.sessionId));
   }, [entries, sessions, filterDate]);
-
-  const filteredEvals = useMemo(() => {
-      if (!filterDate) return evalSessions;
-      return evalSessions.filter(s => s.date === filterDate);
-  }, [evalSessions, filterDate]);
 
   const tacticalEvents = useMemo(() => {
       let events: any[] = [];
@@ -139,6 +144,7 @@ const AthleteProfile: React.FC = () => {
       };
   }, [filteredTacticalEvents]);
 
+  // --- CALENDÁRIO ---
   const activityDates = useMemo(() => {
       const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
       sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
@@ -178,7 +184,7 @@ const AthleteProfile: React.FC = () => {
     return (
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col w-full">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xs font-black uppercase text-gray-400 tracking-widest flex items-center gap-2"><CalendarIcon size={16}/> Calendário de Registros</h3>
+                <h3 className="text-xs font-black uppercase text-gray-400 tracking-widest flex items-center gap-2"><CalendarIcon size={16}/> Histórico de Registros</h3>
                 <div className="flex items-center gap-3">
                     <button onClick={() => setCalendarDate(new Date(year, month - 1))} className="p-1.5 hover:bg-gray-100 rounded text-gray-400"><ChevronLeft size={20}/></button>
                     <span className="text-xs font-black uppercase text-gray-800 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 min-w-[120px] text-center">{calendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
@@ -191,10 +197,10 @@ const AthleteProfile: React.FC = () => {
             </div>
             <div className="mt-6 pt-6 border-t border-gray-50 flex flex-wrap gap-6 justify-center">
                 <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-tighter"><div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Análise de Jogo</div>
-                <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-tighter"><div className="w-2.5 h-2.5 rounded-full bg-green-500"></div> Avaliação Téc/Fis</div>
+                <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-tighter"><div className="w-2.5 h-2.5 rounded-full bg-green-500"></div> Avaliação Técnica</div>
                 {filterDate && (
                     <button onClick={() => setFilterDate(null)} className="text-[10px] font-black text-blue-600 hover:text-blue-800 underline underline-offset-4 ml-auto uppercase transition-colors">
-                        Exibindo {new Date(filterDate).toLocaleDateString()} (Limpar)
+                        Limpar Filtro ({new Date(filterDate).toLocaleDateString()})
                     </button>
                 )}
             </div>
@@ -210,9 +216,9 @@ const AthleteProfile: React.FC = () => {
   return (
     <div className="space-y-6 pb-20 relative">
       
-      {/* BLOCO 1: PERFIL DO ATLETA */}
+      {/* BLOCO 1: PERFIL + SCORES DUPLOS */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8">
             <div className="flex items-center gap-6 flex-1">
               <div className="relative group">
                 {athlete.photoUrl ? (
@@ -224,12 +230,11 @@ const AthleteProfile: React.FC = () => {
                     <button onClick={() => setShowEditModal(true)} className="absolute bottom-0 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={16}/></button>
                 )}
               </div>
-              <div className="flex-1">
-                <h1 className="text-3xl font-black text-gray-900 tracking-tighter">{athlete.name}</h1>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-3xl font-black text-gray-900 tracking-tighter truncate">{athlete.name}</h1>
                 <div className="flex flex-wrap gap-2 mt-2 items-center">
                    <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider">{athlete.position}</span>
                    <span className="bg-purple-100 text-purple-800 text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider">{getCalculatedCategory(athlete.birthDate)}</span>
-                   {athlete.rg && <span className="text-[9px] text-gray-400 font-bold uppercase">ID: {athlete.rg}</span>}
                 </div>
                 <div className="mt-6 flex flex-wrap gap-3">
                     <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-gray-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-tighter"><Timer size={16} /> Analisar em Tempo Real</button>
@@ -238,15 +243,22 @@ const AthleteProfile: React.FC = () => {
               </div>
             </div>
             
-            <div className="text-center px-10 py-5 bg-gray-50 rounded-3xl border border-gray-100 min-w-[160px] shadow-inner">
-                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impacto Global (Jogo)</span>
-                <span className={`block text-5xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(1)}</span>
-                <span className={`text-[9px] font-black uppercase ${impact.text}`}>{impact.label}</span>
+            <div className="flex gap-4 w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0">
+                <div className="text-center px-10 py-5 bg-gray-50 rounded-3xl border border-gray-100 min-w-[160px] shadow-inner flex-shrink-0">
+                    <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impacto (Jogo)</span>
+                    <span className={`block text-5xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(1)}</span>
+                    <span className={`text-[9px] font-black uppercase ${impact.text}`}>{impact.label}</span>
+                </div>
+                <div className="text-center px-10 py-5 bg-gray-50 rounded-3xl border border-gray-100 min-w-[160px] shadow-inner flex-shrink-0">
+                    <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Média Técnica</span>
+                    <span className="block text-5xl font-black text-blue-600">{avgStructuredTech.toFixed(1)}</span>
+                    <span className="text-[9px] font-black uppercase text-blue-400">Snapshot Estruturado</span>
+                </div>
             </div>
         </div>
       </div>
 
-      {/* BLOCO 2: CALENDÁRIO INDEPENDENTE (SANFONA) */}
+      {/* BLOCO 2: CALENDÁRIO (SANFONA RECOLHIDA) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <button 
             onClick={() => setShowCalendar(!showCalendar)}
@@ -265,10 +277,10 @@ const AthleteProfile: React.FC = () => {
           )}
       </div>
 
-      {/* BLOCO 3: ABAS DE NAVEGAÇÃO */}
+      {/* BLOCO 3: ABAS DE CONTEÚDO */}
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm w-full max-w-lg mx-auto">
           <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-3 py-3.5 rounded-xl text-[11px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-gray-900 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>
-              <Activity size={18}/> Scout Tático (RealTime)
+              <Activity size={18}/> Scout Jogo (RealTime)
           </button>
           <button onClick={() => setActiveTab('snapshots')} className={`flex-1 flex items-center justify-center gap-3 py-3.5 rounded-xl text-[11px] font-black uppercase transition-all ${activeTab === 'snapshots' ? 'bg-gray-900 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>
               <ClipboardCheck size={18}/> Avaliação Estruturada
@@ -314,8 +326,8 @@ const AthleteProfile: React.FC = () => {
                             </div>
                         </div>
                 </div>
-                {/* BLOCO TOP IMPACTO - Removido Scroll */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                {/* BLOCO TOP IMPACTO - Expandido e sem barra de rolagem */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-[300px]">
                         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3>
                             <TrendingUp size={14} className="text-gray-300"/>
@@ -324,7 +336,7 @@ const AthleteProfile: React.FC = () => {
                             {impactRanking.best.length > 0 ? (
                                 <>
                                     <div>
-                                        <span className="text-[9px] font-bold text-green-600 uppercase mb-2 block tracking-wider text-center">Pontos Fortes</span>
+                                        <span className="text-[9px] font-bold text-green-600 uppercase mb-2 block tracking-wider">Pontos Fortes</span>
                                         {impactRanking.best.map((a, i) => (
                                             <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-green-50 border border-green-100 mb-1.5">
                                                 <span className="text-[10px] font-black text-green-800 truncate pr-2">{a.name}</span>
@@ -333,7 +345,7 @@ const AthleteProfile: React.FC = () => {
                                         ))}
                                     </div>
                                     <div className="border-t border-dashed border-gray-100 pt-4">
-                                        <span className="text-[9px] font-bold text-red-500 uppercase mb-2 block tracking-wider text-center">Fragilidades</span>
+                                        <span className="text-[9px] font-bold text-red-500 uppercase mb-2 block tracking-wider">Fragilidades</span>
                                         {impactRanking.worst.map((a, i) => (
                                             <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-red-50 border border-red-100 mb-1.5">
                                                 <span className="text-[10px] font-black text-red-800 truncate pr-2">{a.name}</span>
@@ -342,7 +354,7 @@ const AthleteProfile: React.FC = () => {
                                         ))}
                                     </div>
                                 </>
-                            ) : <div className="h-full flex items-center justify-center py-10 text-[9px] text-gray-300 font-bold uppercase text-center italic">Aguardando dados</div>}
+                            ) : <div className="h-full flex items-center justify-center text-[9px] text-gray-300 font-bold uppercase text-center italic">Aguardando dados de jogo</div>}
                         </div>
                 </div>
               </div>
@@ -380,7 +392,7 @@ const AthleteProfile: React.FC = () => {
                       <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-700 active:scale-95 transition-all"><Plus size={14}/> Nova Avaliação</button>
                   </div>
                   <div className="divide-y divide-gray-50">
-                      {filteredEvals.length > 0 ? filteredEvals.map(ev => (
+                      {evalSessions.length > 0 ? evalSessions.map(ev => (
                           <div key={ev.id} className="p-5 flex items-center justify-between hover:bg-gray-50 transition-all border-l-4 border-transparent hover:border-blue-600">
                               <div className="flex items-center gap-5">
                                   <div className="bg-green-100 p-4 rounded-2xl text-green-600 shadow-sm"><Target size={24}/></div>
@@ -404,7 +416,7 @@ const AthleteProfile: React.FC = () => {
                               <div className="bg-gray-50 p-8 rounded-full border-2 border-dashed border-gray-100"><AlertCircle size={48} className="text-gray-200" /></div>
                               <div className="max-w-xs">
                                 <p className="text-sm font-black text-gray-400 uppercase tracking-widest">Nenhuma avaliação encontrada</p>
-                                <p className="text-xs text-gray-300 mt-2 font-medium">{filterDate ? `Não existem snapshots para o dia ${new Date(filterDate).toLocaleDateString()}.` : 'Este atleta ainda não passou por avaliações estruturadas de fundamentos.'}</p>
+                                <p className="text-xs text-gray-300 mt-2 font-medium">Este atleta ainda não passou por avaliações controladas de fundamentos.</p>
                               </div>
                           </div>
                       )}
@@ -413,7 +425,7 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAL DE EDIÇÃO (Simplificado para o contexto) */}
+      {/* MODAL DE EDIÇÃO */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-slide-up">

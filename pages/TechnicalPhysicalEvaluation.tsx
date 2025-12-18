@@ -96,7 +96,6 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
         const { avgTech, avgPhysNormalized } = calculateScores();
         const sessionId = uuidv4();
 
-        // Preparação cuidadosa dos dados para o DB
         const session: EvaluationSession = {
             id: sessionId, 
             athleteId: athlete.id, 
@@ -121,13 +120,11 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
         }));
 
         try {
-            // Persistência coordenada
             await saveEvaluationSession(session, technicals, physicals);
             navigate(`/athletes/${athlete.id}`);
         } catch (err: any) { 
-            console.error("Erro técnico detalhado:", err);
-            // Mensagem de erro mais rica
-            alert(`Erro ao salvar avaliação: ${err.message || "Erro de conexão"}. Verifique as permissões de gravação.`); 
+            console.error("Erro detalhado:", err);
+            alert(`Erro ao salvar: ${err.message || "Erro de RLS"}. Verifique o script SQL de permissões.`); 
         } finally { 
             setSaving(false); 
         }
@@ -168,13 +165,12 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
             </div>
 
             <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-10 animate-fade-in">
-                {/* Cabeçalho de Contexto */}
                 <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="md:col-span-3 pb-2 border-b border-gray-100">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Contexto da Sessão</h3>
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Contexto</h3>
                     </div>
                     <div>
-                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Data da Avaliação</label>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Data</label>
                         <input type="date" value={evalDate} onChange={e=>setEvalDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                     <div>
@@ -184,18 +180,17 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Avaliador Responsável</label>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Avaliador</label>
                         <div className="w-full bg-gray-100 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-500 flex items-center gap-2">
                             <UserIcon size={12} /> {currentUser?.name || 'Sistema'}
                         </div>
                     </div>
                     <div className="md:col-span-3">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas da Sessão</label>
-                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-blue-500 h-16 outline-none" placeholder="Contexto de treino, condições de campo ou observações comportamentais..."></textarea>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Observações</label>
+                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-blue-500 h-16 outline-none" placeholder="Notas sobre histórico, comportamento ou objetivos específicos..."></textarea>
                     </div>
                 </section>
 
-                {/* Fundamentos */}
                 <section className="space-y-6">
                     <div className="flex items-center gap-3 pb-3 border-b-2 border-blue-100">
                         <TrendingUp className="text-blue-600" />
@@ -236,11 +231,10 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                     </div>
                 </section>
 
-                {/* Física */}
                 <section className="space-y-6">
                     <div className="flex items-center gap-3 pb-3 border-b-2 border-orange-100">
                         <Activity className="text-orange-600" />
-                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Capacidades Físicas</h2>
+                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Condição Física</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {PHYS_CONFIG.map((group, idx) => (
@@ -262,7 +256,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                                             <div className="flex gap-2">
                                                 <input 
                                                     type="text" 
-                                                    placeholder="Valor bruto (ex: 30m, 5kg)" 
+                                                    placeholder="Valor bruto" 
                                                     value={physInputs[cap]?.val || ''}
                                                     onChange={e => handlePhysInput(cap, e.target.value)}
                                                     className="flex-1 bg-white border border-gray-200 rounded-lg p-3 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none"
@@ -298,7 +292,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                         className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
-                        {saving ? 'Consolidando...' : 'Salvar Avaliação Estruturada'}
+                        {saving ? 'Gravando...' : 'Salvar Avaliação Estruturada'}
                     </button>
                 </div>
             </div>
