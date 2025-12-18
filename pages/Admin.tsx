@@ -50,11 +50,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         const userStr = localStorage.getItem('performax_current_user');
         const localUser: User = userStr ? JSON.parse(userStr) : null;
         
-        // Busca a versão mais recente do usuário no banco para ter os teamIds atualizados (sem o pending:)
         const loggedUser = u.find(user => user.id === localUser?.id) || localUser;
         setCurrentUser(loggedUser);
         
-        // Sincroniza o localStorage caso tenha mudado
         if (loggedUser) localStorage.setItem('performax_current_user', JSON.stringify(loggedUser));
 
         const ctxId = localStorage.getItem('performax_context_id');
@@ -63,9 +61,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             setOwnedTeams(allTeams.filter(t => t.ownerId === ctxId));
             if (loggedUser) {
                 const teamIds = loggedUser.teamIds || [];
-                // Equipes ativas são as que não começam com pending:
                 const activeTeamIds = teamIds.filter(id => !id.startsWith('pending:'));
-                // Filtra equipes onde o usuário é convidado (não é o dono do contexto atual)
                 setInvitedTeams(allTeams.filter(t => activeTeamIds.includes(t.id) && t.ownerId !== ctxId));
             }
         }
@@ -232,7 +228,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                 )}
             </div>
 
-            {/* SEÇÃO DE IDENTIFICAÇÃO E LINKS (EXCLUSIVO OWNER) */}
             {isOwner && (
                 <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                     <div className="flex justify-between items-center">
@@ -261,7 +256,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     {members.map(u => {
                         const isPending = u.teamIds?.includes(`pending:${team.id}`);
                         return (
-                        <div key={u.id} className={`flex items-center justify-between border px-3 py-2 rounded-2xl group/staff transition-all ${isPending ? 'bg-yellow-50/50 border-yellow-100 italic' : 'bg-gray-50 border-gray-100'}`}>
+                        <div key={u.id} className={`flex items-center justify-between border px-3 py-2 rounded-2xl transition-all ${isPending ? 'bg-yellow-50/50 border-yellow-100 italic' : 'bg-gray-50 border-gray-100'}`}>
                             <div className="flex items-center gap-2 min-w-0">
                                 {u.avatarUrl ? <img src={u.avatarUrl} className={`w-6 h-6 rounded-full object-cover ${isPending ? 'grayscale' : ''}`} /> : <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold ${isPending ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>{u.name.charAt(0)}</div>}
                                 <div className="truncate">
@@ -269,10 +264,10 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                                     <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter">{u.role}</span>
                                 </div>
                             </div>
-                            {isOwner && u.role !== UserRole.MASTER && (
-                                <div className="flex gap-1 opacity-0 group-hover/staff:opacity-100 transition-opacity">
-                                    {!isPending && <button onClick={() => { setSelectedStaff(u); setModalType('edit_staff_role'); }} className="p-1.5 text-indigo-600 hover:bg-white rounded-lg transition-colors"><UserCog size={14}/></button>}
-                                    <button onClick={() => { setSelectedStaff(u); setSelectedTeamForStaff(team.id); setDeleteType('staff'); setModalMessage(isPending ? `Cancelar o convite para ${u.name}?` : `Excluir o acesso de ${u.name} a esta equipe?`); setModalType('confirm_delete'); }} className="p-1.5 text-red-500 hover:bg-white rounded-lg transition-colors"><Trash2 size={14}/></button>
+                            {isOwner && u.id !== team.ownerId && (
+                                <div className="flex gap-1">
+                                    {!isPending && <button onClick={() => { setSelectedStaff(u); setModalType('edit_staff_role'); }} className="p-1.5 text-indigo-600 hover:bg-white rounded-lg transition-colors bg-white/50 border border-indigo-50 shadow-sm" title="Editar Cargo"><UserCog size={14}/></button>}
+                                    <button onClick={() => { setSelectedStaff(u); setSelectedTeamForStaff(team.id); setDeleteType('staff'); setModalMessage(isPending ? `Cancelar o convite para ${u.name}?` : `Excluir o acesso de ${u.name} a esta equipe?`); setModalType('confirm_delete'); }} className="p-1.5 text-red-500 hover:bg-white rounded-lg transition-colors bg-white/50 border border-red-50 shadow-sm" title="Remover"><Trash2 size={14}/></button>
                                 </div>
                             )}
                         </div>
@@ -285,7 +280,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* SEÇÃO MEU CADASTRO / PERFIL */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-6">
               <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-white shadow-lg overflow-hidden shrink-0">
@@ -367,7 +361,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         </div>
       </div>
 
-      {/* MODAIS PADRONIZADOS */}
       {(modalType === 'edit_team' || modalType === 'edit_category' || modalType === 'edit_my_profile') && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl animate-slide-up">
