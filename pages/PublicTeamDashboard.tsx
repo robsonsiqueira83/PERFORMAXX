@@ -1,328 +1,229 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getTeams, getAthletes, getCategories, getTrainingSessions, getTrainingEntries } from '../services/storageService';
-import { Team, Athlete, Category, TrainingSession, TrainingEntry, Position, calculateTotalScore, getCalculatedCategory } from '../types';
+import { getTeams, getAthletes, getCategories, getTrainingSessions, getTrainingEntries, getEvaluationSessions } from '../services/storageService';
+import { Team, Athlete, Category, TrainingSession, TrainingEntry, Position, getCalculatedCategory, EvaluationSession } from '../types';
 import PublicHeader from '../components/PublicHeader';
-import { Loader2, Filter, Shirt, Trophy, Users } from 'lucide-react';
+import { Loader2, Filter, Shirt, Trophy, Users, Target, Activity, Zap, TrendingUp, ChevronDown } from 'lucide-react';
 
 const PublicTeamDashboard: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const [loading, setLoading] = useState(true);
   
-  // Data
   const [team, setTeam] = useState<Team | null>(null);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [sessions, setSessions] = useState<TrainingSession[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationSession[]>([]);
   const [entries, setEntries] = useState<TrainingEntry[]>([]);
 
-  // Filters
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
 
   useEffect(() => {
     const loadData = async () => {
         if (!teamId) return;
         setLoading(true);
-        const [t, a, c, s, e] = await Promise.all([
+        const [t, a, c, e, ev] = await Promise.all([
             getTeams(),
             getAthletes(),
             getCategories(),
-            getTrainingSessions(),
-            getTrainingEntries()
+            getTrainingEntries(),
+            getEvaluationSessions()
         ]);
 
         const currentTeam = t.find(item => item.id === teamId);
         setTeam(currentTeam || null);
         setAthletes(a.filter(item => item.teamId === teamId));
         setCategories(c.filter(item => item.teamId === teamId));
-        setSessions(s.filter(item => item.teamId === teamId));
-        setEntries(e); // Entry filtering happens in memory for simplicity
+        setEntries(e);
+        setEvaluations(ev);
         setLoading(false);
     };
     loadData();
   }, [teamId]);
 
-  // --- Filter Logic ---
-  const filteredSessions = useMemo(() => {
-    const now = new Date();
-    return sessions.filter(s => {
-      const sIso = s.date;
-      const todayIso = now.toISOString().split('T')[0];
-
-      switch (selectedPeriod) {
-        case 'today': return sIso === todayIso;
-        case 'week':
-           const sevenDaysAgo = new Date(now);
-           sevenDaysAgo.setDate(now.getDate() - 7);
-           return sIso >= sevenDaysAgo.toISOString().split('T')[0];
-        case 'month':
-           const thirtyDaysAgo = new Date(now);
-           thirtyDaysAgo.setDate(now.getDate() - 30);
-           return sIso >= thirtyDaysAgo.toISOString().split('T')[0];
-        case 'year':
-           const startYear = `${now.getFullYear()}-01-01`;
-           return sIso >= startYear;
-        case 'all':
-        default:
-          return true;
-      }
-    });
-  }, [sessions, selectedPeriod]);
-
-  const filteredEntries = useMemo(() => {
-      const sessionIds = filteredSessions.map(s => s.id);
-      return entries.filter(e => sessionIds.includes(e.sessionId));
-  }, [entries, filteredSessions]);
-
-  // --- Calculate Scores ---
-  const athletesWithScores = useMemo(() => {
+  const athletesWithMeta = useMemo(() => {
     return athletes.map(athlete => {
-        let athleteEntries = filteredEntries.filter(e => e.athleteId === athlete.id);
+        const myEvals = evaluations.filter(ev => ev.athleteId === athlete.id);
+        const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
         
-        if (athleteEntries.length === 0) return { ...athlete, averageScore: 0, sessionsCount: 0 };
+        const myEntries = entries.filter(e => e.athleteId === athlete.id);
+        let impactScore = 0;
+        let scoutCount = 0;
+        myEntries.forEach(entry => {
+            try {
+                const notes = JSON.parse(entry.notes || '{}');
+                if (notes.avgScore !== undefined) {
+                    impactScore += notes.avgScore;
+                    scoutCount++;
+                }
+            } catch(e) {}
+        });
+        const avgImpact = scoutCount > 0 ? impactScore / scoutCount : 0;
 
-        const sumScore = athleteEntries.reduce((acc, entry) => {
-            return acc + calculateTotalScore(entry.technical, entry.physical, entry.tactical);
-        }, 0);
+        return { ...athlete, avgTech, avgImpact };
+    }).sort((a, b) => b.avgTech - a.avgTech);
+  }, [athletes, evaluations, entries]);
 
-        return {
-            ...athlete,
-            averageScore: Number((sumScore / athleteEntries.length).toFixed(1)),
-            sessionsCount: athleteEntries.length
-        };
-    }).sort((a, b) => b.averageScore - a.averageScore);
-  }, [athletes, filteredEntries]);
-
-  // --- Filtered List for Display ---
   const displayAthletes = useMemo(() => {
-      let list = athletesWithScores;
+      let list = athletesWithMeta;
       if (selectedCategory !== 'all') list = list.filter(a => a.categoryId === selectedCategory);
       if (selectedPosition !== 'all') list = list.filter(a => a.position === selectedPosition);
       return list;
-  }, [athletesWithScores, selectedCategory, selectedPosition]);
+  }, [athletesWithMeta, selectedCategory, selectedPosition]);
 
-
-  // --- Best XI Logic (Matched with Dashboard.tsx) ---
   const bestXI = useMemo(() => {
-    const getTopPlayers = (positions: Position[], count: number, excludeIds: string[]) => {
-       const pool = athletesWithScores.filter(a => 
-         positions.includes(a.position) && 
-         !excludeIds.includes(a.id) && 
-         (selectedCategory === 'all' || a.categoryId === selectedCategory)
-       );
-       return pool.slice(0, count);
+    const selectedIds = new Set<string>();
+    const getTopForSlot = (positions: Position[]) => {
+        const pool = athletesWithMeta
+            .filter(a => positions.includes(a.position) && !selectedIds.has(a.id) && (selectedCategory === 'all' || a.categoryId === selectedCategory))
+            .sort((a, b) => b.avgTech - a.avgTech);
+        if (pool.length > 0) {
+            selectedIds.add(pool[0].id);
+            return pool[0];
+        }
+        return null;
     };
 
-    const selectedIds: string[] = [];
-    
-    // 1. Goleiro (1)
-    const goleiro = getTopPlayers([Position.GOLEIRO], 1, selectedIds);
-    selectedIds.push(...goleiro.map(a => a.id));
-
-    // 2. Laterais (2)
-    const laterais = getTopPlayers([Position.LATERAL], 2, selectedIds);
-    selectedIds.push(...laterais.map(a => a.id));
-
-    // 3. Zagueiros (2)
-    const zagueiros = getTopPlayers([Position.ZAGUEIRO], 2, selectedIds);
-    selectedIds.push(...zagueiros.map(a => a.id));
-
-    // 4. Volante (1)
-    const volante = getTopPlayers([Position.VOLANTE], 1, selectedIds);
-    selectedIds.push(...volante.map(a => a.id));
-
-    // 5. Meio Campo (2)
-    const meios = getTopPlayers([Position.MEIO_CAMPO], 2, selectedIds);
-    selectedIds.push(...meios.map(a => a.id));
-
-    // 6. Atacantes (2)
-    const atacantes = getTopPlayers([Position.ATACANTE], 2, selectedIds);
-    selectedIds.push(...atacantes.map(a => a.id));
-
-    // 7. Centro Avante (1)
-    const centroavante = getTopPlayers([Position.CENTROAVANTE], 1, selectedIds);
-    selectedIds.push(...centroavante.map(a => a.id));
-
     return [
-        // GK (Bottom 5% - Close to goal line)
-        { role: 'GK', player: goleiro[0], style: { bottom: '5%', left: '50%' } }, 
-        
-        // Defesa (Laterais + Zagueiros)
-        { role: 'LE', player: laterais[0], style: { bottom: '22%', left: '15%' } }, 
-        { role: 'ZC', player: zagueiros[0], style: { bottom: '16%', left: '38%' } }, 
-        { role: 'ZC', player: zagueiros[1], style: { bottom: '16%', left: '62%' } }, 
-        { role: 'LD', player: laterais[1], style: { bottom: '22%', left: '85%' } }, 
-        
-        // Volante (Central)
-        { role: 'VOL', player: volante[0], style: { bottom: '35%', left: '50%' } }, 
-        
-        // Meio Campo (Ahead of Volante)
-        { role: 'MC', player: meios[0], style: { bottom: '50%', left: '30%' } }, 
-        { role: 'MC', player: meios[1], style: { bottom: '50%', left: '70%' } }, 
-        
-        // Ataque (Wingers)
-        { role: 'AT', player: atacantes[0], style: { bottom: '65%', left: '20%' } }, 
-        { role: 'AT', player: atacantes[1], style: { bottom: '65%', left: '80%' } }, 
-        
-        // Centro Avante (Lowered to 75%)
-        { role: 'CA', player: centroavante[0], style: { bottom: '75%', left: '50%' } }, 
+        { role: 'GK', player: getTopForSlot([Position.GOLEIRO]), style: { bottom: '5%', left: '50%' } }, 
+        { role: 'LE', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '15%' } }, 
+        { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '38%' } }, 
+        { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '62%' } }, 
+        { role: 'LD', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '85%' } }, 
+        { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '30%' } }, 
+        { role: 'VOL', player: getTopForSlot([Position.VOLANTE, Position.MEIO_CAMPO]), style: { bottom: '38%', left: '50%' } }, 
+        { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '70%' } }, 
+        { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '20%' } }, 
+        { role: 'CA', player: getTopForSlot([Position.CENTROAVANTE, Position.ATACANTE]), style: { bottom: '78%', left: '50%' } }, 
+        { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '80%' } }, 
     ];
-  }, [athletesWithScores, selectedCategory]);
+  }, [athletesWithMeta, selectedCategory]);
 
-
-  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>;
-  if (!team) return <div className="p-10 text-center">Time não encontrado.</div>;
-
-  const selectClass = "bg-gray-100 border border-gray-300 text-gray-900 rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 w-full";
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600"><Loader2 className="animate-spin" size={40} /></div>;
+  if (!team) return <div className="p-10 text-center text-gray-500 font-black uppercase tracking-widest">Equipe não localizada</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
       <PublicHeader team={team} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 space-y-8">
         
-        {/* Filters */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-            <h3 className="text-gray-500 font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Filter size={16}/> Filtros de Visualização
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">CATEGORIA</label>
-                    <select className={selectClass} value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
+        {/* Filtros Premium */}
+        <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 flex flex-wrap items-end gap-6">
+            <div className="flex-1 min-w-[200px]">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Categoria de Visualização</label>
+                <div className="relative">
+                    <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
                         <option value="all">Todas as Categorias</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16}/>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">POSIÇÃO</label>
-                    <select className={selectClass} value={selectedPosition} onChange={e => setSelectedPosition(e.target.value)}>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Posição Tática</label>
+                <div className="relative">
+                    <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedPosition} onChange={e => setSelectedPosition(e.target.value)}>
                         <option value="all">Todas as Posições</option>
                         {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16}/>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">PERÍODO</label>
-                    <select className={selectClass} value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)}>
-                        <option value="all">Todo o Período</option>
-                        <option value="today">Hoje</option>
-                        <option value="week">Últimos 7 dias</option>
-                        <option value="month">Últimos 30 dias</option>
-                        <option value="year">Este Ano</option>
-                    </select>
-                </div>
+            </div>
+            <div className="hidden lg:flex flex-col items-end flex-1">
+                <span className="text-[10px] font-black text-gray-400 uppercase mb-2">Total de Atletas</span>
+                <span className="text-3xl font-black text-indigo-600 tracking-tighter">{displayAthletes.length}</span>
             </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* Column 1: Ranked List */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                        <Users className="text-blue-600"/> Ranking de Atletas
+            {/* Lista de Ranking */}
+            <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+                    <h3 className="font-black text-gray-800 uppercase tracking-tighter text-xl flex items-center gap-3">
+                        <Users className="text-indigo-600"/> Ranking de Performance
                     </h3>
-                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {displayAthletes.length} atletas
-                    </span>
                 </div>
-                <div className="divide-y divide-gray-100 max-h-[800px] overflow-y-auto">
+                <div className="divide-y divide-gray-50 max-h-[800px] overflow-y-auto custom-scrollbar">
                     {displayAthletes.map((athlete, index) => (
-                        /* LINK TO PUBLIC PROFILE */
-                        <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center p-4 hover:bg-blue-50 transition-colors group">
-                            <div className="flex-shrink-0 relative mr-4">
+                        <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center p-6 hover:bg-indigo-50/30 transition-all group">
+                            <div className="flex-shrink-0 relative mr-6">
                                 {athlete.photoUrl ? (
-                                    <img src={athlete.photoUrl} className="w-14 h-14 rounded-full object-cover border-2 border-gray-100 group-hover:border-blue-200" />
+                                    <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-md group-hover:scale-105 transition-transform" />
                                 ) : (
-                                    <div className="w-14 h-14 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-400">
+                                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center font-black text-gray-300 text-xl border-2 border-white shadow-sm">
                                         {athlete.name.charAt(0)}
                                     </div>
                                 )}
-                                <div className="absolute -top-1 -left-1 w-6 h-6 bg-white shadow rounded-full flex items-center justify-center text-xs font-bold text-blue-600 border border-gray-100">
-                                    {index + 1}
+                                <div className="absolute -top-1 -left-1 w-7 h-7 bg-indigo-600 shadow-lg rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-white">
+                                    #{index + 1}
                                 </div>
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-gray-900 truncate">{athlete.name}</h4>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">{athlete.position}</span>
-                                    <span className="text-xs font-medium text-gray-500">{getCalculatedCategory(athlete.birthDate)}</span>
+                                <h4 className="font-black text-gray-800 uppercase tracking-tighter text-base truncate group-hover:text-indigo-600 transition-colors">{athlete.name}</h4>
+                                <div className="flex items-center gap-3 mt-2">
+                                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded uppercase tracking-widest">{athlete.position}</span>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{getCalculatedCategory(athlete.birthDate)}</span>
                                 </div>
                             </div>
-                            <div className="text-right pl-4">
-                                <span className="block text-xs font-bold text-gray-400 uppercase">SCORE</span>
-                                <span className={`text-xl font-bold ${athlete.averageScore >= 8 ? 'text-green-500' : athlete.averageScore >= 4 ? 'text-gray-600' : 'text-red-500'}`}>
-                                    {athlete.averageScore > 0 ? athlete.averageScore.toFixed(1) : '--'}
+                            <div className="text-right pl-6 border-l border-gray-50 ml-4">
+                                <span className="block text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Média Téc.</span>
+                                <span className="text-2xl font-black text-emerald-600 tracking-tighter">
+                                    {athlete.avgTech > 0 ? athlete.avgTech.toFixed(1) : '--'}
                                 </span>
                             </div>
                         </Link>
                     ))}
                     {displayAthletes.length === 0 && (
-                        <div className="p-8 text-center text-gray-500 italic">
-                            Nenhum atleta encontrado com os filtros selecionados.
+                        <div className="p-20 text-center text-gray-300 font-bold uppercase tracking-widest italic text-xs">
+                            Nenhum atleta localizado nestes filtros.
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Column 2: Best XI Field (Matched with Dashboard.tsx) */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2 mb-6">
-                    <Shirt className="text-green-600"/> Seleção do Momento (4-3-3)
+            {/* Seleção do Momento */}
+            <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 p-8 flex flex-col">
+                <h3 className="font-black text-gray-800 uppercase tracking-tighter text-xl flex items-center gap-3 mb-8">
+                    <Shirt className="text-emerald-600"/> Seleção Técnica (4-3-3)
                 </h3>
 
-                {/* Field Container - Reverted to Vertical Aspect Ratio */}
-                <div className="relative w-full aspect-[2/3] sm:aspect-[3/4] lg:aspect-[3/4] bg-green-600 rounded-lg overflow-hidden border-4 border-green-700 shadow-inner">
-                    {/* Field Markings */}
-                    <div className="absolute inset-4 border-2 border-white/40 rounded-sm"></div>
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2"></div>
-                    <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
-                    <div className="absolute bottom-4 left-1/2 w-40 h-20 border-2 border-white/40 border-b-0 transform -translate-x-1/2 bg-transparent"></div>
-                    <div className="absolute top-4 left-1/2 w-40 h-20 border-2 border-white/40 border-t-0 transform -translate-x-1/2 bg-transparent"></div>
-
-                    {/* Players */}
+                <div className="relative w-full aspect-[16/9] bg-green-600 rounded-[32px] overflow-hidden border-4 border-green-800 shadow-inner">
+                    <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
+                    <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-1/2 w-32 h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                    
                     {bestXI.map((pos, idx) => (
-                        <div 
-                        key={idx}
-                        className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer transition-all hover:scale-110 z-10"
-                        style={pos.style as React.CSSProperties}
-                        >
-                        {pos.player && pos.player.averageScore > 0 ? (
-                            /* LINK TO PUBLIC PROFILE */
-                            <Link to={`/p/athlete/${pos.player.id}`} className="flex flex-col items-center">
+                        <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
+                        {pos.player ? (
+                            <Link to={`/p/athlete/${pos.player.id}`} className="flex flex-col items-center group">
                                 <div className="relative">
                                     {pos.player.photoUrl ? (
-                                        <img src={pos.player.photoUrl} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md object-cover bg-white" alt={pos.player.name} />
+                                        <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white group-hover:scale-110 transition-transform" />
                                     ) : (
-                                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md bg-white flex items-center justify-center text-xs font-bold text-gray-700">
+                                        <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">
                                             {pos.player.name.charAt(0)}
                                         </div>
                                     )}
-                                    <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow border border-white">
-                                        {pos.player.averageScore}
+                                    <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">
+                                        {pos.player.avgTech.toFixed(1)}
                                     </div>
                                 </div>
-                                <div className="mt-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white text-[10px] md:text-xs font-medium text-center truncate max-w-[80px]">
-                                    {pos.player.name.split(' ')[0]}
-                                </div>
-                                <div className="text-[9px] text-white/90 bg-black/30 px-1 rounded mt-0.5">
-                                    {pos.player.position}
-                                </div>
+                                <div className="mt-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] font-black uppercase tracking-tighter">{pos.player.name.split(' ')[0]}</div>
                             </Link>
                         ) : (
-                            <div className="opacity-50 flex flex-col items-center">
-                                <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/50 bg-transparent flex items-center justify-center text-white/50 text-xs">
-                                    {pos.role}
-                                </div>
+                            <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center text-white/40 text-[10px] font-black">
+                                {pos.role}
                             </div>
                         )}
                         </div>
                     ))}
-                    
-                    <div className="absolute bottom-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Defesa</div>
-                    <div className="absolute top-2 right-2 text-white/30 text-xs font-bold uppercase tracking-widest">Ataque</div>
+                </div>
+                <div className="mt-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                    <Trophy size={20} className="text-emerald-600" />
+                    <p className="text-[10px] text-emerald-800 font-black uppercase tracking-widest leading-relaxed">Os atletas acima foram escalados automaticamente com base na maior média técnica recente registrada pela comissão.</p>
                 </div>
             </div>
         </div>

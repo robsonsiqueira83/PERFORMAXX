@@ -46,7 +46,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     loadData();
   }, [teamId]);
 
-  // --- FILTRAGEM POR PERÍODO ---
   const filteredEvalSessions = useMemo(() => {
       const now = new Date();
       return evalSessions.filter(s => {
@@ -62,12 +61,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       });
   }, [evalSessions, athletes, selectedPeriod]);
 
-  // --- CÁLCULO DE MÉDIAS POR ATLETA ---
   const athletesWithMeta = useMemo(() => {
     return athletes.map(athlete => {
         const myEvals = filteredEvalSessions.filter(ev => ev.athleteId === athlete.id);
         const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
-        
         const myEntries = entries.filter(e => e.athleteId === athlete.id);
         let impactScore = 0;
         let scoutCount = 0;
@@ -81,7 +78,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
             } catch(e) {}
         });
         const avgImpact = scoutCount > 0 ? impactScore / scoutCount : 0;
-
         return { ...athlete, avgTech, avgImpact };
     }).sort((a, b) => b.avgTech - a.avgTech);
   }, [athletes, filteredEvalSessions, entries]);
@@ -100,12 +96,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       return { tech: sumTech / list.length, impact: sumImpact / list.length };
   }, [athletesWithMeta, selectedCategory]);
 
-  // Radar de Fases do Time
   const teamPhasesRadar = useMemo(() => {
       const activeAthletes = selectedCategory === 'all' ? athletes : athletes.filter(a=>a.categoryId===selectedCategory);
       const athIds = activeAthletes.map(a=>a.id);
       const relevantEntries = entries.filter(e => athIds.includes(e.athleteId));
-      
       const calcPhase = (phase: string) => {
           let sum = 0; let count = 0;
           relevantEntries.forEach(en => {
@@ -122,7 +116,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           });
           return count > 0 ? sum / count : 0;
       };
-
       return [
           { phase: 'Ofensiva', A: calcPhase('OFENSIVA') },
           { phase: 'Defensiva', A: calcPhase('DEFENSIVA') },
@@ -131,7 +124,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       ];
   }, [athletes, selectedCategory, entries]);
 
-  // Evolução Técnica do Time
   const teamEvolutionData = useMemo(() => {
       const dates = Array.from(new Set<string>(filteredEvalSessions.map(s => s.date))).sort();
       return dates.map((d: string) => {
@@ -145,38 +137,27 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       }).filter(d => d.tech !== null);
   }, [filteredEvalSessions, selectedCategory, athletes]);
 
-  // Lógica de Seleção Técnica do Momento (Formação 4-3-3)
   const bestXI = useMemo(() => {
     const selectedIds = new Set<string>();
-    
     const getTopForSlot = (positions: Position[]) => {
         const pool = athletesWithMeta
             .filter(a => positions.includes(a.position) && !selectedIds.has(a.id) && (selectedCategory === 'all' || a.categoryId === selectedCategory))
             .sort((a, b) => b.avgTech - a.avgTech);
-        
         if (pool.length > 0) {
             selectedIds.add(pool[0].id);
             return pool[0];
         }
         return null;
     };
-
     return [
-        // Goleiro (1)
         { role: 'GK', player: getTopForSlot([Position.GOLEIRO]), style: { bottom: '5%', left: '50%' } }, 
-        
-        // Defesa (4)
         { role: 'LE', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '15%' } }, 
         { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '38%' } }, 
         { role: 'ZC', player: getTopForSlot([Position.ZAGUEIRO]), style: { bottom: '18%', left: '62%' } }, 
         { role: 'LD', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '85%' } }, 
-        
-        // Meio-Campo (3)
         { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '30%' } }, 
         { role: 'VOL', player: getTopForSlot([Position.VOLANTE, Position.MEIO_CAMPO]), style: { bottom: '38%', left: '50%' } }, 
         { role: 'MC', player: getTopForSlot([Position.MEIO_CAMPO, Position.VOLANTE]), style: { bottom: '45%', left: '70%' } }, 
-        
-        // Ataque (3)
         { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '20%' } }, 
         { role: 'CA', player: getTopForSlot([Position.CENTROAVANTE, Position.ATACANTE]), style: { bottom: '78%', left: '50%' } }, 
         { role: 'AT', player: getTopForSlot([Position.ATACANTE]), style: { bottom: '70%', left: '80%' } }, 
@@ -186,46 +167,47 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex flex-wrap items-end gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Filtro de Grupo</label><select className="bg-gray-50 border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)}><option value="all">Todas Categorias</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Período de Análise</label><select className="bg-gray-50 border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)}><option value="all">Todo o Histórico</option><option value="week">Últimos 7 dias</option><option value="month">Últimos 30 dias</option><option value="year">Este Ano</option></select></div>
+    <div className="space-y-8 pb-10 transition-colors duration-300">
+      <div className="flex flex-wrap items-end gap-4 bg-white dark:bg-darkCard p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-darkBorder">
+          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Filtro de Grupo</label><select className="bg-gray-50 dark:bg-darkInput dark:text-gray-300 dark:border-darkBorder border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)}><option value="all">Todas Categorias</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Período de Análise</label><select className="bg-gray-50 dark:bg-darkInput dark:text-gray-300 dark:border-darkBorder border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)}><option value="all">Todo o Histórico</option><option value="week">Últimos 7 dias</option><option value="month">Últimos 30 dias</option><option value="year">Este Ano</option></select></div>
           <div className="flex-1"></div>
           {currentUser && canEditData(currentUser.role) && <Link to="/training" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"><ClipboardList size={16}/> Nova Atuação</Link>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between overflow-hidden relative group">
-              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Activity size={100} className="text-indigo-600"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Zap size={14} className="text-yellow-500"/> Impacto em Jogo (Média)</span><p className="text-5xl font-black text-indigo-600 tracking-tighter">{teamAverages.impact.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Scouts RealTime</span></div>
+          <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
+              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Activity size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Zap size={14} className="text-yellow-500"/> Impacto em Jogo (Média)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.impact.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Scouts RealTime</span></div>
           </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between overflow-hidden relative group">
-              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Snapshots Estruturados</span></div>
+          <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
+              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Snapshots Estruturados</span></div>
           </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
          {rankedByTech.map((athlete, index) => (
-             <div key={athlete.id} className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 flex flex-col relative overflow-hidden group">
+             <div key={athlete.id} className="bg-white dark:bg-darkCard rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-darkBorder flex flex-col relative overflow-hidden group">
                  <div className="flex items-center gap-4">
                      <div className="relative">
-                        {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" /> : <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center font-black text-emerald-600 text-xl border border-emerald-100">{athlete.name.charAt(0)}</div>}
-                        <div className={`absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] border ${index===0?'bg-yellow-400 border-yellow-500 text-yellow-900':'bg-gray-100 border-gray-200 text-gray-600'}`}>#{index+1}</div>
+                        {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-darkBorder shadow-md" /> : <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-darkInput flex items-center justify-center font-black text-emerald-600 dark:text-emerald-400 text-xl border border-emerald-100 dark:border-darkBorder">{athlete.name.charAt(0)}</div>}
+                        <div className={`absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] border ${index===0?'bg-yellow-400 border-yellow-500 text-yellow-900':'bg-gray-100 dark:bg-darkInput border-gray-200 dark:border-darkBorder text-gray-600 dark:text-gray-400'}`}>#{index+1}</div>
                      </div>
-                     <div className="min-w-0"><h3 className="font-black text-gray-800 uppercase tracking-tighter truncate text-sm">{athlete.name}</h3><p className="text-[10px] text-gray-400 font-bold uppercase">{athlete.position} • {getCalculatedCategory(athlete.birthDate)}</p></div>
+                     <div className="min-w-0"><h3 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter truncate text-sm">{athlete.name}</h3><p className="text-[10px] text-gray-400 font-bold uppercase">{athlete.position} • {getCalculatedCategory(athlete.birthDate)}</p></div>
                  </div>
-                 <div className="mt-5 pt-4 border-t border-gray-50 flex justify-between items-end">
-                     <div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Média Técnica</span><div className="text-2xl font-black text-emerald-600 tracking-tighter">{athlete.avgTech.toFixed(1)}</div></div>
-                     <Link to={`/athletes/${athlete.id}`} className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">Perfil</Link>
+                 <div className="mt-5 pt-4 border-t border-gray-50 dark:border-darkBorder flex justify-between items-end">
+                     <div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Média Técnica</span><div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{athlete.avgTech.toFixed(1)}</div></div>
+                     <Link to={`/athletes/${athlete.id}`} className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-darkInput px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">Perfil</Link>
                  </div>
              </div>
          ))}
       </div>
 
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600"/> Seleção Técnica do Momento (4-3-3)</h3>
+      <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden">
+         <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Técnica do Momento (4-3-3)</h3>
          <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
+             {/* Conteúdo do campo se mantém verde, mas podemos escurecer levemente se preferir */}
              <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
              <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
@@ -247,22 +229,22 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm h-[400px]">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Target size={14} className="text-indigo-500"/> Análise Tática Média (Time)</h3>
+          <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm h-[400px]">
+              <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Target size={14} className="text-indigo-500 dark:text-indigo-400"/> Análise Tática Média (Time)</h3>
               <ResponsiveContainer width="100%" height="100%">
                   <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamPhasesRadar}>
-                    <PolarGrid stroke="#f3f4f6" /><PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 800 }} /><PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
+                    <PolarGrid stroke="#334155" /><PolarAngleAxis dataKey="phase" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} /><PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
                     <Radar name="Time" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.4} />
-                    <RechartsTooltip />
+                    <RechartsTooltip contentStyle={{backgroundColor: '#1c2d3c', borderColor: '#2d4558', color: '#fff'}} />
                   </RadarChart>
               </ResponsiveContainer>
           </div>
-          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm h-[400px]">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-500"/> Evolução Técnica Geral</h3>
+          <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm h-[400px]">
+              <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-500 dark:text-emerald-400"/> Evolução Técnica Geral</h3>
               <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={teamEvolutionData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f9fafb" /><XAxis dataKey="date" fontSize={10} fontStyle="italic" stroke="#9ca3af" axisLine={false} tickLine={false} /><YAxis domain={[0, 5]} hide />
-                    <RechartsTooltip contentStyle={{borderRadius:'16px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" /><XAxis dataKey="date" fontSize={10} fontStyle="italic" stroke="#64748b" axisLine={false} tickLine={false} /><YAxis domain={[0, 5]} hide />
+                    <RechartsTooltip contentStyle={{borderRadius:'16px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: '#1c2d3c', color: '#fff'}} />
                     <Line type="monotone" dataKey="tech" stroke="#10b981" strokeWidth={4} dot={{ r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
                   </LineChart>
               </ResponsiveContainer>
