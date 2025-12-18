@@ -1,18 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   getAthletes, 
   getTrainingEntries, 
   getTrainingSessions, 
   saveTrainingEntry,
-  saveTrainingSession,
-  deleteTrainingEntry
+  saveTrainingSession
 } from '../services/storageService';
 import { Athlete, TrainingEntry, TrainingSession, HeatmapPoint, User } from '../types';
-import { ArrowLeft, Save, Trash2, FileText, Loader2, Calendar, AlertCircle } from 'lucide-react';
+import { 
+  ArrowLeft, Save, FileText, Loader2, Calendar, AlertCircle, TrendingUp, TrendingDown, 
+  Target, Zap, Shield, Rocket, Info, ChevronRight, Activity, Filter, MousePointer2
+} from 'lucide-react';
+import { 
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+  LineChart, Line
+} from 'recharts';
 import StatSlider from '../components/StatSlider';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
+
+// --- CONFIGURAÇÃO SEMÂNTICA ---
+const IMPACT_LEVELS = [
+    { min: 0.61, label: 'Impacto Muito Alto', color: 'bg-green-600', text: 'text-green-600', border: 'border-green-600' },
+    { min: 0.30, label: 'Impacto Positivo', color: 'bg-green-400', text: 'text-green-400', border: 'border-green-400' },
+    { min: -0.29, label: 'Impacto Neutro', color: 'bg-gray-400', text: 'text-gray-400', border: 'border-gray-400' },
+    { min: -0.60, label: 'Impacto Negativo', color: 'bg-orange-500', text: 'text-orange-500', border: 'border-orange-500' },
+    { min: -Infinity, label: 'Risco Tático', color: 'bg-red-600', text: 'text-red-600', border: 'border-red-600' }
+];
+
+const getImpact = (score: number) => IMPACT_LEVELS.find(l => score >= l.min) || IMPACT_LEVELS[4];
 
 const AthleteEvaluation: React.FC = () => {
   const { id, entryId } = useParams<{ id: string; entryId?: string }>();
@@ -20,28 +38,17 @@ const AthleteEvaluation: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [athlete, setAthlete] = useState<Athlete | null>(null);
+  const [entry, setEntry] = useState<TrainingEntry | null>(null);
   
-  // Form State
-  const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split('T')[0]);
-  const [currentHeatmapPoints, setCurrentHeatmapPoints] = useState<HeatmapPoint[]>([]);
-  const [currentNotes, setCurrentNotes] = useState('');
-  
-  // Logic for Real Time Filtering
-  const [isRealTimeLog, setIsRealTimeLog] = useState(false);
-  const [registeredKeys, setRegisteredKeys] = useState<Set<string>>(new Set());
+  // Motor de Filtros
+  const [filterPhase, setFilterPhase] = useState<string>('all');
+  const [filterResult, setFilterResult] = useState<string>('all');
+  const [selectedTimePoint, setSelectedTimePoint] = useState<number | null>(null);
+  const [mapMode, setMapMode] = useState<'all' | 'positiva' | 'negativa'>('all');
 
-  const [currentStats, setCurrentStats] = useState({
-    // Condição Física
-    velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-    // Fundamentos
-    controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-    // Tático - Defendendo
-    def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-    // Tático - Construindo
-    const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-    // Tático - Último Terço
-    ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-  });
+  // Dados Brutos (Eventos Táticos extraídos das notas)
+  const [events, setEvents] = useState<any[]>([]);
+  const [trainingDate, setTrainingDate] = useState('');
 
   useEffect(() => {
      const load = async () => {
@@ -55,79 +62,22 @@ const AthleteEvaluation: React.FC = () => {
          const foundAthlete = allAthletes.find(a => a.id === id);
          setAthlete(foundAthlete || null);
 
-         if (entryId && foundAthlete) {
-             const entry = allEntries.find(e => e.id === entryId);
-             if (entry) {
-                 const session = allSessions.find(s => s.id === entry.sessionId);
+         if (entryId) {
+             const foundEntry = allEntries.find(e => e.id === entryId);
+             if (foundEntry) {
+                 setEntry(foundEntry);
+                 const session = allSessions.find(s => s.id === foundEntry.sessionId);
                  if (session) setTrainingDate(session.date);
                  
-                 // Handle Notes and Real Time Logs logic
-                 let displayNotes = entry.notes || '';
-                 let isRT = false;
-                 const keysFound = new Set<string>();
-
+                 // Extrair eventos do JSON nas notas (padrão RealTimeEvaluation)
                  try {
-                    const parsed = JSON.parse(displayNotes);
-                    if (parsed.type === 'REAL_TIME_LOG') {
-                        isRT = true;
-                        displayNotes = `[Log de Tempo Real: ${parsed.totalEvents} ações registradas]`;
-                        
-                        // Parse events to find which stats were actually touched
-                        if (parsed.events && Array.isArray(parsed.events)) {
-                            parsed.events.forEach((evt: any) => {
-                                if (evt.stats) {
-                                    Object.entries(evt.stats).forEach(([key, val]) => {
-                                        if (Number(val) > 0) {
-                                            keysFound.add(key);
-                                        }
-                                    });
-                                }
-                            });
-                        }
+                    const parsed = JSON.parse(foundEntry.notes || '{}');
+                    if (parsed.events) {
+                        setEvents(parsed.events);
                     }
                  } catch (e) {
-                     // Not JSON or standard note
+                     setEvents([]);
                  }
-
-                 setIsRealTimeLog(isRT);
-                 setRegisteredKeys(keysFound);
-                 setCurrentNotes(displayNotes);
-                 setCurrentHeatmapPoints(entry.heatmapPoints || []);
-                 
-                 const reset = resetStats();
-                 setCurrentStats({
-                     ...reset,
-                     ...entry.technical,
-                     ...entry.physical,
-                     ...entry.tactical
-                 });
-             }
-         } else if (foundAthlete) {
-             // Calculate Averages for NEW entry
-             const athleteEntries = allEntries.filter(e => e.athleteId === id);
-             if (athleteEntries.length > 0) {
-                 const defaultKeys = resetStats();
-                 const newStats: any = {};
-                 
-                 Object.keys(defaultKeys).forEach(key => {
-                    let sum = 0;
-                    let count = 0;
-                    
-                    athleteEntries.forEach(entry => {
-                        const val = (entry.technical as any)[key] ?? (entry.physical as any)[key] ?? (entry.tactical as any)?.[key];
-                        if (val !== undefined && val !== null) {
-                            sum += Number(val);
-                            count++;
-                        }
-                    });
-                    
-                    if (count > 0) {
-                        newStats[key] = Math.round((sum / count) * 2) / 2;
-                    } else {
-                        newStats[key] = 5;
-                    }
-                });
-                setCurrentStats(newStats);
              }
          }
          setLoading(false);
@@ -135,259 +85,353 @@ const AthleteEvaluation: React.FC = () => {
      load();
   }, [id, entryId]);
 
-  const resetStats = () => ({
-        velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5,
-        controle_bola: 5, conducao: 5, passe: 5, recepcao: 5, drible: 5, finalizacao: 5, cruzamento: 5, desarme: 5, interceptacao: 5,
-        def_posicionamento: 5, def_pressao: 5, def_cobertura: 5, def_fechamento: 5, def_temporizacao: 5, def_desarme_tatico: 5, def_reacao: 5,
-        const_qualidade_passe: 5, const_visao: 5, const_apoios: 5, const_mobilidade: 5, const_circulacao: 5, const_quebra_linhas: 5, const_tomada_decisao: 5,
-        ult_movimentacao: 5, ult_ataque_espaco: 5, ult_1v1: 5, ult_ultimo_passe: 5, ult_finalizacao_eficiente: 5, ult_ritmo: 5, ult_bolas_paradas: 5
-  });
+  // --- CÁLCULOS TÁTICOS (ESTÁVEIS - CAMADA 1) ---
+  const globalStats = useMemo(() => {
+      if (events.length === 0) return null;
+      
+      const calcPhaseScore = (phase: string) => {
+          const phaseEvents = events.filter(e => e.phase === phase);
+          if (phaseEvents.length === 0) return 0;
+          return phaseEvents.reduce((acc, curr) => acc + curr.eventScore, 0) / phaseEvents.length;
+      };
 
-  const handleSaveTraining = async () => {
-     if (!athlete || !trainingDate) return;
-     
-     let sessionId = null;
-     const allSessions = await getTrainingSessions();
-     
-     // Find or create session
-     const existingSession = allSessions.find(s => s.date === trainingDate && s.teamId === athlete.teamId && s.categoryId === athlete.categoryId);
-     if (existingSession) {
-         sessionId = existingSession.id;
-     } else {
-         sessionId = uuidv4();
-         const newSession: TrainingSession = {
-             id: sessionId,
-             date: trainingDate,
-             teamId: athlete.teamId,
-             categoryId: athlete.categoryId,
-             description: 'Atuação (Perfil)'
-         };
-         await saveTrainingSession(newSession);
-     }
+      const avgGlobal = events.reduce((acc, curr) => acc + curr.eventScore, 0) / events.length;
 
-     // Preserve original notes if it was a real-time log and user didn't change it
-     let notesToSave = currentNotes;
-     if (entryId && isRealTimeLog && currentNotes.startsWith('[Log de Tempo Real')) {
-         const allEntries = await getTrainingEntries();
-         const originalEntry = allEntries.find(e => e.id === entryId);
-         if (originalEntry) notesToSave = originalEntry.notes || '';
-     }
+      return {
+          avgGlobal,
+          radarData: [
+              { phase: 'Org. Ofensiva', A: calcPhaseScore('OFENSIVA'), fullMark: 1.5 },
+              { phase: 'Org. Defensiva', A: calcPhaseScore('DEFENSIVA'), fullMark: 1.5 },
+              { phase: 'Trans. Ofensiva', A: calcPhaseScore('TRANSICAO_OF'), fullMark: 1.5 },
+              { phase: 'Trans. Defensiva', A: calcPhaseScore('TRANSICAO_DEF'), fullMark: 1.5 },
+          ]
+      };
+  }, [events]);
 
-     const entry: TrainingEntry = {
-         id: entryId || uuidv4(),
-         sessionId: sessionId,
-         athleteId: athlete.id,
-         technical: {
-            controle_bola: currentStats.controle_bola, conducao: currentStats.conducao, passe: currentStats.passe,
-            recepcao: currentStats.recepcao, drible: currentStats.drible, finalizacao: currentStats.finalizacao,
-            cruzamento: currentStats.cruzamento, desarme: currentStats.desarme, interceptacao: currentStats.interceptacao
-         },
-         physical: {
-            velocidade: currentStats.velocidade, agilidade: currentStats.agilidade, resistencia: currentStats.resistencia,
-            forca: currentStats.forca, coordenacao: currentStats.coordenacao, mobilidade: currentStats.mobilidade, estabilidade: currentStats.estabilidade
-         },
-         tactical: {
-            def_posicionamento: currentStats.def_posicionamento, def_pressao: currentStats.def_pressao, def_cobertura: currentStats.def_cobertura,
-            def_fechamento: currentStats.def_fechamento, def_temporizacao: currentStats.def_temporizacao, def_desarme_tatico: currentStats.def_desarme_tatico,
-            def_reacao: currentStats.def_reacao,
-            const_qualidade_passe: currentStats.const_qualidade_passe, const_visao: currentStats.const_visao, const_apoios: currentStats.const_apoios,
-            const_mobilidade: currentStats.const_mobilidade, const_circulacao: currentStats.const_circulacao, const_quebra_linhas: currentStats.const_quebra_linhas,
-            const_tomada_decisao: currentStats.const_tomada_decisao,
-            ult_movimentacao: currentStats.ult_movimentacao, ult_ataque_espaco: currentStats.ult_ataque_espaco, ult_1v1: currentStats.ult_1v1,
-            ult_ultimo_passe: currentStats.ult_ultimo_passe, ult_finalizacao_eficiente: currentStats.ult_finalizacao_eficiente,
-            ult_ritmo: currentStats.ult_ritmo, ult_bolas_paradas: currentStats.ult_bolas_paradas
-         },
-         heatmapPoints: currentHeatmapPoints,
-         notes: notesToSave
-     };
-     
-     await saveTrainingEntry(entry);
-     navigate(`/athletes/${athlete.id}`);
-  };
-
-  const handleDelete = async () => {
-      if (entryId && window.confirm('Deseja realmente excluir esta atuação?')) {
-          await deleteTrainingEntry(entryId);
-          navigate(`/athletes/${athlete?.id}`);
+  // --- MOTOR DE DATASET (REATIVO - CAMADAS 2 E 3) ---
+  const filteredDataset = useMemo(() => {
+      let ds = events;
+      if (filterPhase !== 'all') ds = ds.filter(e => e.phase === filterPhase);
+      if (filterResult !== 'all') ds = ds.filter(e => e.result === filterResult);
+      if (selectedTimePoint !== null) {
+          // Filtro por bloco de 5 minutos se clicado na timeline
+          ds = ds.filter(e => e.seconds >= selectedTimePoint && e.seconds < selectedTimePoint + 300);
       }
-  };
+      return ds;
+  }, [events, filterPhase, filterResult, selectedTimePoint]);
 
-  // Helper to check visibility based on Real Time mode
-  const shouldShowStat = (key: string) => {
-      if (!isRealTimeLog) return true; // Show all for normal editing
-      return registeredKeys.has(key);
-  };
+  // Ranking de Impacto Reativo (Lateral Camada 2)
+  const impactRanking = useMemo(() => {
+      const grouped = filteredDataset.reduce((acc: any, curr) => {
+          if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
+          acc[curr.action].score += curr.eventScore;
+          acc[curr.action].count += 1;
+          return acc;
+      }, {});
 
-  // Helper to render a slider conditionally
-  const renderStat = (label: string, key: keyof typeof currentStats) => {
-      if (!shouldShowStat(key as string)) return null;
-      return (
-          <StatSlider 
-              label={label} 
-              value={currentStats[key]} 
-              onChange={v => setCurrentStats(prev => ({...prev, [key]: v}))} 
-          />
-      );
-  };
+      const list = Object.values(grouped).map((g: any) => ({ ...g, avg: g.score / g.count }));
+      return {
+          best: [...list].sort((a, b) => b.avg - a.avg).slice(0, 3),
+          worst: [...list].sort((a, b) => a.avg - b.avg).slice(0, 3)
+      };
+  }, [filteredDataset]);
 
-  // Helper to check if a section should be rendered at all
-  const shouldShowSection = (keysToCheck: (keyof typeof currentStats)[]) => {
-      if (!isRealTimeLog) return true;
-      return keysToCheck.some(key => registeredKeys.has(key as string));
-  };
+  // Gráfico Dominante (Centro Camada 2)
+  const dominantChartData = useMemo(() => {
+      if (filterPhase === 'all') {
+          // Visão Geral: Barras por Fase
+          return globalStats?.radarData.map(d => ({ name: d.phase, score: d.A }));
+      } else {
+          // Visão Detalhada: Ações da Fase Selecionada
+          const actions = filteredDataset.reduce((acc: any, curr) => {
+              if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
+              acc[curr.action].score += curr.eventScore;
+              acc[curr.action].count += 1;
+              return acc;
+          }, {});
+          return Object.values(actions).map((a: any) => ({ name: a.name, score: a.score / a.count }));
+      }
+  }, [filterPhase, filteredDataset, globalStats]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
-  if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
+  // Timeline (Base Camada 3)
+  const timelineData = useMemo(() => {
+      const blocks: any[] = [];
+      const maxSeconds = events.length > 0 ? Math.max(...events.map(e => e.seconds)) : 0;
+      for (let i = 0; i <= maxSeconds; i += 60) {
+          const minEvents = events.filter(e => e.seconds >= i && e.seconds < i + 60);
+          const score = minEvents.length > 0 ? minEvents.reduce((acc, c) => acc + c.eventScore, 0) / minEvents.length : 0;
+          blocks.push({ time: `${Math.floor(i/60)}'`, score, raw: i });
+      }
+      return blocks;
+  }, [events]);
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!athlete) return <div className="p-8 text-center">Atleta não encontrado.</div>;
+
+  const impact = getImpact(globalStats?.avgGlobal || 0);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-        <div className="max-w-5xl mx-auto p-4 md:p-6">
+        <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
             
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm sticky top-0 z-20">
+            {/* Bloco de Dados do Atleta (Mantido conforme solicitado) */}
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                  <div className="flex items-center gap-4">
-                     <button onClick={() => navigate(`/athletes/${athlete.id}`)} className="text-gray-500 hover:text-blue-600">
+                     <button onClick={() => navigate(`/athletes/${athlete.id}`)} className="text-gray-400 hover:text-blue-600 transition-colors">
                          <ArrowLeft size={24} />
                      </button>
-                     <div>
-                         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                             {entryId ? 'Editar Atuação' : 'Nova Atuação'}
-                         </h2>
-                         <p className="text-sm text-gray-500">{athlete.name} • {athlete.position}</p>
+                     <div className="flex items-center gap-3">
+                         {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600">{athlete.name.charAt(0)}</div>}
+                         <div>
+                            <h2 className="text-lg font-bold text-gray-800 leading-none">{athlete.name}</h2>
+                            <p className="text-xs text-gray-500 mt-1 uppercase font-bold tracking-wider">{athlete.position} • {trainingDate}</p>
+                         </div>
                      </div>
                  </div>
-                 
-                 <div className="flex items-center gap-3">
-                     <input 
-                       type="date" 
-                       value={trainingDate} 
-                       onChange={(e) => setTrainingDate(e.target.value)} 
-                       className="text-sm font-bold text-gray-700 bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" 
-                     />
-                     {entryId && (
-                         <button onClick={handleDelete} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" title="Excluir">
-                             <Trash2 size={20} />
-                         </button>
-                     )}
+                 <div className="flex items-center gap-2">
+                    <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-blue-200">
+                        <Save size={16} /> Salvar Alterações
+                    </button>
                  </div>
             </div>
 
-            {isRealTimeLog && (
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 flex items-center gap-3 animate-fade-in">
-                    <AlertCircle className="text-blue-600" />
-                    <p className="text-blue-800 text-sm">
-                        Esta é uma análise de tempo real. Apenas os indicadores registrados durante o jogo estão sendo exibidos. 
-                        <span className="font-bold ml-1">Indicadores não avaliados foram ocultados.</span>
-                    </p>
+            {/* CAMADA 1 — PERFIL TÁTICO (FIXO) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center gap-8">
+                    <div className="w-full md:w-1/2 h-[220px]">
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Target size={14}/> Dominância por Fase</h3>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={globalStats?.radarData || []}>
+                                <PolarGrid stroke="#e5e7eb" />
+                                <PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 700 }} />
+                                <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
+                                <Radar name="Score" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.5} />
+                            </RadarChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="w-full md:w-1/2 space-y-6">
+                        <div>
+                            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Activity size={14}/> Impacto Geral no Jogo</h3>
+                            <div className="relative h-4 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                <div 
+                                    className={`absolute inset-y-0 left-0 transition-all duration-1000 ${impact.color}`}
+                                    style={{ width: `${Math.max(0, Math.min(100, ((globalStats?.avgGlobal || 0) + 1.5) / 3 * 100))}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between items-center mt-2">
+                                <span className={`text-lg font-black uppercase tracking-tighter ${impact.text}`}>{impact.label}</span>
+                                <span className="text-2xl font-mono font-black text-gray-800">{(globalStats?.avgGlobal || 0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">Ações Analisadas</p>
+                            <p className="text-xl font-black text-gray-800">{events.length} <span className="text-xs text-gray-400 font-medium">cliques táticos registrados</span></p>
+                        </div>
+                    </div>
                 </div>
-            )}
 
-            <div className="space-y-6">
-                  {/* Heatmap Input */}
-                  <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                       <HeatmapField 
-                          points={currentHeatmapPoints} 
-                          onChange={setCurrentHeatmapPoints} 
-                          label="Mapa de Calor (Toque para marcar)" 
-                       />
-                  </div>
-
-                  {/* Stats Sliders */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {/* Defendendo */}
-                      {shouldShowSection(['def_posicionamento', 'def_pressao', 'def_cobertura', 'def_fechamento', 'def_temporizacao', 'def_desarme_tatico', 'def_reacao']) && (
-                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
-                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Defendendo</h4>
-                               {renderStat("Posicionamento", "def_posicionamento")}
-                               {renderStat("Pressão", "def_pressao")}
-                               {renderStat("Cobertura", "def_cobertura")}
-                               {renderStat("Fechamento", "def_fechamento")}
-                               {renderStat("Temporização", "def_temporizacao")}
-                               {renderStat("Desarme Tát.", "def_desarme_tatico")}
-                               {renderStat("Reação", "def_reacao")}
-                          </div>
-                      )}
-
-                      {/* Construindo */}
-                      {shouldShowSection(['const_qualidade_passe', 'const_visao', 'const_apoios', 'const_mobilidade', 'const_circulacao', 'const_quebra_linhas', 'const_tomada_decisao']) && (
-                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
-                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Construindo</h4>
-                               {renderStat("Qual. Passe", "const_qualidade_passe")}
-                               {renderStat("Visão", "const_visao")}
-                               {renderStat("Apoios", "const_apoios")}
-                               {renderStat("Mobilidade", "const_mobilidade")}
-                               {renderStat("Circulação", "const_circulacao")}
-                               {renderStat("Quebra Linhas", "const_quebra_linhas")}
-                               {renderStat("Decisão", "const_tomada_decisao")}
-                          </div>
-                      )}
-
-                      {/* Último Terço */}
-                      {shouldShowSection(['ult_movimentacao', 'ult_ataque_espaco', 'ult_1v1', 'ult_ultimo_passe', 'ult_finalizacao_eficiente', 'ult_ritmo', 'ult_bolas_paradas']) && (
-                          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 h-fit">
-                               <h4 className="text-sm uppercase font-bold text-purple-700 mb-4 border-b border-purple-200 pb-2">Último Terço</h4>
-                               {renderStat("Movimentação", "ult_movimentacao")}
-                               {renderStat("Atq Espaço", "ult_ataque_espaco")}
-                               {renderStat("1v1", "ult_1v1")}
-                               {renderStat("Último Passe", "ult_ultimo_passe")}
-                               {renderStat("Finalização", "ult_finalizacao_eficiente")}
-                               {renderStat("Ritmo", "ult_ritmo")}
-                               {renderStat("Bolas Paradas", "ult_bolas_paradas")}
-                          </div>
-                      )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Technical */}
-                      {shouldShowSection(['controle_bola', 'conducao', 'passe', 'recepcao', 'drible', 'finalizacao', 'cruzamento', 'desarme', 'interceptacao']) && (
-                          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 h-fit">
-                               <h4 className="text-sm uppercase font-bold text-blue-700 mb-4 border-b border-blue-200 pb-2">Fundamentos</h4>
-                               {renderStat("Controle", "controle_bola")}
-                               {renderStat("Condução", "conducao")}
-                               {renderStat("Passe", "passe")}
-                               {renderStat("Recepção", "recepcao")}
-                               {renderStat("Drible", "drible")}
-                               {renderStat("Finalização", "finalizacao")}
-                               {renderStat("Cruzamento", "cruzamento")}
-                               {renderStat("Desarme", "desarme")}
-                               {renderStat("Intercept.", "interceptacao")}
-                          </div>
-                      )}
-
-                      {/* Physical */}
-                      {shouldShowSection(['velocidade', 'agilidade', 'resistencia', 'forca', 'coordenacao', 'mobilidade', 'estabilidade']) && (
-                          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 h-fit">
-                               <h4 className="text-sm uppercase font-bold text-orange-700 mb-4 border-b border-orange-200 pb-2">Físico</h4>
-                               {renderStat("Velocidade", "velocidade")}
-                               {renderStat("Agilidade", "agilidade")}
-                               {renderStat("Resistência", "resistencia")}
-                               {renderStat("Força", "forca")}
-                               {renderStat("Coordenação", "coordenacao")}
-                               {renderStat("Mobilidade", "mobilidade")}
-                               {renderStat("Estabilidade", "estabilidade")}
-                          </div>
-                      )}
-                  </div>
-
-                  <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                      <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                          <FileText size={16} /> Observações
-                      </h4>
-                      <textarea 
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 h-32"
-                        value={currentNotes}
-                        onChange={(e) => setCurrentNotes(e.target.value)}
-                        placeholder="Notas sobre a atuação..."
-                      ></textarea>
-                  </div>
-
-                  <button 
-                    onClick={handleSaveTraining}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 text-lg"
-                  >
-                      <Save size={20} /> Salvar Atuação
-                  </button>
+                {/* Filtros Ativos (Invisíveis/Motor) */}
+                <div className="bg-blue-900 text-white p-6 rounded-2xl shadow-xl flex flex-col justify-between">
+                    <h3 className="text-xs font-black text-blue-300 uppercase tracking-widest mb-4 flex items-center gap-2"><Filter size={14}/> Filtros de Contexto</h3>
+                    <div className="space-y-3">
+                        <select 
+                            value={filterPhase} 
+                            onChange={(e) => setFilterPhase(e.target.value)}
+                            className="w-full bg-blue-800 border-none rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-blue-400"
+                        >
+                            <option value="all">Todas as Fases</option>
+                            <option value="OFENSIVA">Organização Ofensiva</option>
+                            <option value="DEFENSIVA">Organização Defensiva</option>
+                            <option value="TRANSICAO_OF">Transição Ofensiva</option>
+                            <option value="TRANSICAO_DEF">Transição Defensiva</option>
+                        </select>
+                        <select 
+                            value={filterResult} 
+                            onChange={(e) => setFilterResult(e.target.value)}
+                            className="w-full bg-blue-800 border-none rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-blue-400"
+                        >
+                            <option value="all">Todos os Resultados</option>
+                            <option value="POSITIVA">Ações Positivas</option>
+                            <option value="NEUTRA">Ações Neutras</option>
+                            <option value="NEGATIVA">Ações Negativas</option>
+                        </select>
+                        <button 
+                            onClick={() => {setFilterPhase('all'); setFilterResult('all'); setSelectedTimePoint(null);}}
+                            className="w-full py-2 text-[10px] font-black uppercase text-blue-300 hover:text-white transition-colors underline decoration-blue-500 underline-offset-4"
+                        >
+                            Limpar todos os filtros
+                        </button>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-blue-800 flex items-center gap-2">
+                        <Info size={12} className="text-blue-400" />
+                        <span className="text-[9px] text-blue-400 font-medium uppercase">Datasets com menos de 5 eventos são ocultados.</span>
+                    </div>
+                </div>
             </div>
+
+            {/* CAMADA 2 — CONTEXTO DE DESEMPENHO (REATIVO) */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative min-h-[350px]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2">
+                           {filterPhase === 'all' ? <Activity size={18} className="text-blue-500"/> : <Zap size={18} className="text-yellow-500"/>}
+                           {filterPhase === 'all' ? 'Desempenho por Fase do Jogo' : `Impacto das Ações: ${filterPhase.replace('_', ' ')}`}
+                        </h3>
+                    </div>
+
+                    {filteredDataset.length >= 5 ? (
+                        <div className="h-[250px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={dominantChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 10, fontWeight: 700}} />
+                                    <YAxis domain={[-1.5, 1.5]} axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 10}} />
+                                    <Tooltip 
+                                        cursor={{fill: '#f9fafb'}}
+                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                                    />
+                                    <Bar dataKey="score" radius={[6, 6, 0, 0]} barSize={40}>
+                                        {dominantChartData?.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.score >= 0.3 ? '#10b981' : entry.score <= -0.3 ? '#ef4444' : '#9ca3af'} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-[250px] flex flex-col items-center justify-center text-gray-400 gap-2">
+                            <AlertCircle size={32} className="opacity-20" />
+                            <p className="text-sm font-bold uppercase tracking-widest opacity-50">Volume Insuficiente para Análise</p>
+                            <p className="text-[10px] text-center max-w-xs">Filtros muito restritos impedem uma leitura estatística confiável. Tente ampliar o contexto.</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={12}/> Top Impacto</h3>
+                    </div>
+                    <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+                        <div>
+                            <span className="text-[9px] font-bold text-green-600 uppercase mb-2 block tracking-tight">Melhores Decisões</span>
+                            <div className="space-y-1">
+                                {impactRanking.best.map((a, i) => (
+                                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-green-50 border border-green-100">
+                                        <span className="text-xs font-black text-green-800 truncate pr-2">{a.name}</span>
+                                        <span className="text-xs font-mono font-black text-green-600">+{a.avg.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="border-t border-dashed border-gray-100 pt-4">
+                            <span className="text-[9px] font-bold text-red-500 uppercase mb-2 block tracking-tight">Risco/Atenção</span>
+                            <div className="space-y-1">
+                                {impactRanking.worst.map((a, i) => (
+                                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-red-50 border border-red-100">
+                                        <span className="text-xs font-black text-red-800 truncate pr-2">{a.name}</span>
+                                        <span className="text-xs font-mono font-black text-red-600">{a.avg.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* CAMADA 3 — ESPAÇO E TEMPO (DINÂMICA) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><MousePointer2 size={14}/> Distribuição Espacial</h3>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            {(['all', 'positiva', 'negativa'] as const).map(mode => (
+                                <button 
+                                    key={mode} 
+                                    onClick={() => setMapMode(mode)}
+                                    className={`px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all ${mapMode === mode ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}
+                                >
+                                    {mode === 'all' ? 'Todas' : mode === 'positiva' ? 'Sucesso' : 'Erro'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                        <HeatmapField 
+                            perspective={true} 
+                            readOnly={true} 
+                            points={filteredDataset.filter(e => {
+                                if (mapMode === 'all') return true;
+                                return mapMode === 'positiva' ? e.result === 'POSITIVA' : e.result === 'NEGATIVA';
+                            }).map(e => e.location)} 
+                        />
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col h-full">
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Activity size={14}/> Timeline de Intensidade</h3>
+                    <div className="flex-1 min-h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart 
+                                data={timelineData} 
+                                onClick={(data) => {
+                                    if (data && data.activePayload) {
+                                        setSelectedTimePoint(data.activePayload[0].payload.raw);
+                                    }
+                                }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 10}} />
+                                <YAxis domain={[-1.5, 1.5]} hide />
+                                <Tooltip 
+                                    cursor={{stroke: '#2563eb', strokeWidth: 2}}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                            return (
+                                                <div className="bg-gray-900 text-white p-2 rounded-lg text-[10px] font-bold shadow-xl border border-gray-700">
+                                                    <p>{payload[0].payload.time}: Impacto {payload[0].value?.toFixed(2)}</p>
+                                                    <p className="text-blue-400 mt-1">Clique para filtrar este período</p>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="score" 
+                                    stroke="#2563eb" 
+                                    strokeWidth={3} 
+                                    dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }} 
+                                    activeDot={{ r: 6, strokeWidth: 0 }}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                    {selectedTimePoint !== null && (
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl flex justify-between items-center animate-fade-in">
+                            <span className="text-xs font-bold text-blue-700">Filtro Temporal Ativo: Minutos {Math.floor(selectedTimePoint/60)} a {Math.floor(selectedTimePoint/60) + 5}</span>
+                            <button onClick={() => setSelectedTimePoint(null)} className="text-[10px] font-black text-blue-500 uppercase hover:text-blue-800 transition-colors">Remover</button>
+                        </div>
+                    )}
+                    <p className="text-[10px] text-gray-400 font-medium mt-4 text-center">Clique nos pontos da linha para isolar momentos específicos do jogo.</p>
+                </div>
+            </div>
+
+            {/* Observações de Campo */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><FileText size={14}/> Observações e Notas Técnicas</h3>
+                <div className="prose prose-sm max-w-none text-gray-600 italic">
+                    {entry?.notes?.startsWith('[Log') ? (
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-3">
+                            <Info className="text-blue-500 shrink-0" size={20} />
+                            <p className="text-blue-700 text-sm font-medium">Os dados desta sessão foram capturados através da ferramenta de <span className="font-bold underline">Análise em Tempo Real</span>. Os scores e mapas de calor foram gerados automaticamente pelo algoritmo de impacto.</p>
+                        </div>
+                    ) : (
+                        <p>{entry?.notes || 'Nenhuma observação registrada para esta sessão.'}</p>
+                    )}
+                </div>
+            </div>
+
         </div>
     </div>
   );
