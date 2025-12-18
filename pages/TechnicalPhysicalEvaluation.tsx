@@ -1,13 +1,13 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   getAthletes, 
-  saveEvaluationSession,
-  getEvaluationSessions
+  saveEvaluationSession
 } from '../services/storageService';
 import { Athlete, EvaluationType, EvaluationSession, TechnicalEvaluation, PhysicalEvaluation, User } from '../types';
 import { 
-  ArrowLeft, Save, X, Loader2, Calendar as CalendarIcon, Info, ClipboardCheck, TrendingUp, Activity, User as UserIcon, CheckCircle
+  ArrowLeft, Save, X, Loader2, Calendar as CalendarIcon, Info, ClipboardCheck, TrendingUp, Activity, User as UserIcon, CheckCircle, Target
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -36,14 +36,11 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
     const [athlete, setAthlete] = useState<Athlete | null>(null);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-    // Session Data
     const [evalDate, setEvalDate] = useState(new Date().toISOString().split('T')[0]);
     const [evalType, setEvalType] = useState<EvaluationType>(EvaluationType.MENSUAL);
     const [notes, setNotes] = useState('');
 
-    // Tech State
     const [techScores, setTechScores] = useState<Record<string, number>>({});
-    // Phys State
     const [physInputs, setPhysInputs] = useState<Record<string, { val: string, score: number }>>({});
 
     useEffect(() => {
@@ -65,67 +62,64 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
     };
 
     const handlePhysInput = (cap: string, value: string, directScore?: number) => {
-        // Simple normalization: if value is provided and can be scored, or use direct score 1-5
         let score = directScore || 0;
         if (!directScore) {
-            // Placeholder logic for normalization. In a real app, this would use tables based on category/position.
-            const num = parseFloat(value);
-            if (!isNaN(num)) score = Math.min(5, Math.max(1, num / 20)); // Dummy map
+            const num = parseFloat(value.replace(',', '.'));
+            if (!isNaN(num)) score = Math.min(5, Math.max(1, num / 2)); 
         }
         setPhysInputs(prev => ({ ...prev, [cap]: { val: value, score } }));
     };
 
     const calculateScores = () => {
-        // Fix Error in file pages/TechnicalPhysicalEvaluation.tsx on line 80: Explicitly cast Object.values to number[]
         const techVals = Object.values(techScores) as number[];
         const avgTech = techVals.length > 0 ? (techVals.reduce((a, b) => a + b, 0) / techVals.length) : 0;
         
-        // Fix Error in file pages/TechnicalPhysicalEvaluation.tsx on line 82: Explicitly cast Object.values to the specific entry type
+        // Físico é normalizado para 0-100 para persistência no BD e exibição
         const physVals = (Object.values(physInputs) as { val: string, score: number }[]).map(i => i.score);
-        const avgPhys = physVals.length > 0 ? (physVals.reduce((a, b) => a + b, 0) / physVals.length) : 0;
+        const avgPhysRaw = physVals.length > 0 ? (physVals.reduce((a, b) => a + b, 0) / physVals.length) : 0;
+        const avgPhysNormalized = (avgPhysRaw / 5) * 100;
         
-        return { avgTech, avgPhys };
+        return { avgTech, avgPhysNormalized };
     };
 
     const handleSave = async () => {
         if (!athlete || !currentUser) return;
         setSaving(true);
-
-        const { avgTech, avgPhys } = calculateScores();
+        const { avgTech, avgPhysNormalized } = calculateScores();
         const sessionId = uuidv4();
 
         const session: EvaluationSession = {
-            id: sessionId,
-            athleteId: athlete.id,
-            date: evalDate,
+            id: sessionId, 
+            athleteId: athlete.id, 
+            date: evalDate, 
             type: evalType,
-            evaluatorId: currentUser.id,
-            scoreTecnico: avgTech,
-            scoreFisico: avgPhys,
+            evaluatorId: currentUser.id, 
+            scoreTecnico: avgTech, 
+            scoreFisico: avgPhysNormalized, 
             notes
         };
 
-        // Fix Error in file pages/TechnicalPhysicalEvaluation.tsx on line 106: Explicitly cast Object.entries to ensure types are correct
         const technicals: TechnicalEvaluation[] = (Object.entries(techScores) as [string, number][]).map(([key, nota]) => {
             const [fundamento, subfundamento] = key.split('|');
             return { sessionId, fundamento, subfundamento, nota };
         });
 
-        // Fix Error in file pages/TechnicalPhysicalEvaluation.tsx on lines 114 and 115: Explicitly cast Object.entries to ensure types are correct
         const physicals: PhysicalEvaluation[] = (Object.entries(physInputs) as [string, { val: string, score: number }][]).map(([capacidade, data]) => ({
-            sessionId,
-            capacidade,
+            sessionId, 
+            capacidade, 
             valorBruto: data.val,
-            scoreNormalizado: (data.score / 5) * 100 // Normalize to 0-100
+            scoreNormalizado: (data.score / 5) * 100
         }));
 
         try {
+            // Chamada ao serviço de persistência
             await saveEvaluationSession(session, technicals, physicals);
             navigate(`/athletes/${athlete.id}`);
-        } catch (err) {
-            alert("Erro ao salvar avaliação.");
-        } finally {
-            setSaving(false);
+        } catch (err: any) { 
+            console.error("Erro detalhado ao salvar snapshot:", err);
+            alert("Erro ao salvar avaliação. Verifique a conexão ou as permissões do banco."); 
+        } finally { 
+            setSaving(false); 
         }
     };
 
@@ -136,79 +130,87 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 pb-32">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-30 px-6 py-4 flex items-center justify-between shadow-sm">
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-4">
                     <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-400 hover:text-blue-600"><ArrowLeft size={24}/></button>
-                    <div>
-                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2">
-                            <ClipboardCheck className="text-blue-600" /> Avaliação Técnica & Física
-                        </h2>
-                        <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{athlete.name} • {athlete.position}</p>
+                    <div className="flex items-center gap-3">
+                        {athlete.photoUrl ? (
+                            <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-blue-50 shadow-sm" alt="" />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 uppercase">{athlete.name.charAt(0)}</div>
+                        )}
+                        <div>
+                            <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2">
+                                <ClipboardCheck className="text-blue-600" size={20} /> Avaliação TÉC & FIS
+                            </h2>
+                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{athlete.name} • {athlete.position}</p>
+                        </div>
                     </div>
                 </div>
-                <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200 hidden md:block">
-                    <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${fillProgress * 100}%` }}></div>
+                <div className="flex items-center gap-3">
+                    <div className="hidden md:flex flex-col items-end">
+                        <span className="text-[8px] font-black text-gray-400 uppercase">Preenchimento</span>
+                        <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
+                            <div className="h-full bg-blue-600 transition-all duration-700" style={{ width: `${fillProgress * 100}%` }}></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto p-6 space-y-8">
-                
-                {/* SEÇÃO 1 – Dados da Sessão */}
-                <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-10">
+                <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
                     <div className="md:col-span-3 pb-2 border-b border-gray-100">
-                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Dados da Sessão</h3>
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Contexto da Sessão</h3>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Data da Avaliação</label>
-                        <input type="date" value={evalDate} onChange={e=>setEvalDate(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Data da Avaliação</label>
+                        <input type="date" value={evalDate} onChange={e=>setEvalDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Tipo de Avaliação</label>
-                        <select value={evalType} onChange={e=>setEvalType(e.target.value as EvaluationType)} className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Objetivo</label>
+                        <select value={evalType} onChange={e=>setEvalType(e.target.value as EvaluationType)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500">
                             {Object.values(EvaluationType).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Avaliador</label>
-                        <div className="w-full bg-gray-100 border border-gray-200 rounded-xl p-3 text-sm font-bold text-gray-500 flex items-center gap-2">
-                            <UserIcon size={14} /> {currentUser?.name}
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Avaliador Responsável</label>
+                        <div className="w-full bg-gray-100 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-500 flex items-center gap-2">
+                            <UserIcon size={12} /> {currentUser?.name}
                         </div>
                     </div>
                     <div className="md:col-span-3">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Observações Gerais</label>
-                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 h-20" placeholder="Histórico clínico, pontos de destaque ou comportamentais..."></textarea>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Observações Técnicas</label>
+                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-blue-500 h-16" placeholder="Notas sobre histórico, comportamento ou objetivos específicos..."></textarea>
                     </div>
                 </section>
 
-                {/* SEÇÃO 2 – Avaliação dos Fundamentos Técnicos */}
                 <section className="space-y-6">
-                    <div className="flex items-center gap-3 pb-2 border-b-2 border-blue-100">
+                    <div className="flex items-center gap-3 pb-3 border-b-2 border-blue-100">
                         <TrendingUp className="text-blue-600" />
-                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliação Técnica (Fundamentos)</h2>
+                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Fundamentos Técnicos</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {TECH_CONFIG.map((group, idx) => (
-                            <div key={idx} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <div className="w-2 h-4 bg-blue-600 rounded"></div> {group.fundamento}
+                            <div key={idx} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-5 flex items-center gap-2">
+                                    <Target size={14} className="text-blue-400"/> {group.fundamento}
                                 </h4>
                                 <div className="space-y-6">
                                     {group.subs.map(sub => (
-                                        <div key={sub} className="space-y-2">
+                                        <div key={sub} className="space-y-3">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-gray-600">{sub}</span>
-                                                <span className="text-[10px] font-black text-blue-500 uppercase">{techScores[`${group.fundamento}|${sub}`] ? `Nível ${techScores[`${group.fundamento}|${sub}`]}` : 'Não avaliado'}</span>
+                                                <span className="text-[11px] font-bold text-gray-600">{sub}</span>
+                                                <span className="text-[9px] font-black text-blue-500 uppercase">{techScores[`${group.fundamento}|${sub}`] ? `Nota ${techScores[`${group.fundamento}|${sub}`]}` : 'Aguardando'}</span>
                                             </div>
-                                            <div className="grid grid-cols-5 gap-1">
+                                            <div className="grid grid-cols-5 gap-1.5">
                                                 {[1, 2, 3, 4, 5].map(score => (
                                                     <button 
                                                         key={score} 
                                                         onClick={() => handleTechScore(group.fundamento, sub, score)}
-                                                        className={`py-3 rounded-lg text-xs font-black transition-all border-2 
+                                                        className={`py-3 rounded-lg text-[10px] font-black transition-all border-2 
                                                             ${techScores[`${group.fundamento}|${sub}`] === score 
-                                                                ? 'bg-blue-600 text-white border-blue-700 shadow-inner scale-95' 
-                                                                : 'bg-gray-50 text-gray-400 border-gray-100 hover:border-blue-200'}`}
+                                                                ? 'bg-blue-600 text-white border-blue-700 shadow-lg scale-95' 
+                                                                : 'bg-gray-50 text-gray-300 border-gray-100 hover:border-blue-200'}`}
                                                     >
                                                         {score}
                                                     </button>
@@ -222,42 +224,43 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                     </div>
                 </section>
 
-                {/* SEÇÃO 3 – Avaliação da Condição Física */}
                 <section className="space-y-6">
-                    <div className="flex items-center gap-3 pb-2 border-b-2 border-orange-100">
+                    <div className="flex items-center gap-3 pb-3 border-b-2 border-orange-100">
                         <Activity className="text-orange-600" />
-                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliação Física (Capacidades)</h2>
+                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Condição Física & Capacidades</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {PHYS_CONFIG.map((group, idx) => (
                             <div key={idx} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                                <h4 className="text-sm font-black text-orange-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <div className="w-2 h-4 bg-orange-600 rounded"></div> {group.cat}
+                                <h4 className="text-[11px] font-black text-orange-900 uppercase tracking-widest mb-5 flex items-center gap-2">
+                                    <div className="w-1.5 h-3 bg-orange-600 rounded-full"></div> {group.cat}
                                 </h4>
-                                <div className="space-y-6">
+                                <div className="space-y-5">
                                     {group.caps.map(cap => (
-                                        <div key={cap} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                        <div key={cap} className="space-y-3 p-4 bg-gray-50/50 rounded-xl border border-gray-100">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-gray-600">{cap}</span>
-                                                <div className="h-1.5 w-16 bg-gray-200 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-orange-500 transition-all" style={{ width: `${(physInputs[cap]?.score || 0) * 20}%` }}></div>
+                                                <span className="text-[10px] font-black text-gray-500 uppercase">{cap}</span>
+                                                <div className="flex gap-0.5">
+                                                    {[1,2,3,4,5].map(s => (
+                                                        <div key={s} className={`h-1 w-3 rounded-full ${physInputs[cap]?.score >= s ? 'bg-orange-500' : 'bg-gray-200'}`}></div>
+                                                    ))}
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
                                                 <input 
                                                     type="text" 
-                                                    placeholder="Valor bruto (ex: 5.2s)" 
+                                                    placeholder="Valor bruto (ex: 30m)" 
                                                     value={physInputs[cap]?.val || ''}
                                                     onChange={e => handlePhysInput(cap, e.target.value)}
-                                                    className="flex-1 bg-white border border-gray-300 rounded-lg p-2 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none"
+                                                    className="flex-1 bg-white border border-gray-200 rounded-lg p-3 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none"
                                                 />
                                                 <div className="flex gap-1">
                                                     {[1,2,3,4,5].map(s => (
                                                         <button 
                                                             key={s} 
                                                             onClick={() => handlePhysInput(cap, physInputs[cap]?.val || '', s)}
-                                                            className={`w-6 h-8 rounded text-[10px] font-black transition-all
-                                                                ${physInputs[cap]?.score === s ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-400'}`}
+                                                            className={`w-7 h-10 rounded-lg text-[10px] font-black transition-all
+                                                                ${physInputs[cap]?.score === s ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-gray-300 border border-gray-200'}`}
                                                         >
                                                             {s}
                                                         </button>
@@ -273,17 +276,16 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                 </section>
             </div>
 
-            {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex justify-center">
-                <div className="max-w-5xl w-full flex gap-4">
-                    <button onClick={() => navigate(`/athletes/${id}`)} className="flex-1 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-gray-200 transition-all">Cancelar</button>
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-40 flex justify-center">
+                <div className="max-w-4xl w-full flex gap-4">
+                    <button onClick={() => navigate(`/athletes/${id}`)} className="flex-1 bg-gray-50 text-gray-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-gray-100 transition-all">Cancelar</button>
                     <button 
                         onClick={handleSave} 
                         disabled={saving}
-                        className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-xs hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        {saving ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle size={18} />}
-                        {saving ? 'Salvando...' : 'Salvar Avaliação Estruturada'}
+                        {saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
+                        {saving ? 'Processando...' : 'Salvar Snapshot de Avaliação'}
                     </button>
                 </div>
             </div>

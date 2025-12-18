@@ -13,7 +13,7 @@ import {
 import { 
   Edit, ArrowLeft, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
   TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye, Info,
-  Plus // Added missing Plus icon
+  Plus, ChevronDown, ChevronUp
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
@@ -44,6 +44,7 @@ const AthleteProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [showCalendar, setShowCalendar] = useState(false); // Sanfona recolhida por padrão
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
@@ -248,9 +249,24 @@ const AthleteProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* BLOCO 2: CALENDÁRIO INDEPENDENTE */}
-      <div className="animate-fade-in">
-        {renderCalendar()}
+      {/* BLOCO 2: CALENDÁRIO INDEPENDENTE (SANFONA) */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-in">
+        <button 
+          onClick={() => setShowCalendar(!showCalendar)}
+          className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-400 tracking-widest">
+            <CalendarIcon size={16} className="text-blue-500" />
+            Calendário de Atividades {filterDate && `(Filtro: ${new Date(filterDate).toLocaleDateString()})`}
+          </div>
+          {showCalendar ? <ChevronUp size={20} className="text-gray-400" /> : <ChevronDown size={20} className="text-gray-400" />}
+        </button>
+        
+        {showCalendar && (
+          <div className="p-4 bg-gray-50/30 border-t border-gray-50">
+            {renderCalendar()}
+          </div>
+        )}
       </div>
 
       {/* BLOCO 3: ABAS DE NAVEGAÇÃO */}
@@ -302,12 +318,13 @@ const AthleteProfile: React.FC = () => {
                             </div>
                         </div>
                 </div>
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                {/* BLOCO TOP IMPACTO - Ajustado para não ter barra de rolagem */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-full min-h-[300px]">
                         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3>
                             <TrendingUp size={14} className="text-gray-300"/>
                         </div>
-                        <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[300px]">
+                        <div className="flex-1 p-4 space-y-4">
                             {impactRanking.best.length > 0 ? (
                                 <>
                                     <div>
