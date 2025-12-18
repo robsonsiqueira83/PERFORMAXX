@@ -8,14 +8,14 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon, UserPlus, Search } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
   currentTeamId: string;
 }
 
-type ModalType = 'none' | 'edit_team' | 'edit_category' | 'edit_my_profile' | 'alert_error' | 'alert_success' | 'edit_staff_role' | 'confirm_delete';
+type ModalType = 'none' | 'edit_team' | 'edit_category' | 'edit_my_profile' | 'alert_error' | 'alert_success' | 'edit_staff_role' | 'confirm_delete' | 'invite_staff';
 
 const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [activeTab, setActiveTab] = useState<'teams' | 'categories'>(() => {
@@ -39,6 +39,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [modalMessage, setModalMessage] = useState<string>(''); 
   const [formData, setFormData] = useState<{ name: string, logoUrl?: string }>({ name: '', logoUrl: '' });
   const [profileData, setProfileData] = useState<{ name: string, avatarUrl?: string }>({ name: '', avatarUrl: '' });
+  const [inviteStaffUserId, setInviteStaffUserId] = useState('');
 
   const refreshData = async () => {
     setLoading(true);
@@ -80,6 +81,31 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         refreshData();
     } catch (err: any) { setModalType('alert_error'); setModalMessage(err.message); }
     finally { setLoading(false); }
+  };
+
+  const handleInviteStaff = async () => {
+      if (!inviteStaffUserId || !targetId) return;
+      setLoading(true);
+      try {
+          const found = allUsers.find(u => u.id === inviteStaffUserId.trim());
+          if (!found) throw new Error("Usuário não encontrado com este ID.");
+          
+          const currentIds = found.teamIds || [];
+          if (currentIds.includes(targetId) || currentIds.includes(`pending:${targetId}`)) {
+              throw new Error("Usuário já possui acesso ou convite para esta equipe.");
+          }
+          
+          await saveUser({ ...found, teamIds: [...currentIds, `pending:${targetId}`] });
+          setModalType('alert_success');
+          setModalMessage(`Convite enviado para ${found.name}!`);
+          setInviteStaffUserId('');
+          refreshData();
+      } catch (err: any) {
+          setModalType('alert_error');
+          setModalMessage(err.message);
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleSaveProfile = async () => {
@@ -180,8 +206,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     </div>
                 </div>
                 {isOwner ? (
-                    <div className="flex gap-2 w-full md:w-auto">
+                    <div className="flex gap-2 w-full md:w-auto flex-wrap">
                         <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="flex-1 md:flex-none bg-gray-50 text-indigo-600 hover:bg-indigo-50 p-3 rounded-xl border border-gray-100 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2"><Edit size={16}/> Editar</button>
+                        <button onClick={() => { setTargetId(team.id); setModalType('invite_staff'); }} className="flex-1 md:flex-none bg-indigo-600 text-white hover:bg-indigo-700 p-3 rounded-xl transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg"><UserPlus size={16}/> Convidar Staff</button>
                         <button onClick={() => { setTargetId(team.id); setDeleteType('team'); setModalMessage(`Deseja realmente excluir a equipe "${team.name}"?`); setModalType('confirm_delete'); }} className="bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 transition-all"><Trash2 size={16}/></button>
                     </div>
                 ) : (
@@ -223,23 +250,25 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             <div className="space-y-3">
                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block border-b pb-1">Comissão Técnica / Staff</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {members.map(u => (
-                        <div key={u.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 px-3 py-2 rounded-2xl group/staff">
+                    {members.map(u => {
+                        const isPending = u.teamIds?.includes(`pending:${team.id}`);
+                        return (
+                        <div key={u.id} className={`flex items-center justify-between border px-3 py-2 rounded-2xl group/staff transition-all ${isPending ? 'bg-yellow-50/50 border-yellow-100 italic' : 'bg-gray-50 border-gray-100'}`}>
                             <div className="flex items-center gap-2 min-w-0">
-                                {u.avatarUrl ? <img src={u.avatarUrl} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[8px] font-bold text-blue-600">{u.name.charAt(0)}</div>}
+                                {u.avatarUrl ? <img src={u.avatarUrl} className={`w-6 h-6 rounded-full object-cover ${isPending ? 'grayscale' : ''}`} /> : <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold ${isPending ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>{u.name.charAt(0)}</div>}
                                 <div className="truncate">
-                                    <p className="text-[10px] font-black text-gray-700 leading-tight truncate">{u.name.split(' ')[0]}</p>
+                                    <p className={`text-[10px] font-black leading-tight truncate ${isPending ? 'text-yellow-700' : 'text-gray-700'}`}>{u.name.split(' ')[0]} {isPending && '(Pendente)'}</p>
                                     <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter">{u.role}</span>
                                 </div>
                             </div>
                             {isOwner && u.role !== UserRole.MASTER && (
                                 <div className="flex gap-1 opacity-0 group-hover/staff:opacity-100 transition-opacity">
-                                    <button onClick={() => { setSelectedStaff(u); setModalType('edit_staff_role'); }} className="p-1.5 text-indigo-600 hover:bg-white rounded-lg transition-colors"><UserCog size={14}/></button>
-                                    <button onClick={() => { setSelectedStaff(u); setSelectedTeamForStaff(team.id); setDeleteType('staff'); setModalMessage(`Excluir o acesso de ${u.name} a esta equipe?`); setModalType('confirm_delete'); }} className="p-1.5 text-red-500 hover:bg-white rounded-lg transition-colors"><Trash2 size={14}/></button>
+                                    {!isPending && <button onClick={() => { setSelectedStaff(u); setModalType('edit_staff_role'); }} className="p-1.5 text-indigo-600 hover:bg-white rounded-lg transition-colors"><UserCog size={14}/></button>}
+                                    <button onClick={() => { setSelectedStaff(u); setSelectedTeamForStaff(team.id); setDeleteType('staff'); setModalMessage(isPending ? `Cancelar o convite para ${u.name}?` : `Excluir o acesso de ${u.name} a esta equipe?`); setModalType('confirm_delete'); }} className="p-1.5 text-red-500 hover:bg-white rounded-lg transition-colors"><Trash2 size={14}/></button>
                                 </div>
                             )}
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
         </div>
@@ -258,6 +287,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                   <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded">Meu Cadastro</span>
                   <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter mt-1">{currentUser?.name}</h2>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{currentUser?.email} • {currentUser?.role}</p>
+                  <p className="text-[9px] text-gray-300 font-mono mt-1 select-all">ID: {currentUser?.id}</p>
               </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
@@ -373,6 +403,26 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
               </div>
            </div>
         </div>
+      )}
+
+      {modalType === 'invite_staff' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up border border-indigo-50">
+                  <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner"><UserPlus size={36} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Convidar Colaborador</h2>
+                  <p className="text-[10px] text-gray-400 mb-8 font-black uppercase tracking-widest leading-relaxed">Insira o ID de Usuário do colaborador para convidá-lo para esta equipe.</p>
+                  <div className="space-y-4">
+                      <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
+                          <input autoFocus type="text" className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-12 pr-4 py-4 font-mono font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="Cole o ID (UUID) aqui..." value={inviteStaffUserId} onChange={e => setInviteStaffUserId(e.target.value)} />
+                      </div>
+                      <button onClick={handleInviteStaff} disabled={loading || !inviteStaffUserId} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
+                         {loading ? <Loader2 className="animate-spin" size={18}/> : 'Enviar Convite'}
+                      </button>
+                  </div>
+                  <button onClick={() => {setModalType('none'); setInviteStaffUserId('');}} className="mt-8 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
+              </div>
+          </div>
       )}
 
       {modalType === 'edit_staff_role' && selectedStaff && (
