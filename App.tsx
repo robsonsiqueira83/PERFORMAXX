@@ -8,7 +8,7 @@ import AthletesList from './pages/AthletesList';
 import AthleteProfile from './pages/AthleteProfile';
 import AthleteEvaluation from './pages/AthleteEvaluation'; 
 import TechnicalPhysicalEvaluation from './pages/TechnicalPhysicalEvaluation';
-import EvaluationView from './pages/EvaluationView'; // Nova Página
+import EvaluationView from './pages/EvaluationView';
 import Training from './pages/Training';
 import Admin from './pages/Admin';
 import UserManagement from './pages/UserManagement';
@@ -45,7 +45,7 @@ const App: React.FC = () => {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
     init();
-  }, []);
+  }, [viewingAsMasterId]);
 
   const updateSelectedTeamForContext = async (contextId: string, currentUser: User) => {
       const allTeams = await getTeams();
@@ -66,7 +66,23 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('performax_current_user');
+    localStorage.removeItem('performax_context_id');
     window.location.hash = '/';
+  };
+
+  const handleAccessMaster = async (masterId: string) => {
+      setViewingAsMasterId(masterId);
+      localStorage.setItem('performax_context_id', masterId);
+      if (user) await updateSelectedTeamForContext(masterId, user);
+      window.location.hash = '/';
+  };
+
+  const handleReturnToGlobal = () => {
+      if (user) {
+          setViewingAsMasterId(user.id);
+          localStorage.setItem('performax_context_id', user.id);
+          window.location.hash = '/global';
+      }
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50 text-blue-600 font-bold">Carregando...</div>;
@@ -77,7 +93,7 @@ const App: React.FC = () => {
         <Route path="/p/team/:teamId" element={<PublicTeamDashboard />} />
         <Route path="/p/athlete/:athleteId" element={<PublicAthleteProfile />} />
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
-        <Route path="/global" element={user && user.role === UserRole.GLOBAL ? <GlobalDashboard onAccessMaster={() => {}} onLogout={handleLogout} /> : <Navigate to="/login" />} />
+        <Route path="/global" element={user && user.role === UserRole.GLOBAL ? <GlobalDashboard onAccessMaster={handleAccessMaster} onLogout={handleLogout} /> : <Navigate to="/login" />} />
 
         {user && (
             <>
@@ -88,7 +104,15 @@ const App: React.FC = () => {
         )}
 
         <Route path="*" element={!user ? <Navigate to="/login" /> : (
-             <Layout user={user} viewingAsMasterId={viewingAsMasterId} onLogout={handleLogout} selectedTeamId={selectedTeamId} onTeamChange={setSelectedTeamId} onContextChange={() => {}} onReturnToGlobal={() => {}}>
+             <Layout 
+                user={user} 
+                viewingAsMasterId={viewingAsMasterId} 
+                onLogout={handleLogout} 
+                selectedTeamId={selectedTeamId} 
+                onTeamChange={setSelectedTeamId} 
+                onContextChange={handleAccessMaster} 
+                onReturnToGlobal={handleReturnToGlobal}
+             >
                <Routes>
                   <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
