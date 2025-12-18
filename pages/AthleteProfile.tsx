@@ -1,19 +1,19 @@
 
-// Fix: Added Category to the imports from '../types' to resolve the "Cannot find name 'Category'" error.
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions, deleteAthlete, getTeams
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, Category, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe, Team, Position } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Category, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe, Team, Position, HeatmapPoint } from '../types';
 import { 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell
 } from 'recharts';
 import { 
   Edit, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
   TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye,
-  Plus, Trash2, ArrowRightLeft, Mail, Phone, UserCircle
+  Plus, Trash2, ArrowRightLeft, Mail, Phone, UserCircle, CheckCircle
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
@@ -44,7 +44,9 @@ const AthleteProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
-  const [showEditModal, setShowEditModal] = useState(false);
+  
+  const [modalType, setModalType] = useState<'none' | 'edit' | 'confirm_delete' | 'success' | 'error'>('none');
+  const [modalMessage, setModalMessage] = useState('');
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
 
@@ -82,22 +84,48 @@ const AthleteProfile: React.FC = () => {
     return evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / evalSessions.length;
   }, [evalSessions]);
 
-  const filteredEntries = useMemo(() => {
-      if (!filterDate) return entries;
-      const sessionIdsInDate = sessions.filter(s => s.date === filterDate).map(s => s.id);
-      return entries.filter(e => sessionIdsInDate.includes(e.sessionId));
-  }, [entries, sessions, filterDate]);
+  const radarAveragesData = useMemo(() => {
+    if (entries.length === 0) return null;
+    const avg = (type: 'technical' | 'physical') => {
+        let count = 0;
+        const sum = entries.reduce((acc, curr) => {
+            const group = curr[type] as any;
+            if (!group) return acc;
+            const vals = Object.values(group).map(v => Number(v) || 0);
+            count++;
+            return acc + (vals.reduce((a,b)=>a+b, 0) / vals.length);
+        }, 0);
+        return count > 0 ? sum / count : 0;
+    };
+    
+    // Decompõe fundamentos técnicos específicos
+    const techGroup = entries[0]?.technical ? Object.keys(entries[0].technical).map(key => {
+        const val = entries.reduce((acc, curr) => acc + (Number((curr.technical as any)[key]) || 0), 0) / entries.length;
+        return { subject: key.replace('_', ' '), A: val };
+    }) : [];
+
+    const physGroup = entries[0]?.physical ? Object.keys(entries[0].physical).map(key => {
+        const val = entries.reduce((acc, curr) => acc + (Number((curr.physical as any)[key]) || 0), 0) / entries.length;
+        return { subject: key.charAt(0).toUpperCase() + key.slice(1), A: val };
+    }) : [];
+
+    return { tech: techGroup, phys: physGroup };
+  }, [entries]);
 
   const tacticalEvents = useMemo(() => {
       let events: any[] = [];
-      filteredEntries.forEach(entry => {
+      const relevantEntries = !filterDate ? entries : entries.filter(e => {
+          const s = sessions.find(sess => sess.id === e.sessionId);
+          return s?.date === filterDate;
+      });
+      relevantEntries.forEach(entry => {
           try {
               const notes = JSON.parse(entry.notes || '{}');
               if (notes.events) events = [...events, ...notes.events];
           } catch (e) {}
       });
       return events;
-  }, [filteredEntries]);
+  }, [entries, sessions, filterDate]);
 
   const filteredTacticalEvents = useMemo(() => {
       let ds = tacticalEvents;
@@ -123,19 +151,17 @@ const AthleteProfile: React.FC = () => {
       };
   }, [tacticalEvents]);
 
-  const impactRanking = useMemo(() => {
-      const grouped = filteredTacticalEvents.reduce((acc: any, curr) => {
-          if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
-          acc[curr.action].score += curr.eventScore;
-          acc[curr.action].count += 1;
-          return acc;
-      }, {});
-      const list = Object.values(grouped).map((g: any) => ({ ...g, avg: g.score / g.count }));
-      return {
-          best: [...list].sort((a, b) => b.avg - a.avg).slice(0, 3),
-          worst: [...list].sort((a, b) => a.avg - b.avg).slice(0, 3)
-      };
-  }, [filteredTacticalEvents]);
+  const aggregateHeatmapPoints = useMemo(() => {
+    let allPoints: HeatmapPoint[] = [];
+    const relevantEntries = !filterDate ? entries : entries.filter(e => {
+        const s = sessions.find(sess => sess.id === e.sessionId);
+        return s?.date === filterDate;
+    });
+    relevantEntries.forEach(e => {
+        if (e.heatmapPoints) allPoints = [...allPoints, ...e.heatmapPoints];
+    });
+    return allPoints;
+  }, [entries, sessions, filterDate]);
 
   const activityDates = useMemo(() => {
       const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
@@ -191,19 +217,56 @@ const AthleteProfile: React.FC = () => {
     );
   };
 
-  const handleDelete = async () => {
-      if (!athlete || !window.confirm(`Tem certeza que deseja excluir o perfil de ${athlete.name}? Todos os dados de desempenho serão perdidos.`)) return;
-      await deleteAthlete(athlete.id);
-      navigate('/athletes');
+  const confirmDeleteAthlete = async () => {
+      if (!athlete) return;
+      setLoading(true);
+      try {
+          await deleteAthlete(athlete.id);
+          setModalType('success');
+          setModalMessage('Perfil do atleta removido com sucesso.');
+          setTimeout(() => navigate('/athletes'), 1500);
+      } catch (err) {
+          setModalType('error');
+          setModalMessage('Erro ao excluir atleta.');
+      } finally {
+          setLoading(false);
+      }
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading && modalType === 'none') return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
 
   const impact = getImpact(globalStats?.avgGlobal || 0);
 
   return (
     <div className="space-y-6 pb-20 relative animate-fade-in">
+      
+      {/* RADARES DE MÉDIAS (NOVO) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
+              <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Médias Fundamentos Técnicos</h3>
+              {radarAveragesData?.tech.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.tech}>
+                        <PolarGrid stroke="#f3f4f6" /><PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Nota" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.4} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+              ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold italic">Sem dados técnicos</div>}
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
+              <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Activity size={16}/> Médias Capacidade Física</h3>
+              {radarAveragesData?.phys.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.phys}>
+                        <PolarGrid stroke="#f3f4f6" /><PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} /><PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                        <Radar name="Nota" dataKey="A" stroke="#ea580c" fill="#f97316" fillOpacity={0.4} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+              ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold italic">Sem dados físicos</div>}
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-8">
               <div className="relative group">
@@ -213,7 +276,7 @@ const AthleteProfile: React.FC = () => {
                     <div className="w-32 h-32 rounded-full bg-indigo-100 flex items-center justify-center text-5xl font-black text-indigo-600">{athlete.name.charAt(0)}</div>
                 )}
                 {canEditData(currentUser?.role || UserRole.TECNICO) && (
-                    <button onClick={() => { setEditFormData({...athlete}); setShowEditModal(true); }} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
+                    <button onClick={() => { setEditFormData({...athlete}); setModalType('edit'); }} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
                 )}
               </div>
               <div className="flex-1 min-w-0 text-center md:text-left">
@@ -236,7 +299,7 @@ const AthleteProfile: React.FC = () => {
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
               <div>
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><Timer size={12} className="text-indigo-500"/> Impacto em Jogo</span>
-                  <p className={`text-3xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(1)}</p>
+                  <p className={`text-3xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(2)}</p>
                   <span className={`text-[8px] font-black uppercase ${impact.text}`}>{impact.label}</span>
               </div>
               <div className="h-12 w-1.5 rounded-full bg-gray-100 overflow-hidden">
@@ -255,6 +318,26 @@ const AthleteProfile: React.FC = () => {
           </div>
       </div>
 
+      {/* MAPA DE CALOR E TÁTICO RESTAURADOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center">
+              <HeatmapField perspective points={aggregateHeatmapPoints} readOnly label="Mapa de Calor (Posicionamento Acumulado)" />
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[380px]">
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Desempenho Tático por Fase</h3>
+              {globalStats ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={globalStats.radarData}>
+                          <PolarGrid stroke="#e5e7eb" />
+                          <PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 9, fontWeight: 800 }} />
+                          <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
+                          <Radar name="Score" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
+                      </RadarChart>
+                  </ResponsiveContainer>
+              ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold bg-gray-50 rounded-xl italic">Sem registros táticos</div>}
+          </div>
+      </div>
+
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-md mx-auto">
           <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-50'}`}>
               <Activity size={16}/> Scout RealTime
@@ -263,75 +346,6 @@ const AthleteProfile: React.FC = () => {
               <ClipboardCheck size={16}/> Avaliações
           </button>
       </div>
-
-      {activeTab === 'realtime' && (
-          <div className="space-y-6 animate-fade-in">
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-3 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-8">
-                        <div className="w-full md:w-1/2 h-[260px]">
-                            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Target size={14} className="text-indigo-500"/> Desempenho por Fase</h3>
-                            {globalStats ? (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={globalStats.radarData}>
-                                        <PolarGrid stroke="#e5e7eb" />
-                                        <PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 9, fontWeight: 800 }} />
-                                        <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
-                                        <Radar name="Score" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
-                                    </RadarChart>
-                                </ResponsiveContainer>
-                            ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold bg-gray-50 rounded-xl italic">Sem registros táticos</div>}
-                        </div>
-                        <div className="w-full md:w-1/2">
-                            <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-xl space-y-4">
-                                <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest flex items-center gap-2"><Filter size={14}/> Filtros de Scout</h3>
-                                <div className="space-y-2.5">
-                                    <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
-                                        <option value="all">Todas as Fases</option>
-                                        <option value="OFENSIVA">Org. Ofensiva</option>
-                                        <option value="DEFENSIVA">Org. Defensiva</option>
-                                        <option value="TRANSICAO_OF">Trans. Ofensiva</option>
-                                        <option value="TRANSICAO_DEF">Trans. Defensiva</option>
-                                    </select>
-                                    <select value={filterResult} onChange={(e) => setFilterResult(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
-                                        <option value="all">Todos os Resultados</option>
-                                        <option value="POSITIVA">Sucesso</option>
-                                        <option value="NEUTRA">Neutro</option>
-                                        <option value="NEGATIVA">Erro</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center"><h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3><TrendingUp size={14} className="text-indigo-400"/></div>
-                    <div className="flex-1 p-4 space-y-4">
-                        {impactRanking.best.length > 0 ? (
-                            <>
-                                <div>
-                                    <span className="text-[9px] font-black text-indigo-600 uppercase mb-2 block tracking-wider">Pontos Fortes</span>
-                                    {impactRanking.best.map((a, i) => (
-                                        <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-indigo-50 border border-indigo-100 mb-1.5">
-                                            <span className="text-[9px] font-black text-indigo-800 truncate pr-2 uppercase">{a.name}</span>
-                                            <span className="text-[9px] font-mono font-black text-indigo-600">+{a.avg.toFixed(1)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="border-t border-dashed border-gray-100 pt-4">
-                                    <span className="text-[9px] font-black text-red-500 uppercase mb-2 block tracking-wider">Erros Críticos</span>
-                                    {impactRanking.worst.map((a, i) => (
-                                        <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-red-50 border border-red-100 mb-1.5">
-                                            <span className="text-[9px] font-black text-red-800 truncate pr-2 uppercase">{a.name}</span>
-                                            <span className="text-[9px] font-mono font-black text-red-600">{a.avg.toFixed(1)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        ) : <div className="h-full flex items-center justify-center text-[9px] text-gray-300 font-bold uppercase text-center italic">Sem dados...</div>}
-                    </div>
-                </div>
-              </div>
-          </div>
-      )}
 
       {activeTab === 'snapshots' && (
           <div className="space-y-6 animate-fade-in">
@@ -361,20 +375,24 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAL EDIÇÃO ATLETA PADRONIZADO */}
-      {showEditModal && (
+      {/* MODAL EDIÇÃO E EXCLUSÃO PADRONIZADOS */}
+      {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-slide-up">
               <div className="flex justify-between items-center mb-8 border-b pb-4">
                 <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2"><Edit className="text-indigo-600" size={24}/> Editar Perfil do Atleta</h3>
-                <button onClick={() => setShowEditModal(false)} className="bg-gray-100 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20} /></button>
+                <button onClick={() => setModalType('none')} className="bg-gray-100 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20} /></button>
               </div>
               <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!editFormData.name || !athlete) return;
-                  await saveAthlete({ ...athlete, ...editFormData } as Athlete);
-                  setShowEditModal(false);
-                  setRefreshKey(prev => prev + 1);
+                  setLoading(true);
+                  try {
+                      await saveAthlete({ ...athlete, ...editFormData } as Athlete);
+                      setModalType('success');
+                      setModalMessage('Dados atualizados!');
+                      setRefreshKey(prev => prev + 1);
+                  } catch (err) { setModalType('error'); setModalMessage('Erro ao salvar.'); } finally { setLoading(false); }
               }} className="space-y-6">
                  <div className="flex flex-col items-center">
                     <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-dashed border-gray-200 shadow-inner relative">
@@ -412,57 +430,24 @@ const AthleteProfile: React.FC = () => {
                                 <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Posição</label>
-                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
-                                    {Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Categoria</label>
-                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
-                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Posição</label>
+                            <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
+                                {Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}
+                            </select>
                         </div>
                     </div>
 
                     <div className="space-y-4">
                         <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Responsáveis</h4>
-                        <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><UserCircle size={12}/> Nome</label>
-                           <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Mail size={12}/> E-mail</label>
-                           <input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsibleEmail || ''} onChange={e => setEditFormData({...editFormData, responsibleEmail: e.target.value})} />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Phone size={12}/> Telefone</label>
-                           <input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
-                        </div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nome</label><input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none" value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1">E-mail</label><input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none" value={editFormData.responsibleEmail || ''} onChange={e => setEditFormData({...editFormData, responsibleEmail: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Telefone</label><input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none" value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} /></div>
                     </div>
                  </div>
 
-                 {/* BLOCO TRANSFERÊNCIA */}
-                 <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-4">
-                     <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft size={16}/> Central de Transferência</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Mover para Time</label>
-                           <select className="w-full bg-white border border-indigo-200 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={editFormData.teamId} onChange={e => setEditFormData({...editFormData, teamId: e.target.value})}>
-                               {allTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                           </select>
-                        </div>
-                        <div className="flex items-end">
-                            <button type="button" onClick={() => setEditFormData({...editFormData, pendingTransferTeamId: 'exit'})} className="w-full bg-indigo-100 text-indigo-700 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all">Solicitar Saída do Clube</button>
-                        </div>
-                     </div>
-                 </div>
-
                  <div className="flex gap-3 pt-4">
-                    <button type="button" onClick={handleDelete} className="flex-1 bg-red-50 text-red-600 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all flex items-center justify-center gap-2"><Trash2 size={16}/> Excluir Atleta</button>
+                    <button type="button" onClick={() => setModalType('confirm_delete')} className="flex-1 bg-red-50 text-red-600 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all flex items-center justify-center gap-2"><Trash2 size={16}/> Excluir Atleta</button>
                     <button type="submit" disabled={uploading} className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
                         {uploading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
                         {uploading ? 'Aguarde...' : 'Salvar Alterações'}
@@ -471,6 +456,33 @@ const AthleteProfile: React.FC = () => {
               </form>
            </div>
         </div>
+      )}
+
+      {modalType === 'confirm_delete' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl animate-slide-up text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500"><AlertCircle size={32}/></div>
+                  <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter mb-4">Atenção!</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-8 leading-relaxed">Deseja realmente excluir o perfil de {athlete.name}? Esta ação é irreversível.</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setModalType('edit')} className="flex-1 bg-gray-50 text-gray-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px]">Cancelar</button>
+                      <button onClick={confirmDeleteAthlete} className="flex-1 bg-red-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-red-700 transition-all">Excluir</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {(modalType === 'success' || modalType === 'error') && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${modalType === 'success' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                    {modalType === 'success' ? <CheckCircle className="text-emerald-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+                 </div>
+                 <h3 className="text-xl font-black text-gray-800 mb-2 uppercase tracking-tighter">{modalType === 'success' ? 'Sucesso!' : 'Erro'}</h3>
+                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">{modalMessage}</p>
+                 <button onClick={() => setModalType('none')} className="text-white font-black py-3 px-8 rounded-2xl transition-all w-full mt-6 shadow-lg uppercase tracking-widest text-[10px] bg-indigo-600 hover:bg-indigo-700">OK</button>
+             </div>
+         </div>
       )}
     </div>
   );
