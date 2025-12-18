@@ -16,6 +16,7 @@ import {
   Plus, Trash2, ArrowRightLeft, Mail, Phone, UserCircle, CheckCircle
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
+import { supabase } from '../services/supabaseClient';
 
 const IMPACT_LEVELS = [
     { min: 0.61, label: 'Impacto Muito Alto', color: 'bg-indigo-600', text: 'text-indigo-600', border: 'border-indigo-600' },
@@ -45,8 +46,9 @@ const AthleteProfile: React.FC = () => {
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   
-  const [modalType, setModalType] = useState<'none' | 'edit' | 'confirm_delete' | 'success' | 'error'>('none');
+  const [modalType, setModalType] = useState<'none' | 'edit' | 'confirm_delete' | 'confirm_delete_eval' | 'success' | 'error'>('none');
   const [modalMessage, setModalMessage] = useState('');
+  const [selectedEvalId, setSelectedEvalId] = useState<string | null>(null);
   
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
@@ -88,11 +90,11 @@ const AthleteProfile: React.FC = () => {
     if (entries.length === 0) return null;
     
     const techKeys: Record<string, string> = {
-        controle_bola: 'Controle', conducao: 'Condução', padding_1: '', passe: 'Passe', recepcao: 'Recepção', padding_2: '',
+        controle_bola: 'Controle', conducao: 'Condução', padding_1: '', padding_2: '', passe: 'Passe', recepcao: 'Recepção', 
         drible: 'Drible', finalizacao: 'Finaliz.', cruzamento: 'Cruzam.', desarme: 'Desarme', interceptacao: 'Intercep.'
     };
 
-    const techGroup = Object.keys(techKeys).filter(k => !k.startsWith('padding')).map(key => {
+    const techGroup = Object.keys(techKeys).filter(k => techKeys[k] !== '').map(key => {
         const sum = entries.reduce((acc, curr) => acc + (Number((curr.technical as any)[key]) || 0), 0);
         const avg = sum / entries.length;
         const displayVal = avg > 5 ? avg / 2 : avg; 
@@ -238,6 +240,27 @@ const AthleteProfile: React.FC = () => {
           setModalMessage('Erro ao excluir atleta.');
       } finally {
           setLoading(false);
+      }
+  };
+
+  const confirmDeleteEvaluation = async () => {
+      if (!selectedEvalId) return;
+      setLoading(true);
+      try {
+          // Deleta a sessão e as avaliações técnicas/físicas relacionadas (se houver CASCADE no banco, só o primeiro basta)
+          await supabase.from('technical_evaluations').delete().eq('session_id', selectedEvalId);
+          await supabase.from('physical_evaluations').delete().eq('session_id', selectedEvalId);
+          await supabase.from('evaluations_sessions').delete().eq('id', selectedEvalId);
+          
+          setModalType('success');
+          setModalMessage('Avaliação excluída com sucesso.');
+          setRefreshKey(prev => prev + 1);
+      } catch (err) {
+          setModalType('error');
+          setModalMessage('Erro ao excluir avaliação.');
+      } finally {
+          setLoading(false);
+          setSelectedEvalId(null);
       }
   };
 
@@ -483,7 +506,15 @@ const AthleteProfile: React.FC = () => {
                                       </div>
                                   </div>
                               </div>
-                              <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-sm"><Eye size={16}/> Relatório</button>
+                              <div className="flex items-center gap-2">
+                                  <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="p-2.5 bg-gray-50 text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all shadow-sm" title="Editar Avaliação">
+                                      <Edit size={16}/>
+                                  </button>
+                                  <button onClick={() => { setSelectedEvalId(ev.id); setModalType('confirm_delete_eval'); setModalMessage('Deseja excluir permanentemente esta avaliação?'); }} className="p-2.5 bg-gray-50 text-red-600 rounded-xl hover:bg-red-50 transition-all shadow-sm" title="Excluir Avaliação">
+                                      <Trash2 size={16}/>
+                                  </button>
+                                  <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-sm"><Eye size={16}/> Relatório</button>
+                              </div>
                           </div>
                       )) : <div className="p-24 text-center text-gray-300 text-xs font-bold uppercase tracking-widest italic">Nenhuma avaliação encontrada</div>}
                   </div>
@@ -549,6 +580,20 @@ const AthleteProfile: React.FC = () => {
                   <div className="flex gap-3">
                       <button onClick={() => setModalType('edit')} className="flex-1 bg-gray-50 text-gray-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px]">Cancelar</button>
                       <button onClick={confirmDeleteAthlete} className="flex-1 bg-red-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-red-700 transition-all">Excluir</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {modalType === 'confirm_delete_eval' && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl animate-slide-up text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500"><AlertCircle size={32}/></div>
+                  <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter mb-4">Excluir Avaliação?</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-8 leading-relaxed">{modalMessage}</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => { setModalType('none'); setSelectedEvalId(null); }} className="flex-1 bg-gray-50 text-gray-400 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px]">Cancelar</button>
+                      <button onClick={confirmDeleteEvaluation} className="flex-1 bg-red-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-red-700 transition-all">Excluir</button>
                   </div>
               </div>
           </div>
