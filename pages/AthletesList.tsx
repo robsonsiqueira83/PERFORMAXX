@@ -20,6 +20,7 @@ interface AthletesListProps {
 const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [allSystemAthletes, setAllSystemAthletes] = useState<Athlete[]>([]);
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationSession[]>([]);
   const [search, setSearch] = useState('');
@@ -33,10 +34,16 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Transferência
+  // Transferência (Entrada / Vincular)
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferRg, setTransferRg] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
+
+  // Transferência (Saída / Enviar)
+  const [showSendTransferModal, setShowSendTransferModal] = useState(false);
+  const [transferOutRg, setTransferOutRg] = useState('');
+  const [transferOutTeamId, setTransferOutTeamId] = useState('');
+  const [sendTransferLoading, setSendTransferLoading] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<Partial<Athlete>>({
@@ -46,12 +53,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const loadData = async () => {
       setLoading(true);
       try {
-          const [a, c, ev] = await Promise.all([
+          const [a, c, ev, teams] = await Promise.all([
               getAthletes(),
               getCategories(),
-              getEvaluationSessions()
+              getEvaluationSessions(),
+              getTeams()
           ]);
           setAllSystemAthletes(a);
+          setAllTeams(teams);
           const localAthletes = a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId);
           setAthletes(localAthletes);
           setCategories(c.filter(item => item.teamId === teamId));
@@ -108,6 +117,43 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       } finally { 
           setTransferLoading(false); 
       }
+  };
+
+  const handleSendTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferOutRg || !transferOutTeamId) return;
+    setSendTransferLoading(true);
+    try {
+        // Busca o atleta no time atual pelo RG
+        const targetAthlete = athletes.find(a => a.rg === transferOutRg.trim() && a.teamId === teamId);
+        if (!targetAthlete) {
+            setFeedback({ type: 'error', message: 'Atleta com este RG não encontrado na sua lista de jogadores.' });
+            return;
+        }
+
+        // Valida se o time de destino existe
+        const targetTeam = allTeams.find(t => t.id === transferOutTeamId.trim());
+        if (!targetTeam) {
+            setFeedback({ type: 'error', message: 'ID do Time de destino não localizado no sistema.' });
+            return;
+        }
+
+        if (targetTeam.id === teamId) {
+            setFeedback({ type: 'error', message: 'O time de destino não pode ser o mesmo time atual.' });
+            return;
+        }
+        
+        await saveAthlete({ ...targetAthlete, pendingTransferTeamId: targetTeam.id });
+        setFeedback({ type: 'success', message: `Solicitação de transferência para o time ${targetTeam.name} enviada com sucesso!` });
+        setShowSendTransferModal(false);
+        setTransferOutRg('');
+        setTransferOutTeamId('');
+        setRefreshKey(prev => prev + 1);
+    } catch (err: any) { 
+        setFeedback({ type: 'error', message: `Erro: ${err.message}` }); 
+    } finally { 
+        setSendTransferLoading(false); 
+    }
   };
 
   const handleAcceptTransfer = async (athlete: Athlete) => {
@@ -200,7 +246,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           </select>
           {currentUser && canEditData(currentUser.role) && (
             <div className="flex gap-2">
-                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors" title="Solicitar Transferência"><ArrowRightLeft size={18} /></button>
+                <button onClick={() => setShowTransferModal(true)} className="bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors" title="Solicitar Transferência (Vincular Atleta Externo)"><ArrowRightLeft size={18} /></button>
+                <button onClick={() => setShowSendTransferModal(true)} className="bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 transition-colors" title="Transferir Atleta (Enviar para outro Time)"><ArrowRightLeft size={18} className="rotate-180" /></button>
                 <button onClick={() => { setFormData({position: Position.MEIO_CAMPO}); setPreviewUrl(''); setShowModal(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-md transition-all"><Plus size={16} /> Novo</button>
             </div>
           )}
@@ -284,6 +331,30 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                       </button>
                   </form>
                   <button onClick={() => setShowTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
+              </div>
+          </div>
+      )}
+
+      {showSendTransferModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-600 dark:text-amber-400 shadow-inner"><ArrowRightLeft size={36} className="rotate-180" /></div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir Atleta</h2>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-8 font-black uppercase tracking-widest leading-relaxed">Escolha um atleta do seu time e o ID da escola destino.</p>
+                  <form onSubmit={handleSendTransfer} className="space-y-4">
+                      <div>
+                          <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 text-left">RG DO ATLETA (DO SEU TIME)</label>
+                          <input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-4 text-center font-mono font-black text-lg uppercase tracking-widest outline-none focus:ring-2 focus:ring-amber-500 shadow-inner" placeholder="RG-000000" value={transferOutRg} onChange={e => setTransferOutRg(e.target.value)} required />
+                      </div>
+                      <div>
+                          <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 text-left">ID DO TIME DESTINO (UUID)</label>
+                          <input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-4 text-center font-mono font-black text-lg uppercase tracking-widest outline-none focus:ring-2 focus:ring-amber-500 shadow-inner" placeholder="UUID-TIME" value={transferOutTeamId} onChange={e => setTransferOutTeamId(e.target.value)} required />
+                      </div>
+                      <button type="submit" disabled={sendTransferLoading} className="w-full bg-amber-600 text-white font-black py-4 rounded-2xl hover:bg-amber-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
+                         {sendTransferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Solicitar Envio de Atleta'}
+                      </button>
+                  </form>
+                  <button onClick={() => setShowSendTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
               </div>
           </div>
       )}
