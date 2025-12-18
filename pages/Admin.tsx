@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -50,7 +50,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
             setOwnedTeams(allTeams.filter(t => t.ownerId === ctxId));
             if (currentUser) {
                 const teamIds = currentUser.teamIds || [];
-                setInvitedTeams(allTeams.filter(t => teamIds.includes(t.id) && t.ownerId !== currentUser.id));
+                // Remove prefixo pending: para busca se necessário, mas invitedTeams são as ativas
+                const activeTeamIds = teamIds.filter(id => !id.startsWith('pending:'));
+                setInvitedTeams(allTeams.filter(t => activeTeamIds.includes(t.id) && t.ownerId !== ctxId));
             }
         }
         
@@ -121,7 +123,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
           } else if (deleteType === 'staff' && selectedStaff && selectedTeamForStaff) {
               const updatedTeamIds = (selectedStaff.teamIds || []).filter(id => id !== selectedTeamForStaff);
               await saveUser({ ...selectedStaff, teamIds: updatedTeamIds });
-              setModalMessage('Colaborador removido da equipe.');
+              setModalMessage(selectedStaff.id === localStorage.getItem('performax_current_user') ? 'Você saiu da equipe.' : 'Colaborador removido da equipe.');
           }
           setModalType('alert_success');
           refreshData();
@@ -132,6 +134,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
           setLoading(false);
           setTargetId(null);
           setSelectedStaff(null);
+          setSelectedTeamForStaff(null);
       }
   };
 
@@ -166,10 +169,29 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                         </div>
                     </div>
                 </div>
-                {isOwner && (
+                {isOwner ? (
                     <div className="flex gap-2 w-full md:w-auto">
                         <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="flex-1 md:flex-none bg-gray-50 text-indigo-600 hover:bg-indigo-50 p-3 rounded-xl border border-gray-100 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2"><Edit size={16}/> Editar</button>
                         <button onClick={() => { setTargetId(team.id); setDeleteType('team'); setModalMessage(`Deseja realmente excluir a equipe "${team.name}"?`); setModalType('confirm_delete'); }} className="bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 transition-all"><Trash2 size={16}/></button>
+                    </div>
+                ) : (
+                    <div className="flex gap-2 w-full md:w-auto">
+                         <button 
+                            onClick={() => { 
+                                const userStr = localStorage.getItem('performax_current_user');
+                                if (userStr) {
+                                    const currentUser = JSON.parse(userStr);
+                                    setSelectedStaff(currentUser);
+                                    setSelectedTeamForStaff(team.id);
+                                    setDeleteType('staff');
+                                    setModalMessage(`Deseja sair da equipe "${team.name}"? Você perderá o acesso de colaborador.`);
+                                    setModalType('confirm_delete');
+                                }
+                            }} 
+                            className="flex-1 md:flex-none bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2"
+                         >
+                            <LogOut size={16}/> Sair da Equipe
+                         </button>
                     </div>
                 )}
             </div>
@@ -245,6 +267,9 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                     <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2"><Briefcase size={16} className="text-emerald-500"/> Equipes onde Atuo (Colaborador)</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {invitedTeams.map(team => renderTeamCard(team, false))}
+                        {invitedTeams.length === 0 && (
+                            <div className="col-span-full bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-10 text-center text-gray-300 text-xs font-black uppercase tracking-widest">Você não foi convidado para outras equipes ainda.</div>
+                        )}
                     </div>
                 </div>
             </div>
