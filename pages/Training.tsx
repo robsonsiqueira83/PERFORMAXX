@@ -130,8 +130,8 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       },
       tactical: {
         def_posicionamento: finalAvgTech, def_pressao: finalAvgTech, def_cobertura: finalAvgTech, def_fechamento: finalAvgTech, def_temporizacao: finalAvgTech, def_desarme_tatico: finalAvgTech, def_reacao: finalAvgTech,
-        const_qualidade_passe: techScores['Passe|Médio'] || finalAvgTech, const_visao: finalAvgTech, const_apoios: finalAvgTech, const_mobilidade: finalAvgTech, const_circulacao: finalAvgTech, const_quebra_linhas: finalAvgTech, const_tomada_decisao: finalAvgTech,
-        ult_movimentacao: finalAvgTech, ult_ataque_espaco: finalAvgTech, ult_1v1: techScores['1x1 Ofensivo|Mudança de direção'] || finalAvgTech, ult_ultimo_passe: finalAvgTech, ult_finalizacao_eficiente: techScores['Finalização|Primeira finalização'] || finalAvgTech, ult_ritmo: finalAvgTech, ult_bolas_paradas: finalAvgTech
+        const_qualidade_passe: finalAvgTech, const_visao: finalAvgTech, const_apoios: finalAvgTech, const_mobilidade: finalAvgTech, const_circulacao: finalAvgTech, const_quebra_linhas: finalAvgTech, const_tomada_decisao: finalAvgTech,
+        ult_movimentacao: finalAvgTech, ult_ataque_espaco: finalAvgTech, ult_1v1: finalAvgTech, ult_ultimo_passe: finalAvgTech, ult_finalizacao_eficiente: finalAvgTech, ult_ritmo: finalAvgTech, ult_bolas_paradas: finalAvgTech
       },
       heatmapPoints: [], 
       notes: `[Avaliação Estruturada] ${notes}`
@@ -190,13 +190,12 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                               <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Avaliar Atuação: {selectedAthlete.name}</h3>
                               <div className="flex items-center gap-3 mt-1">
                                   <span className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">Snapshot de Treino Controlado</span>
-                                  <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border border-emerald-100 dark:border-emerald-800 flex items-center gap-1"><Target size={12}/> Média Técnica: {avgTechScore.toFixed(1)}</span>
                               </div>
                           </div>
                       </div>
                       {notification && <div className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse shadow-sm border border-emerald-200 dark:border-emerald-800">{notification}</div>}
                   </div>
-
+                  {/* ... Restante do form mantido igual ... */}
                   <div className="mb-10">
                       <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-blue-600 pl-3">
                           <Target size={18} className="text-blue-600"/> Fundamentos Técnicos (1-5)

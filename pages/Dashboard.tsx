@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target } from 'lucide-react';
+import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target, Info } from 'lucide-react';
 import { 
   getAthletes, getCategories, getTrainingEntries, getTrainingSessions, getEvaluationSessions
 } from '../services/storageService';
@@ -46,43 +46,45 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     loadData();
   }, [teamId]);
 
-  const filteredEvalSessions = useMemo(() => {
-      const now = new Date();
-      return evalSessions.filter(s => {
-          const athlete = athletes.find(ath => ath.id === s.athleteId);
-          if (!athlete) return false;
-          const sIso = s.date;
-          switch (selectedPeriod) {
-              case 'week': return sIso >= new Date(now.setDate(now.getDate()-7)).toISOString();
-              case 'month': return sIso >= new Date(now.setDate(now.getDate()-30)).toISOString();
-              case 'year': return sIso >= `${now.getFullYear()}-01-01`;
-              default: return true;
-          }
-      });
-  }, [evalSessions, athletes, selectedPeriod]);
-
   const athletesWithMeta = useMemo(() => {
     return athletes.map(athlete => {
-        const myEvals = filteredEvalSessions.filter(ev => ev.athleteId === athlete.id);
+        const myEvals = evalSessions.filter(ev => ev.athleteId === athlete.id);
         const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
+        
         const myEntries = entries.filter(e => e.athleteId === athlete.id);
-        let impactScore = 0;
+        let rawImpactSum = 0;
         let scoutCount = 0;
+        let eventTotal = 0;
+        
         myEntries.forEach(entry => {
             try {
                 const notes = JSON.parse(entry.notes || '{}');
                 if (notes.avgScore !== undefined) {
-                    impactScore += notes.avgScore;
+                    rawImpactSum += notes.avgScore;
                     scoutCount++;
+                    if (notes.events) eventTotal += notes.events.length;
                 }
             } catch(e) {}
         });
-        const avgImpact = scoutCount > 0 ? impactScore / scoutCount : 0;
-        return { ...athlete, avgTech, avgImpact };
-    }).sort((a, b) => b.avgTech - a.avgTech);
-  }, [athletes, filteredEvalSessions, entries]);
 
-  const rankedByTech = useMemo(() => {
+        const avgRawImpact = scoutCount > 0 ? rawImpactSum / scoutCount : 0;
+        // Normalização Motor Analítico: -1.5/+1.5 -> 0/10
+        const globalScore = Math.max(0, Math.min(10, 5 + (avgRawImpact * 3.33)));
+
+        return { ...athlete, avgTech, globalScore, eventCount: eventTotal };
+    }).sort((a, b) => b.globalScore - a.globalScore);
+  }, [athletes, evalSessions, entries]);
+
+  const getSemanticReading = (score: number, eventCount: number) => {
+      if (eventCount < 5) return "Leitura inicial — mais dados aumentam a precisão";
+      if (score >= 8.0) return "Alto impacto e boa consistência nas decisões";
+      if (score >= 6.5) return "Bom nível de impacto nas ações de jogo";
+      if (score >= 5.0) return "Desempenho funcional dentro da proposta";
+      if (score >= 3.0) return "Abaixo do nível desejado para o contexto atual";
+      return "Participação ainda em construção";
+  };
+
+  const rankedByScore = useMemo(() => {
       let list = athletesWithMeta;
       if (selectedCategory !== 'all') list = list.filter(a => a.categoryId === selectedCategory);
       return list.slice(0, 3);
@@ -90,53 +92,13 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   const teamAverages = useMemo(() => {
       const list = selectedCategory === 'all' ? athletesWithMeta : athletesWithMeta.filter(a=>a.categoryId===selectedCategory);
-      if (list.length === 0) return { tech: 0, impact: 0 };
+      if (list.length === 0) return { tech: 0, score: 0 };
       const sumTech = list.reduce((a,b)=>a+b.avgTech, 0);
-      const sumImpact = list.reduce((a,b)=>a+b.avgImpact, 0);
-      return { tech: sumTech / list.length, impact: sumImpact / list.length };
+      const sumScore = list.reduce((a,b)=>a+b.globalScore, 0);
+      return { tech: sumTech / list.length, score: sumScore / list.length };
   }, [athletesWithMeta, selectedCategory]);
 
-  const teamPhasesRadar = useMemo(() => {
-      const activeAthletes = selectedCategory === 'all' ? athletes : athletes.filter(a=>a.categoryId===selectedCategory);
-      const athIds = activeAthletes.map(a=>a.id);
-      const relevantEntries = entries.filter(e => athIds.includes(e.athleteId));
-      const calcPhase = (phase: string) => {
-          let sum = 0; let count = 0;
-          relevantEntries.forEach(en => {
-              try {
-                  const notes = JSON.parse(en.notes || '{}');
-                  if (notes.events) {
-                      const phaseEvents = notes.events.filter((ev:any) => ev.phase === phase);
-                      if (phaseEvents.length > 0) {
-                          sum += phaseEvents.reduce((a:any,b:any)=>a+b.eventScore,0) / phaseEvents.length;
-                          count++;
-                      }
-                  }
-              } catch(e){}
-          });
-          return count > 0 ? sum / count : 0;
-      };
-      return [
-          { phase: 'Ofensiva', A: calcPhase('OFENSIVA') },
-          { phase: 'Defensiva', A: calcPhase('DEFENSIVA') },
-          { phase: 'Trans. Of.', A: calcPhase('TRANSICAO_OF') },
-          { phase: 'Trans. Def.', A: calcPhase('TRANSICAO_DEF') }
-      ];
-  }, [athletes, selectedCategory, entries]);
-
-  const teamEvolutionData = useMemo(() => {
-      const dates = Array.from(new Set<string>(filteredEvalSessions.map(s => s.date))).sort();
-      return dates.map((d: string) => {
-          const dayEvals = filteredEvalSessions.filter(s => s.date === d);
-          const activeIds = selectedCategory === 'all' ? athletes.map(a => a.id) : athletes.filter(a => a.categoryId === selectedCategory).map(a => a.id);
-          const relevant = dayEvals.filter(e => activeIds.includes(e.athleteId));
-          return {
-              date: new Date(d).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
-              tech: relevant.length > 0 ? relevant.reduce((a,b)=>a+b.scoreTecnico, 0) / relevant.length : null
-          };
-      }).filter(d => d.tech !== null);
-  }, [filteredEvalSessions, selectedCategory, athletes]);
-
+  // Fix: Added missing bestXI useMemo hook to resolve "Cannot find name 'bestXI'" error
   const bestXI = useMemo(() => {
     const selectedIds = new Set<string>();
     const getTopForSlot = (positions: Position[]) => {
@@ -149,6 +111,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
         }
         return null;
     };
+
     return [
         { role: 'GK', player: getTopForSlot([Position.GOLEIRO]), style: { bottom: '5%', left: '50%' } }, 
         { role: 'LE', player: getTopForSlot([Position.LATERAL]), style: { bottom: '22%', left: '15%' } }, 
@@ -177,28 +140,34 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
-              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Activity size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Zap size={14} className="text-yellow-500"/> Impacto em Jogo (Média)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.impact.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Scouts RealTime</span></div>
+              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> Score Global do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado no Motor Analítico Ativo</span></div>
           </div>
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase">Baseado em Snapshots Estruturados</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado em Snapshots Estruturados</span></div>
           </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         {rankedByTech.map((athlete, index) => (
-             <div key={athlete.id} className="bg-white dark:bg-darkCard rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-darkBorder flex flex-col relative overflow-hidden group">
-                 <div className="flex items-center gap-4">
+         {rankedByScore.map((athlete, index) => (
+             <div key={athlete.id} className="bg-white dark:bg-darkCard rounded-[32px] shadow-sm p-6 border border-gray-100 dark:border-darkBorder flex flex-col relative overflow-hidden group transition-all hover:shadow-md">
+                 <div className="flex items-center gap-4 mb-6">
                      <div className="relative">
-                        {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-darkBorder shadow-md" /> : <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-darkInput flex items-center justify-center font-black text-emerald-600 dark:text-emerald-400 text-xl border border-emerald-100 dark:border-darkBorder">{athlete.name.charAt(0)}</div>}
+                        {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-darkBorder shadow-md" /> : <div className="w-16 h-16 rounded-full bg-gray-50 dark:bg-darkInput flex items-center justify-center font-black text-gray-300 dark:text-gray-600 text-xl border border-gray-100 dark:border-darkBorder">{athlete.name.charAt(0)}</div>}
                         <div className={`absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] border ${index===0?'bg-yellow-400 border-yellow-500 text-yellow-900':'bg-gray-100 dark:bg-darkInput border-gray-200 dark:border-darkBorder text-gray-600 dark:text-gray-400'}`}>#{index+1}</div>
                      </div>
-                     <div className="min-w-0"><h3 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter truncate text-sm">{athlete.name}</h3><p className="text-[10px] text-gray-400 font-bold uppercase">{athlete.position} • {getCalculatedCategory(athlete.birthDate)}</p></div>
+                     <div className="min-w-0"><h3 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter truncate text-sm leading-tight">{athlete.name}</h3><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{athlete.position}</p></div>
                  </div>
-                 <div className="mt-5 pt-4 border-t border-gray-50 dark:border-darkBorder flex justify-between items-end">
-                     <div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Média Técnica</span><div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{athlete.avgTech.toFixed(1)}</div></div>
-                     <Link to={`/athletes/${athlete.id}`} className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-darkInput px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">Perfil</Link>
+                 
+                 <div className="bg-gray-50 dark:bg-darkInput/50 rounded-2xl p-4 text-center border border-gray-100 dark:border-darkBorder">
+                     <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1 block">Score do Atleta</span>
+                     <span className="text-4xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{athlete.globalScore.toFixed(1)}</span>
+                     <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-2 leading-tight uppercase tracking-widest">{getSemanticReading(athlete.globalScore, athlete.eventCount)}</p>
+                 </div>
+
+                 <div className="mt-6 flex justify-end">
+                     <Link to={`/athletes/${athlete.id}`} className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-1.5"><Activity size={12}/> Perfil</Link>
                  </div>
              </div>
          ))}
@@ -207,7 +176,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden">
          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Técnica do Momento (4-3-3)</h3>
          <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
-             {/* Conteúdo do campo se mantém verde, mas podemos escurecer levemente se preferir */}
              <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
              <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
@@ -226,29 +194,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                 </div>
              ))}
          </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm h-[400px]">
-              <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Target size={14} className="text-indigo-500 dark:text-indigo-400"/> Análise Tática Média (Time)</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={teamPhasesRadar}>
-                    <PolarGrid stroke="#334155" /><PolarAngleAxis dataKey="phase" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} /><PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
-                    <Radar name="Time" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.4} />
-                    <RechartsTooltip contentStyle={{backgroundColor: '#1c2d3c', borderColor: '#2d4558', color: '#fff'}} />
-                  </RadarChart>
-              </ResponsiveContainer>
-          </div>
-          <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm h-[400px]">
-              <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-500 dark:text-emerald-400"/> Evolução Técnica Geral</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={teamEvolutionData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" /><XAxis dataKey="date" fontSize={10} fontStyle="italic" stroke="#64748b" axisLine={false} tickLine={false} /><YAxis domain={[0, 5]} hide />
-                    <RechartsTooltip contentStyle={{borderRadius:'16px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: '#1c2d3c', color: '#fff'}} />
-                    <Line type="monotone" dataKey="tech" stroke="#10b981" strokeWidth={4} dot={{ r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
-                  </LineChart>
-              </ResponsiveContainer>
-          </div>
       </div>
     </div>
   );

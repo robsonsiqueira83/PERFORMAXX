@@ -18,16 +18,6 @@ import {
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
-const IMPACT_LEVELS = [
-    { min: 0.61, label: 'Impacto Muito Alto', color: 'bg-indigo-600', text: 'text-indigo-600', border: 'border-indigo-600' },
-    { min: 0.30, label: 'Impacto Positivo', color: 'bg-indigo-400', text: 'text-indigo-400', border: 'border-indigo-400' },
-    { min: -0.29, label: 'Impacto Neutro', color: 'bg-gray-400', text: 'text-gray-400', border: 'border-gray-400' },
-    { min: -0.60, label: 'Impacto Negativo', color: 'bg-orange-500', text: 'text-orange-500', border: 'border-orange-500' },
-    { min: -Infinity, label: 'Risco Tático', color: 'bg-red-600', text: 'text-red-600', border: 'border-red-600' }
-];
-
-const getImpact = (score: number) => IMPACT_LEVELS.find(l => score >= l.min) || IMPACT_LEVELS[4];
-
 const AthleteProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -44,7 +34,6 @@ const AthleteProfile: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   
-  // --- MOTOR DE FILTROS REALTIME ---
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [filterPhase, setFilterPhase] = useState<string>('all');
   const [filterAction, setFilterAction] = useState<string>('all');
@@ -86,9 +75,6 @@ const AthleteProfile: React.FC = () => {
      load();
   }, [id, refreshKey]);
 
-  // --- ALGORITMO DE PROCESSAMENTO REALTIME ---
-
-  // 1. Extração Universal de Eventos (Base para todas as camadas)
   const allEvents = useMemo(() => {
       let evts: any[] = [];
       entries.forEach(entry => {
@@ -103,7 +89,6 @@ const AthleteProfile: React.FC = () => {
       return evts.sort((a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime());
   }, [entries, sessions]);
 
-  // 2. Filtro de Contexto (O que alimenta Camada 2 e 3)
   const filteredEvents = useMemo(() => {
       let ds = allEvents;
       if (filterDate) ds = ds.filter(e => e.sessionDate === filterDate);
@@ -113,10 +98,8 @@ const AthleteProfile: React.FC = () => {
       return ds;
   }, [allEvents, filterDate, filterPhase, filterAction, filterTimeBlock]);
 
-  // --- CAMADA 1: PERFIL (ESTÁVEL) ---
   const layer1Stats = useMemo(() => {
-      if (allEvents.length === 0) return null;
-      // Radar fixo pelas 4 fases (pode filtrar por jogo, mas estável a filtros internos)
+      if (allEvents.length === 0) return { avgGlobal: 0, radarData: [] };
       const baseEvents = filterDate ? allEvents.filter(e => e.sessionDate === filterDate) : allEvents;
       const calcPhase = (p: string) => {
           const fe = baseEvents.filter(e => e.phase === p);
@@ -133,29 +116,37 @@ const AthleteProfile: React.FC = () => {
       };
   }, [allEvents, filterDate]);
 
-  // --- CAMADA 2: CONTEXTO (REATIVO) ---
+  // Normalização do Score Global 0-10 para o bloco EXECUTIVE
+  const globalScore = useMemo(() => {
+      const raw = layer1Stats?.avgGlobal || 0;
+      return Math.max(0, Math.min(10, 5 + (raw * 3.33)));
+  }, [layer1Stats]);
+
+  const getSemanticReading = (score: number, eventCount: number) => {
+      if (eventCount < 5) return "Leitura inicial — mais dados aumentam a precisão";
+      if (score >= 8.0) return "Alto impacto e boa consistência nas decisões";
+      if (score >= 6.5) return "Bom nível de impacto nas ações de jogo";
+      if (score >= 5.0) return "Desempenho funcional dentro da proposta";
+      if (score >= 3.0) return "Abaixo do nível desejado para o contexto atual";
+      return "Participação ainda em construção";
+  };
+
   const dominantChartData = useMemo(() => {
       if (filteredEvents.length === 0) return [];
-      
       if (filterAction !== 'all') {
-          // Visão por Resultado da Ação
           const results = ['POSITIVA', 'NEUTRA', 'NEGATIVA'];
           return results.map(r => ({
               name: r,
               score: filteredEvents.filter(e => e.result === r).length
           }));
       }
-
       if (filterPhase !== 'all') {
-          // Visão por Ações da Fase
           const actions = Array.from(new Set(filteredEvents.map(e => e.action)));
           return actions.map(a => {
               const ae = filteredEvents.filter(e => e.action === a);
               return { name: a, score: ae.reduce((acc, c) => acc + c.eventScore, 0) / ae.length };
           });
       }
-
-      // Default: Barras por Fase
       return layer1Stats?.radarData.map(d => ({ name: d.phase, score: d.A })) || [];
   }, [filteredEvents, filterPhase, filterAction, layer1Stats]);
 
@@ -173,7 +164,6 @@ const AthleteProfile: React.FC = () => {
       };
   }, [filteredEvents]);
 
-  // --- CAMADA 3: ESPAÇO E TEMPO (DINÂMICA) ---
   const timelineData = useMemo(() => {
       const baseEvents = filterDate ? allEvents.filter(e => e.sessionDate === filterDate) : allEvents;
       if (baseEvents.length === 0) return [];
@@ -194,7 +184,6 @@ const AthleteProfile: React.FC = () => {
       return pts.map(e => e.location);
   }, [filteredEvents, mapToggle]);
 
-  // --- UTILITÁRIOS ---
   const activityDates = useMemo(() => {
       const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
       sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
@@ -243,9 +232,7 @@ const AthleteProfile: React.FC = () => {
         const isSelected = filterDate === dateStr;
         days.push(
             <button key={d} onClick={() => setFilterDate(isSelected ? null : dateStr)} 
-              className={`h-9 w-9 flex flex-col items-center justify-center text-[10px] rounded-lg border transition-all
-                ${isSelected ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-white dark:bg-darkInput text-gray-500 dark:text-gray-400 border-gray-100 dark:border-darkBorder hover:border-indigo-200'}
-              `}>
+              className={`h-9 w-9 flex flex-col items-center justify-center text-[10px] rounded-lg border transition-all ${isSelected ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-white dark:bg-darkInput text-gray-500 dark:text-gray-400 border-gray-100 dark:border-darkBorder hover:border-indigo-200'}`}>
                 <span className="font-bold">{d}</span>
                 {type && !isSelected && (
                     <div className="flex gap-0.5 mt-0.5">
@@ -277,41 +264,48 @@ const AthleteProfile: React.FC = () => {
   if (loading && modalType === 'none') return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
 
-  const impact = getImpact(layer1Stats?.avgGlobal || 0);
-
   return (
     <div className="space-y-6 pb-20 relative animate-fade-in transition-colors duration-300">
       
-      {/* HEADER COMPACTO */}
+      {/* HEADER INTEGRADO COM SCORE EXECUTIVE */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white dark:bg-darkCard rounded-2xl shadow-sm border border-gray-100 dark:border-darkBorder p-6 flex flex-col md:flex-row items-center gap-8">
-              <div className="relative group">
-                {athlete.photoUrl ? (
-                    <img src={athlete.photoUrl} className="w-32 h-32 rounded-full object-cover border-4 border-white dark:border-darkBorder shadow-lg" alt="" />
-                ) : (
-                    <div className="w-32 h-32 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-5xl font-black text-indigo-600 dark:text-indigo-400">{athlete.name.charAt(0)}</div>
-                )}
-                {canEditData(currentUser?.role || UserRole.TECNICO) && (
-                    <button onClick={() => { setEditFormData({...athlete}); setModalType('edit'); }} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
-                )}
+          <div className="lg:col-span-2 bg-white dark:bg-darkCard rounded-[32px] shadow-sm border border-gray-100 dark:border-darkBorder p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="flex flex-col md:flex-row items-center gap-8 flex-1">
+                  <div className="relative group shrink-0">
+                    {athlete.photoUrl ? (
+                        <img src={athlete.photoUrl} className="w-32 h-32 rounded-full object-cover border-4 border-white dark:border-darkBorder shadow-lg" alt="" />
+                    ) : (
+                        <div className="w-32 h-32 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-5xl font-black text-indigo-600 dark:text-indigo-400">{athlete.name.charAt(0)}</div>
+                    )}
+                    {canEditData(currentUser?.role || UserRole.TECNICO) && (
+                        <button onClick={() => { setEditFormData({...athlete}); setModalType('edit'); }} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-center md:text-left">
+                    <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter truncate uppercase">{athlete.name}</h1>
+                    <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
+                       <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400 text-[10px] px-2 py-1 rounded font-black uppercase tracking-widest">{athlete.position}</span>
+                       <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-[10px] px-2 py-1 rounded font-black uppercase tracking-widest">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
+                    </div>
+                    <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
+                        <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
+                    </div>
+                  </div>
               </div>
-              <div className="flex-1 min-w-0 text-center md:text-left">
-                <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter truncate uppercase">{athlete.name}</h1>
-                <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
-                   <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400 text-[10px] px-2 py-1 rounded font-black uppercase tracking-widest">{athlete.position}</span>
-                   <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-[10px] px-2 py-1 rounded font-black uppercase tracking-widest">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
-                   <span className="bg-gray-100 dark:bg-darkInput text-gray-600 dark:text-gray-400 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-tighter">RG: {athlete.rg}</span>
-                </div>
-                <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
-                    <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
-                    <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><ClipboardCheck size={16} /> Nova Avaliação</button>
-                </div>
+
+              {/* Bloco Score EXECUTIVE (Novo) */}
+              <div className="w-full md:w-56 bg-gray-50 dark:bg-darkInput/50 p-6 rounded-3xl border border-gray-100 dark:border-darkBorder flex flex-col items-center text-center shrink-0 shadow-inner">
+                  <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Score do Atleta</span>
+                  <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{globalScore.toFixed(1)}</span>
+                  <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSemanticReading(globalScore, allEvents.length)}</p>
+                  <div className="mt-4 flex items-center justify-center text-gray-300 dark:text-gray-700" title="Este score resume o impacto das ações do atleta no jogo.">
+                      <HelpCircle size={14} />
+                  </div>
               </div>
           </div>
           <div className="lg:col-span-1">{renderCalendar()}</div>
       </div>
 
-      {/* SELETOR DE ABAS */}
       <div className="flex bg-white dark:bg-darkCard p-1.5 rounded-2xl border border-gray-100 dark:border-darkBorder shadow-sm max-w-md mx-auto">
           <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-darkInput'}`}>
               <Activity size={16}/> Scout RealTime
@@ -323,8 +317,6 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'realtime' && (
           <div className="space-y-8 animate-fade-in">
-              
-              {/* CAMADA 1: PERFIL TÁTICO (FIXO) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col md:flex-row items-center gap-10">
                       <div className="w-full md:w-1/2 h-[280px]">
@@ -339,16 +331,6 @@ const AthleteProfile: React.FC = () => {
                         </ResponsiveContainer>
                       </div>
                       <div className="w-full md:w-1/2 space-y-8">
-                          <div>
-                              <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Timer size={14} className="text-indigo-500"/> Impacto Semântico Geral</h3>
-                              <div className="relative h-4 w-full bg-gray-100 dark:bg-darkInput rounded-full overflow-hidden border dark:border-darkBorder shadow-inner">
-                                  <div className={`absolute inset-y-0 left-0 transition-all duration-1000 ${impact.color}`} style={{ width: `${Math.max(0, Math.min(100, ((layer1Stats?.avgGlobal || 0) + 1.5) / 3 * 100))}%` }} />
-                              </div>
-                              <div className="flex justify-between items-center mt-3">
-                                  <span className={`text-xl font-black uppercase tracking-tighter ${impact.text}`}>{impact.label}</span>
-                                  <span className="text-3xl font-mono font-black text-gray-800 dark:text-gray-100">{(layer1Stats?.avgGlobal || 0).toFixed(2)}</span>
-                              </div>
-                          </div>
                           <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
                               <p className="text-[9px] text-indigo-400 font-black uppercase mb-1 tracking-widest">Ações Analisadas</p>
                               <p className="text-2xl font-black text-indigo-900 dark:text-indigo-200">{filteredEvents.length} <span className="text-xs text-indigo-400 font-bold uppercase">cliques táticos</span></p>
@@ -356,7 +338,6 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
 
-                  {/* MOTOR DE FILTROS (INVISÍVEL/CONECTOR) */}
                   <div className="bg-indigo-900 dark:bg-darkInput p-8 rounded-3xl shadow-xl flex flex-col justify-between border dark:border-darkBorder">
                       <h3 className="text-[10px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Filter size={14}/> Motor de Contexto</h3>
                       <div className="space-y-4">
@@ -380,7 +361,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* CAMADA 2: CONTEXTO DE DESEMPENHO (REATIVO) */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   <div className="lg:col-span-3 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm relative min-h-[400px]">
                       <h3 className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter mb-8 flex items-center gap-3">
@@ -443,7 +423,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* CAMADA 3: ESPAÇO E TEMPO (DINÂMICA) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col">
                       <div className="flex justify-between items-center mb-6">
@@ -524,13 +503,13 @@ const AthleteProfile: React.FC = () => {
                                   <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-all shadow-sm"><Eye size={16}/> Relatório</button>
                               </div>
                           </div>
-                      )) : <div className="p-24 text-center text-gray-300 dark:text-gray-700 text-xs font-bold uppercase tracking-widest italic text-xs">Nenhuma avaliação encontrada</div>}
+                      )) : <div className="p-24 text-center text-gray-300 dark:text-gray-700 text-[10px] font-black uppercase tracking-widest italic text-xs">Nenhuma avaliação encontrada</div>}
                   </div>
               </div>
           </div>
       )}
 
-      {/* MODAIS */}
+      {/* MODAIS (MANTIDOS) */}
       {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
