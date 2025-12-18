@@ -1,19 +1,19 @@
 
+// Fix: Added Category to the imports from '../types' to resolve the "Cannot find name 'Category'" error.
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions 
+  getAthletes, getTrainingEntries, getTrainingSessions, saveAthlete, getCategories, getEvaluationSessions, deleteAthlete, getTeams
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { calculateTotalScore, TrainingEntry, Athlete, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe } from '../types';
+import { calculateTotalScore, TrainingEntry, Athlete, Category, TrainingSession, getCalculatedCategory, User, canEditData, UserRole, EvaluationSession, formatDateSafe, Team, Position } from '../types';
 import { 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip
 } from 'recharts';
 import { 
-  Edit, ArrowLeft, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-  TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye, Info,
-  Plus, ChevronDown, ChevronUp, MapPin
+  Edit, User as UserIcon, Save, X, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
+  TrendingUp, Activity, Target, Zap, Filter, MousePointer2, AlertCircle, Timer, ClipboardCheck, Eye,
+  Plus, Trash2, ArrowRightLeft, Mail, Phone, UserCircle
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 
@@ -38,7 +38,8 @@ const AthleteProfile: React.FC = () => {
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
   const [evalSessions, setEvalSessions] = useState<EvaluationSession[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
 
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -57,8 +58,8 @@ const AthleteProfile: React.FC = () => {
 
      const load = async () => {
          setLoading(true);
-         const [allAthletes, allEntries, allSessions, allCats, allEvals] = await Promise.all([
-             getAthletes(), getTrainingEntries(), getTrainingSessions(), getCategories(), getEvaluationSessions(id)
+         const [allAthletes, allEntries, allSessions, allCats, allEvals, teamsData] = await Promise.all([
+             getAthletes(), getTrainingEntries(), getTrainingSessions(), getCategories(), getEvaluationSessions(id), getTeams()
          ]);
          
          const foundAthlete = allAthletes.find(a => a.id === id);
@@ -69,6 +70,7 @@ const AthleteProfile: React.FC = () => {
              setEntries(allEntries.filter(e => e.athleteId === id));
              setSessions(allSessions);
              setEvalSessions(allEvals);
+             setAllTeams(teamsData);
          }
          setLoading(false);
      };
@@ -189,6 +191,12 @@ const AthleteProfile: React.FC = () => {
     );
   };
 
+  const handleDelete = async () => {
+      if (!athlete || !window.confirm(`Tem certeza que deseja excluir o perfil de ${athlete.name}? Todos os dados de desempenho serão perdidos.`)) return;
+      await deleteAthlete(athlete.id);
+      navigate('/athletes');
+  };
+
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
 
@@ -196,10 +204,7 @@ const AthleteProfile: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-20 relative animate-fade-in">
-      
-      {/* BLOCO SUPERIOR: PERFIL + CALENDÁRIO FIXO */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Card Info Atleta */}
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-8">
               <div className="relative group">
                 {athlete.photoUrl ? (
@@ -208,30 +213,25 @@ const AthleteProfile: React.FC = () => {
                     <div className="w-32 h-32 rounded-full bg-indigo-100 flex items-center justify-center text-5xl font-black text-indigo-600">{athlete.name.charAt(0)}</div>
                 )}
                 {canEditData(currentUser?.role || UserRole.TECNICO) && (
-                    <button onClick={() => setShowEditModal(true)} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
+                    <button onClick={() => { setEditFormData({...athlete}); setShowEditModal(true); }} className="absolute bottom-1 right-1 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:scale-110 transition-all"><Edit size={16}/></button>
                 )}
               </div>
               <div className="flex-1 min-w-0 text-center md:text-left">
                 <h1 className="text-3xl font-black text-gray-900 tracking-tighter truncate">{athlete.name}</h1>
                 <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
                    <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-1 rounded font-black uppercase">{athlete.position}</span>
-                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded font-black uppercase">{getCalculatedCategory(athlete.birthDate)}</span>
-                   <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-tighter">Nasc: {formatDateSafe(athlete.birthDate)}</span>
+                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded font-black uppercase">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
+                   <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-tighter">RG: {athlete.rg}</span>
                 </div>
                 <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
-                    <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo (RealTime)</button>
+                    <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
                     <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><ClipboardCheck size={16} /> Nova Avaliação</button>
                 </div>
               </div>
           </div>
-          
-          {/* Calendário Fixo */}
-          <div className="lg:col-span-1">
-             {renderCalendar()}
-          </div>
+          <div className="lg:col-span-1">{renderCalendar()}</div>
       </div>
 
-      {/* BLOCO SCORES MÉDIOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
               <div>
@@ -245,9 +245,9 @@ const AthleteProfile: React.FC = () => {
           </div>
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
               <div>
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><ClipboardCheck size={12} className="text-emerald-500"/> Média Técnica (Snapshots)</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><ClipboardCheck size={12} className="text-emerald-500"/> Média Técnica</span>
                   <p className="text-3xl font-black text-emerald-600">{avgStructuredTech.toFixed(1)}</p>
-                  <span className="text-[8px] font-black uppercase text-emerald-400">Escala controlada 1-5</span>
+                  <span className={`text-[8px] font-black uppercase text-emerald-400`}>Escala controlada 1-5</span>
               </div>
               <div className="h-12 w-1.5 rounded-full bg-gray-100 overflow-hidden">
                   <div className="w-full bg-emerald-500 transition-all duration-1000" style={{ height: `${(avgStructuredTech / 5) * 100}%` }}></div>
@@ -255,7 +255,6 @@ const AthleteProfile: React.FC = () => {
           </div>
       </div>
 
-      {/* ABAS DE CONTEÚDO */}
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-md mx-auto">
           <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-50'}`}>
               <Activity size={16}/> Scout RealTime
@@ -265,7 +264,6 @@ const AthleteProfile: React.FC = () => {
           </button>
       </div>
 
-      {/* CONTEÚDO REALTIME (Indigo/Roxo) */}
       {activeTab === 'realtime' && (
           <div className="space-y-6 animate-fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -281,20 +279,20 @@ const AthleteProfile: React.FC = () => {
                                         <Radar name="Score" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
                                     </RadarChart>
                                 </ResponsiveContainer>
-                            ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold bg-gray-50 rounded-xl italic">Sem registros táticos no período</div>}
+                            ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold bg-gray-50 rounded-xl italic">Sem registros táticos</div>}
                         </div>
                         <div className="w-full md:w-1/2">
                             <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-xl space-y-4">
                                 <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest flex items-center gap-2"><Filter size={14}/> Filtros de Scout</h3>
                                 <div className="space-y-2.5">
-                                    <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-400">
+                                    <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
                                         <option value="all">Todas as Fases</option>
                                         <option value="OFENSIVA">Org. Ofensiva</option>
                                         <option value="DEFENSIVA">Org. Defensiva</option>
                                         <option value="TRANSICAO_OF">Trans. Ofensiva</option>
                                         <option value="TRANSICAO_DEF">Trans. Defensiva</option>
                                     </select>
-                                    <select value={filterResult} onChange={(e) => setFilterResult(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-400">
+                                    <select value={filterResult} onChange={(e) => setFilterResult(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
                                         <option value="all">Todos os Resultados</option>
                                         <option value="POSITIVA">Sucesso</option>
                                         <option value="NEUTRA">Neutro</option>
@@ -305,10 +303,7 @@ const AthleteProfile: React.FC = () => {
                         </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3>
-                        <TrendingUp size={14} className="text-indigo-400"/>
-                    </div>
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center"><h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3><TrendingUp size={14} className="text-indigo-400"/></div>
                     <div className="flex-1 p-4 space-y-4">
                         {impactRanking.best.length > 0 ? (
                             <>
@@ -331,42 +326,18 @@ const AthleteProfile: React.FC = () => {
                                     ))}
                                 </div>
                             </>
-                        ) : <div className="h-full flex items-center justify-center text-[9px] text-gray-300 font-bold uppercase text-center italic">Aguardando dados...</div>}
+                        ) : <div className="h-full flex items-center justify-center text-[9px] text-gray-300 font-bold uppercase text-center italic">Sem dados...</div>}
                     </div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><MousePointer2 size={14}/> Mapeamento de Campo</h3>
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
-                            {(['all', 'positiva', 'negativa'] as const).map(mode => (
-                                <button key={mode} onClick={() => setMapMode(mode)} className={`px-3 py-1 rounded-md text-[8px] font-black uppercase transition-all ${mapMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}>{mode === 'all' ? 'Tudo' : mode === 'positiva' ? 'Sucesso' : 'Erro'}</button>
-                            ))}
-                        </div>
-                    </div>
-                    <HeatmapField perspective={true} readOnly={true} points={filteredTacticalEvents.filter(e => {
-                        if (mapMode === 'all') return true;
-                        return mapMode === 'positiva' ? e.result === 'POSITIVA' : e.result === 'NEGATIVA';
-                    }).map(e => e.location)} />
-                </div>
-                <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="bg-indigo-50 p-6 rounded-full mb-4 border border-indigo-100"><Zap size={40} className="text-indigo-500" /></div>
-                    <h4 className="text-lg font-black uppercase text-gray-800 tracking-tighter">Motor de Análise Tática</h4>
-                    <p className="text-[11px] text-gray-400 mt-2 max-w-xs font-medium uppercase leading-relaxed">As métricas de jogo são ponderadas pelo impacto da fase e dificuldade da ação executada pelo atleta em tempo real.</p>
                 </div>
               </div>
           </div>
       )}
 
-      {/* CONTEÚDO AVALIAÇÃO (Emerald/Verde) */}
       {activeTab === 'snapshots' && (
           <div className="space-y-6 animate-fade-in">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                      <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico Estruturado</h3>
-                      <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all shadow-md"><Plus size={14}/> Nova Avaliação</button>
+                      <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações</h3>
                   </div>
                   <div className="divide-y divide-gray-50">
                       {evalSessions.length > 0 ? evalSessions.map(ev => (
@@ -377,37 +348,25 @@ const AthleteProfile: React.FC = () => {
                                       <p className="text-base font-black text-gray-800 uppercase tracking-tighter">{ev.type}</p>
                                       <div className="flex items-center gap-4 mt-1.5 text-[9px] text-gray-400 font-black uppercase tracking-widest">
                                           <div className="flex items-center gap-1"><CalendarIcon size={12}/> {formatDateSafe(ev.date)}</div>
-                                          <span className="text-gray-200">|</span>
                                           <div className="flex items-center gap-1 text-emerald-600"><TrendingUp size={12}/> TÉC: {ev.scoreTecnico.toFixed(1)}</div>
-                                          <span className="text-gray-200">|</span>
                                           <div className="flex items-center gap-1 text-blue-500"><Activity size={12}/> FÍS: {ev.scoreFisico.toFixed(0)}%</div>
                                       </div>
                                   </div>
                               </div>
-                              <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all active:scale-95 shadow-sm">
-                                  <Eye size={16}/> Relatório
-                              </button>
+                              <button onClick={() => navigate(`/athletes/${id}/eval-view/${ev.id}`)} className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-sm"><Eye size={16}/> Relatório</button>
                           </div>
-                      )) : (
-                          <div className="p-24 text-center flex flex-col items-center gap-6">
-                              <div className="bg-gray-50 p-8 rounded-full border-2 border-dashed border-gray-100"><AlertCircle size={48} className="text-gray-200" /></div>
-                              <div className="max-w-xs">
-                                <p className="text-sm font-black text-gray-400 uppercase tracking-widest">Nenhuma avaliação encontrada</p>
-                                <p className="text-[10px] text-gray-300 mt-2 font-bold uppercase italic leading-relaxed">Este atleta ainda não passou por avaliações controladas de fundamentos e capacidades físicas.</p>
-                              </div>
-                          </div>
-                      )}
+                      )) : <div className="p-24 text-center text-gray-300 text-xs font-bold uppercase tracking-widest italic">Nenhuma avaliação encontrada</div>}
                   </div>
               </div>
           </div>
       )}
 
-      {/* MODAL EDIÇÃO ATLETA */}
+      {/* MODAL EDIÇÃO ATLETA PADRONIZADO */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-           <div className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-slide-up">
+           <div className="bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-slide-up">
               <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2"><Edit className="text-indigo-600" size={24}/> Editar Perfil</h3>
+                <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2"><Edit className="text-indigo-600" size={24}/> Editar Perfil do Atleta</h3>
                 <button onClick={() => setShowEditModal(false)} className="bg-gray-100 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20} /></button>
               </div>
               <form onSubmit={async (e) => {
@@ -416,13 +375,13 @@ const AthleteProfile: React.FC = () => {
                   await saveAthlete({ ...athlete, ...editFormData } as Athlete);
                   setShowEditModal(false);
                   setRefreshKey(prev => prev + 1);
-              }} className="space-y-5">
-                 <div className="flex flex-col items-center mb-8">
-                    <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden relative border-4 border-white shadow-xl">
-                        {uploading ? <Loader2 className="animate-spin text-indigo-600" /> : editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={40} className="text-gray-200" />}
+              }} className="space-y-6">
+                 <div className="flex flex-col items-center">
+                    <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-dashed border-gray-200 shadow-inner relative">
+                        {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={32} className="text-gray-200" />)}
                     </div>
-                    <label className={`cursor-pointer text-indigo-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:text-indigo-800 ${uploading ? 'opacity-50' : ''}`}>
-                       <Save size={14} /> {uploading ? 'Processando...' : 'Atualizar Foto'}
+                    <label className={`cursor-pointer text-blue-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:text-blue-800 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                       {uploading ? 'Enviando...' : <><Plus size={14} /> Alterar Foto</>}
                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={async (ev) => {
                             const file = ev.target.files?.[0];
                             if (file) {
@@ -435,21 +394,80 @@ const AthleteProfile: React.FC = () => {
                         }} />
                     </label>
                  </div>
-                 <div>
-                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nome Completo</label>
-                   <input required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Data de Nascimento</label>
-                        <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={editFormData.birthDate || ''} onChange={e => setEditFormData({...editFormData, birthDate: e.target.value})} />
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Dados Pessoais</h4>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nome Completo</label>
+                           <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Nascimento</label>
+                                <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.birthDate || ''} onChange={e => setEditFormData({...editFormData, birthDate: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">RG / ID</label>
+                                <input required type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Posição</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
+                                    {Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Categoria</label>
+                                <select required className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">RG / Identificador</label>
-                        <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
+
+                    <div className="space-y-4">
+                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b pb-1">Responsáveis</h4>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><UserCircle size={12}/> Nome</label>
+                           <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
+                        </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Mail size={12}/> E-mail</label>
+                           <input type="email" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsibleEmail || ''} onChange={e => setEditFormData({...editFormData, responsibleEmail: e.target.value})} />
+                        </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Phone size={12}/> Telefone</label>
+                           <input type="tel" className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
+                        </div>
                     </div>
                  </div>
-                 <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl mt-4 hover:bg-indigo-700 transition-all uppercase tracking-widest text-[11px] shadow-xl shadow-indigo-100">Atualizar Atleta</button>
+
+                 {/* BLOCO TRANSFERÊNCIA */}
+                 <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-4">
+                     <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft size={16}/> Central de Transferência</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                           <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Mover para Time</label>
+                           <select className="w-full bg-white border border-indigo-200 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={editFormData.teamId} onChange={e => setEditFormData({...editFormData, teamId: e.target.value})}>
+                               {allTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                           </select>
+                        </div>
+                        <div className="flex items-end">
+                            <button type="button" onClick={() => setEditFormData({...editFormData, pendingTransferTeamId: 'exit'})} className="w-full bg-indigo-100 text-indigo-700 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all">Solicitar Saída do Clube</button>
+                        </div>
+                     </div>
+                 </div>
+
+                 <div className="flex gap-3 pt-4">
+                    <button type="button" onClick={handleDelete} className="flex-1 bg-red-50 text-red-600 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all flex items-center justify-center gap-2"><Trash2 size={16}/> Excluir Atleta</button>
+                    <button type="submit" disabled={uploading} className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                        {uploading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                        {uploading ? 'Aguarde...' : 'Salvar Alterações'}
+                    </button>
+                 </div>
               </form>
            </div>
         </div>

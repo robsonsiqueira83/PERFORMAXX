@@ -1,13 +1,22 @@
 
+// Fix: Added explicit typing to the reduce call to resolve arithmetic operation errors on unknown types.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions, getTrainingEntries
+  getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions
 } from '../services/storageService';
-import { Athlete, Category, TrainingEntry, TrainingSession, Position, HeatmapPoint, User, canEditData } from '../types';
-import HeatmapField from '../components/HeatmapField';
-import { Save, CheckCircle, Users, ClipboardList, FileText, Loader2, Search, Filter, AlertOctagon, Target, Activity, TrendingUp } from 'lucide-react';
+import { Athlete, Category, TrainingEntry, TrainingSession, Position, User, canEditData } from '../types';
+import { Save, Users, ClipboardList, Loader2, Search, Target, AlertOctagon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+
+const TECH_CONFIG = [
+    { fundamento: 'Passe', subs: ['Curto', 'Médio', 'Longo'] },
+    { fundamento: 'Domínio e Controle', subs: ['Orientado', 'Sob pressão'] },
+    { fundamento: 'Condução', subs: ['Espaço curto', 'Progressão'] },
+    { fundamento: 'Finalização', subs: ['Bola rolando', 'Primeira finalização'] },
+    { fundamento: '1x1 Ofensivo', subs: ['Drible curto', 'Mudança de direção'] },
+    { fundamento: '1x1 Defensivo', subs: ['Desarme', 'Postura corporal'] }
+];
 
 interface TrainingProps {
   teamId: string;
@@ -29,10 +38,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const [loading, setLoading] = useState(true);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const [techStats, setTechStats] = useState<Record<string, number>>({});
-  const [physStats, setPhysStats] = useState<Record<string, number>>({});
-  const [tactStats, setTactStats] = useState<Record<string, number>>({});
-  const [heatmapPoints, setHeatmapPoints] = useState<HeatmapPoint[]>([]);
+  const [techScores, setTechScores] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -70,10 +76,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
   const handleSelectAthlete = (athlete: Athlete) => {
     setSelectedAthlete(athlete);
-    setTechStats({});
-    setPhysStats({});
-    setTactStats({});
-    setHeatmapPoints([]); 
+    setTechScores({});
     setNotes('');
   };
 
@@ -82,52 +85,50 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
     let sessionIdToUse = currentSessionId;
     if (!sessionIdToUse) {
         sessionIdToUse = uuidv4();
-        await saveTrainingSession({ id: sessionIdToUse, date, categoryId: selectedCategory, teamId, description: 'Atuação Regular' });
+        await saveTrainingSession({ id: sessionIdToUse, date, categoryId: selectedCategory, teamId, description: 'Atuação de Treino' });
         setCurrentSessionId(sessionIdToUse);
     }
+
+    // Fix: Explicitly cast values to number array and type the reduce parameters to avoid arithmetic operation errors on unknown types
+    const avgScore = Object.values(techScores).length > 0 
+        ? (Object.values(techScores) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.values(techScores).length 
+        : 5;
 
     const entry: TrainingEntry = {
       id: uuidv4(), sessionId: sessionIdToUse, athleteId: selectedAthlete.id,
       technical: {
-        controle_bola: techStats.controle_bola || 5, conducao: techStats.conducao || 5, passe: techStats.passe || 5,
-        recepcao: techStats.recepcao || 5, drible: techStats.drible || 5, finalizacao: techStats.finalizacao || 5,
-        cruzamento: techStats.cruzamento || 5, desarme: techStats.desarme || 5, interceptacao: techStats.interceptacao || 5
+        controle_bola: techScores['Domínio e Controle|Orientado'] || avgScore,
+        conducao: techScores['Condução|Progressão'] || avgScore,
+        passe: techScores['Passe|Curto'] || avgScore,
+        recepcao: techScores['Domínio e Controle|Sob pressão'] || avgScore,
+        drible: techScores['1x1 Ofensivo|Drible curto'] || avgScore,
+        finalizacao: techScores['Finalização|Bola rolando'] || avgScore,
+        cruzamento: avgScore,
+        desarme: techScores['1x1 Defensivo|Desarme'] || avgScore,
+        interceptacao: techScores['1x1 Defensivo|Postura corporal'] || avgScore
       },
-      physical: {
-        velocidade: physStats.velocidade || 5, agilidade: physStats.agilidade || 5, resistencia: physStats.resistencia || 5,
-        forca: physStats.forca || 5, coordenacao: physStats.coordenacao || 5, mobilidade: physStats.mobilidade || 5, estabilidade: physStats.estabilidade || 5
-      },
+      physical: { velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5 },
       tactical: {
-        def_posicionamento: tactStats.def_posicionamento || 5, def_pressao: tactStats.def_pressao || 5, def_cobertura: tactStats.def_cobertura || 5,
-        def_fechamento: tactStats.def_fechamento || 5, def_temporizacao: tactStats.def_temporizacao || 5, def_desarme_tatico: tactStats.def_desarme_tatico || 5,
-        def_reacao: tactStats.def_reacao || 5, const_qualidade_passe: tactStats.const_qualidade_passe || 5, const_visao: tactStats.const_visao || 5, const_apoios: tactStats.const_apoios || 5,
-        const_mobilidade: tactStats.const_mobilidade || 5, const_circulacao: tactStats.const_circulacao || 5, const_quebra_linhas: tactStats.const_quebra_linhas || 5,
-        const_tomada_decisao: tactStats.const_tomada_decisao || 5, ult_movimentacao: tactStats.ult_movimentacao || 5, ult_ataque_espaco: tactStats.ult_ataque_espaco || 5, ult_1v1: tactStats.ult_1v1 || 5,
-        ult_ultimo_passe: tactStats.ult_ultimo_passe || 5, ult_finalizacao_eficiente: tactStats.ult_finalizacao_eficiente || 5,
-        ult_ritmo: tactStats.ult_ritmo || 5, ult_bolas_paradas: tactStats.ult_bolas_paradas || 5
+        def_posicionamento: avgScore, def_pressao: avgScore, def_cobertura: avgScore, def_fechamento: avgScore, def_temporizacao: avgScore, def_desarme_tatico: avgScore, def_reacao: avgScore,
+        const_qualidade_passe: techScores['Passe|Médio'] || avgScore, const_visao: avgScore, const_apoios: avgScore, const_mobilidade: avgScore, const_circulacao: avgScore, const_quebra_linhas: avgScore, const_tomada_decisao: avgScore,
+        ult_movimentacao: avgScore, ult_ataque_espaco: avgScore, ult_1v1: techScores['1x1 Ofensivo|Mudança de direção'] || avgScore, ult_ultimo_passe: avgScore, ult_finalizacao_eficiente: techScores['Finalização|Primeira finalização'] || avgScore, ult_ritmo: avgScore, ult_bolas_paradas: avgScore
       },
-      heatmapPoints, notes
+      heatmapPoints: [], 
+      notes: `[Treino] ${notes}`
     };
     await saveTrainingEntry(entry);
-    setNotification(`Atuação salva!`);
-    setTimeout(() => { setNotification(null); navigate(`/athletes/${selectedAthlete.id}`); }, 600);
+    setNotification(`Atuação de ${selectedAthlete.name} salva!`);
+    setTimeout(() => { setNotification(null); setSelectedAthlete(null); }, 1500);
   };
 
-  const renderScoreRow = (label: string, key: string, store: any, setStore: any) => (
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-50 last:border-0 gap-2">
-          <span className="text-[11px] font-bold text-gray-600 uppercase tracking-tighter">{label}</span>
-          <div className="grid grid-cols-5 gap-1">
-              {[1, 2, 3, 4, 5].map(v => (
-                  <button key={v} onClick={() => setStore({...store, [key]: v})} className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all border ${store[key] === v ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' : 'bg-white text-gray-300 border-gray-200 hover:border-indigo-200'}`}>{v}</button>
-              ))}
-          </div>
-      </div>
-  );
+  const handleScoreClick = (fund: string, sub: string, score: number) => {
+      setTechScores(prev => ({ ...prev, [`${fund}|${sub}`]: score }));
+  };
 
   if (currentUser && !canEditData(currentUser.role)) return <div className="p-20 text-center"><AlertOctagon className="mx-auto text-red-500" size={48}/><h2 className="text-xl font-black mt-4">Acesso Restrito</h2></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex items-center gap-2 mb-4">
         <ClipboardList className="text-blue-600" size={28} />
         <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Lançamento de Atuação</h2>
@@ -142,7 +143,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
       {selectedCategory && (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Users size={14}/> Lista de Seleção</h3>
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Users size={14}/> Atletas da Categoria</h3>
             <div className="flex gap-4 pb-2">
                 {athletes.map(a => (
                     <button key={a.id} onClick={() => handleSelectAthlete(a)} className={`flex-shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${selectedAthlete?.id === a.id ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-105' : 'bg-gray-50 text-gray-700 border-gray-100 hover:bg-blue-50'}`}>
@@ -150,6 +151,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                         <span className="text-[10px] font-black uppercase tracking-tighter truncate max-w-[80px]">{a.name.split(' ')[0]}</span>
                     </button>
                 ))}
+                {athletes.length === 0 && <p className="text-gray-400 text-xs py-4">Nenhum atleta nesta filtragem.</p>}
             </div>
         </div>
       )}
@@ -161,44 +163,40 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       <div className="flex items-center gap-4">
                           {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-14 h-14 rounded-full object-cover border-2 border-blue-50" />}
                           <div>
-                              <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliar {selectedAthlete.name}</h3>
-                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Padrão de Avaliação Estruturada (Snapshot)</p>
+                              <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliar Atuação: {selectedAthlete.name}</h3>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Critérios de Fundamentos Técnicos (1-5)</p>
                           </div>
                       </div>
                       {notification && <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse">{notification}</div>}
                   </div>
 
-                  <div className="mb-10"><HeatmapField points={heatmapPoints} onChange={setHeatmapPoints} label="Zona de Atuação Predominante" perspective={true} /></div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                       <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
-                           <h4 className="text-[11px] font-black text-blue-700 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={14}/> Fundamentos</h4>
-                           {renderScoreRow('Controle', 'controle_bola', techStats, setTechStats)}
-                           {renderScoreRow('Passe', 'passe', techStats, setTechStats)}
-                           {renderScoreRow('Drible', 'drible', techStats, setTechStats)}
-                           {renderScoreRow('Finalização', 'finalizacao', techStats, setTechStats)}
-                           {renderScoreRow('Desarme', 'desarme', techStats, setTechStats)}
-                       </div>
-                       <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
-                           <h4 className="text-[11px] font-black text-green-700 uppercase tracking-widest mb-4 flex items-center gap-2"><Activity size={14}/> Físico</h4>
-                           {renderScoreRow('Velocidade', 'velocidade', physStats, setPhysStats)}
-                           {renderScoreRow('Agilidade', 'agilidade', physStats, setPhysStats)}
-                           {renderScoreRow('Força', 'forca', physStats, setPhysStats)}
-                           {renderScoreRow('Coordenação', 'coordenacao', physStats, setPhysStats)}
-                           {renderScoreRow('Resistência', 'resistencia', physStats, setPhysStats)}
-                       </div>
-                       <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
-                           <h4 className="text-[11px] font-black text-purple-700 uppercase tracking-widest mb-4 flex items-center gap-2"><TrendingUp size={14}/> Tático (Jogo)</h4>
-                           {renderScoreRow('Posicionamento', 'def_posicionamento', tactStats, setTactStats)}
-                           {renderScoreRow('Visão', 'const_visao', tactStats, setTactStats)}
-                           {renderScoreRow('Transição', 'const_mobilidade', tactStats, setTactStats)}
-                           {renderScoreRow('Tomada Decisão', 'const_tomada_decisao', tactStats, setTactStats)}
-                           {renderScoreRow('Compactação', 'def_fechamento', tactStats, setTactStats)}
-                       </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {TECH_CONFIG.map((group, idx) => (
+                          <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100">
+                               <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                   <Target size={14} className="text-blue-400"/> {group.fundamento}
+                               </h4>
+                               <div className="space-y-4">
+                                   {group.subs.map(sub => (
+                                       <div key={sub} className="space-y-2">
+                                           <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-bold text-gray-600 uppercase">{sub}</span>
+                                                <span className="text-[9px] font-black text-blue-600">{techScores[`${group.fundamento}|${sub}`] || '-'}</span>
+                                           </div>
+                                           <div className="grid grid-cols-5 gap-1">
+                                               {[1, 2, 3, 4, 5].map(v => (
+                                                   <button key={v} onClick={() => handleScoreClick(group.fundamento, sub, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${techScores[`${group.fundamento}|${sub}`] === v ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-300 border-gray-100'}`}>{v}</button>
+                                               ))}
+                                           </div>
+                                       </div>
+                                   ))}
+                               </div>
+                          </div>
+                      ))}
                   </div>
 
-                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Observações Técnicas</label><textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-24 outline-none" placeholder="Análise qualitativa..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
-                  <div className="mt-8 flex justify-end"><button onClick={handleSaveEntry} className="bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 uppercase tracking-widest text-[10px] active:scale-95 transition-all"><Save size={18}/> Finalizar e Salvar Atuação</button></div>
+                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Observações do Treino</label><textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-20 outline-none" placeholder="Feedback qualitativo sobre a sessão..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
+                  <div className="mt-8 flex justify-end"><button onClick={handleSaveEntry} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 uppercase tracking-widest text-[10px] active:scale-95 transition-all"><Save size={18}/> Salvar Atuação</button></div>
               </div>
           </div>
       )}
