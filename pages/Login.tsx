@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { getUsers, saveUser } from '../services/storageService';
@@ -44,14 +45,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               teamIds: [] 
             };
             
-            const { error: saveError } = await saveUser(newUser);
+            const response = await saveUser(newUser);
             
-            if (saveError) {
-                console.error(saveError);
-                if (saveError.code === '23505') { 
+            if (response.error) {
+                console.error("Erro detalhado Supabase:", response.error);
+                if (response.error.code === '23505') { 
                     setError('Este email já está cadastrado.');
+                } else if (response.error.message.includes('row-level security')) {
+                    setError('Erro de permissão no banco. Verifique as políticas SQL.');
                 } else {
-                    setError('Erro ao criar conta. Tente novamente.');
+                    setError(`Erro ao criar conta: ${response.error.message}`);
                 }
             } else {
                 onLogin(newUser);
@@ -70,9 +73,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               setError('Credenciais inválidas.');
             }
         }
-    } catch (err) {
-        console.error(err);
-        setError('Erro de conexão com servidor.');
+    } catch (err: any) {
+        console.error("Erro de conexão:", err);
+        setError(`Erro de conexão: ${err.message || 'Servidor offline'}`);
     } finally {
         setLoading(false);
     }

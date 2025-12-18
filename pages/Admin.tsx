@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   getTeams, saveTeam, deleteTeam, 
@@ -14,11 +15,9 @@ interface AdminProps {
   currentTeamId: string;
 }
 
-// Modal types
 type ModalType = 'none' | 'delete_confirm_simple' | 'delete_migrate_warn' | 'edit_team' | 'edit_category' | 'delete_category_confirm' | 'alert_error' | 'alert_success' | 'leave_team_confirm';
 
 const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
-  // Initialize tab from localStorage to persist state after reload
   const [activeTab, setActiveTab] = useState<'teams' | 'categories'>(() => {
     const savedTab = localStorage.getItem('admin_active_tab');
     return (savedTab === 'teams' || savedTab === 'categories') ? savedTab : 'teams';
@@ -30,91 +29,63 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   };
 
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false); // New Uploading State
+  const [uploading, setUploading] = useState(false);
   const [viewingContextId, setViewingContextId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Data State
   const [ownedTeams, setOwnedTeams] = useState<Team[]>([]);
   const [activeGuestTeams, setActiveGuestTeams] = useState<Team[]>([]);
   const [pendingGuestTeams, setPendingGuestTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // Modal State
   const [modalType, setModalType] = useState<ModalType>('none');
-  const [targetId, setTargetId] = useState<string | null>(null); // ID of item being acted upon
-  const [targetName, setTargetName] = useState<string>(''); // Name for display
-  const [modalMessage, setModalMessage] = useState<string>(''); // For generic alerts
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [targetName, setTargetName] = useState<string>('');
+  const [modalMessage, setModalMessage] = useState<string>(''); 
   
-  // Migration State
   const [dependencyCounts, setDependencyCounts] = useState({ athletes: 0, users: 0, categories: 0, sessions: 0 });
   const [migrationDestTeamId, setMigrationDestTeamId] = useState<string>('');
   const [newTeamName, setNewTeamName] = useState('');
   const [isMigrating, setIsMigrating] = useState(false);
 
-  // Edit Form State (for Team/Category)
   const [formData, setFormData] = useState<{ name: string, logoUrl?: string }>({ name: '', logoUrl: '' });
 
-  // Use helper functions from types.ts where applicable or define local scope
   const canEdit = canEditData(userRole);
   const canDelete = canDeleteData(userRole);
 
   useEffect(() => {
-    // Get context ID from local storage to ensure new teams are assigned to the correct Master/Panel
     const ctxId = localStorage.getItem('performax_context_id');
     const userStr = localStorage.getItem('performax_current_user');
-    
     if (userStr) setCurrentUser(JSON.parse(userStr));
     if (ctxId) setViewingContextId(ctxId);
-
     refreshData(ctxId);
   }, [currentTeamId]);
 
   const refreshData = async (ctxId?: string | null) => {
     setLoading(true);
-    const allTeams = await getTeams();
-    const userStr = localStorage.getItem('performax_current_user');
-    const u: User | null = userStr ? JSON.parse(userStr) : null;
+    try {
+        const allTeams = await getTeams();
+        const userStr = localStorage.getItem('performax_current_user');
+        const u: User | null = userStr ? JSON.parse(userStr) : null;
+        const contextId = ctxId || viewingContextId;
+        const isOwnerOrGlobal = u && (u.id === contextId || u.role === UserRole.GLOBAL);
 
-    const contextId = ctxId || viewingContextId;
-    
-    // Check if I am the owner of this panel OR a Global Admin
-    const isOwnerOrGlobal = u && (u.id === contextId || u.role === UserRole.GLOBAL);
+        if (contextId && isOwnerOrGlobal) setOwnedTeams(allTeams.filter(t => t.ownerId === contextId));
+        else setOwnedTeams([]);
 
-    // 1. Owned Teams (Managed by this Panel)
-    if (contextId && isOwnerOrGlobal) {
-        setOwnedTeams(allTeams.filter(t => t.ownerId === contextId));
-    } else {
-        // If I am a guest viewing another panel, I should NOT see the "Managed Teams" section
-        // as if I own them. I should only see the teams I'm invited to (below).
-        setOwnedTeams([]); 
-    }
-
-    // 2. Guest Teams (Teams I accepted to work in, but don't own)
-    if (u) {
-        const teamIds = u.teamIds || [];
-        
-        // Find Pending Teams
-        const pendingIds = teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
-        setPendingGuestTeams(allTeams.filter(t => pendingIds.includes(t.id)));
-
-        // Find Active Guest Teams (Not pending, not owned)
-        const activeIds = teamIds.filter(id => !id.startsWith('pending:'));
-        let myActiveTeams = allTeams.filter(t => 
-            activeIds.includes(t.id) && t.ownerId !== u.id
-        );
-
-        // FILTER: If viewing a specific context as a GUEST, only show guest teams belonging to THAT context.
-        if (contextId && !isOwnerOrGlobal) {
-            myActiveTeams = myActiveTeams.filter(t => t.ownerId === contextId);
+        if (u) {
+            const teamIds = u.teamIds || [];
+            const pendingIds = teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
+            setPendingGuestTeams(allTeams.filter(t => pendingIds.includes(t.id)));
+            const activeIds = teamIds.filter(id => !id.startsWith('pending:'));
+            let myActiveTeams = allTeams.filter(t => activeIds.includes(t.id) && t.ownerId !== u.id);
+            if (contextId && !isOwnerOrGlobal) myActiveTeams = myActiveTeams.filter(t => t.ownerId === contextId);
+            setActiveGuestTeams(myActiveTeams);
         }
-
-        setActiveGuestTeams(myActiveTeams);
-    }
-    
-    // Categories for the currently selected team (in header)
-    const c = await getCategories();
-    setCategories(c.filter(item => item.teamId === currentTeamId));
+        
+        const c = await getCategories();
+        setCategories(c.filter(item => item.teamId === currentTeamId));
+    } catch (err) { console.error(err); }
     setLoading(false);
   };
 
@@ -134,460 +105,47 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       setModalMessage(message);
   };
 
-  // --- TEAM MANAGEMENT LOGIC ---
-
-  const openNewTeamModal = () => {
-    setModalType('edit_team');
-    setFormData({ name: '', logoUrl: '' });
-    setTargetId(null); // null means new
-  };
-
-  const openEditTeamModal = (team: Team) => {
-    setModalType('edit_team');
-    setFormData({ name: team.name, logoUrl: team.logoUrl || '' });
-    setTargetId(team.id);
-  };
-
-  const handleTeamLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploading(true);
-      try {
-        e.target.value = ''; // Reset input
-        const url = await processImageUpload(file);
-        setFormData({ ...formData, logoUrl: url });
-      } catch (error) {
-        showAlert('alert_error', 'Erro ao processar imagem');
-      } finally {
-        setUploading(false);
-      }
-    }
-  };
-
   const handleSaveTeam = async () => {
     if (!formData.name) return;
-    
-    // Save with current Viewing Context ID as owner
-    await saveTeam({ 
-        id: targetId || uuidv4(), 
-        name: formData.name, 
-        logoUrl: formData.logoUrl,
-        ownerId: viewingContextId 
-    });
-    closeModal();
-    window.location.reload();
-  };
-
-  const handleDeleteTeamClick = async (team: Team) => {
-    setTargetId(team.id);
-    setTargetName(team.name);
     setLoading(true);
-
-    // Check dependencies
-    const [allAthletes, allUsers, allCategories, allSessions] = await Promise.all([
-        getAthletes(), getUsers(), getCategories(), getTrainingSessions()
-    ]);
-
-    const counts = {
-        athletes: allAthletes.filter(a => a.teamId === team.id).length,
-        users: allUsers.filter(u => u.teamIds?.includes(team.id)).length,
-        categories: allCategories.filter(c => c.teamId === team.id).length,
-        sessions: allSessions.filter(s => s.teamId === team.id).length
-    };
-
-    setDependencyCounts(counts);
-    setLoading(false);
-
-    const hasData = counts.athletes > 0 || counts.users > 0 || counts.categories > 0 || counts.sessions > 0;
-
-    if (hasData) {
-        setModalType('delete_migrate_warn');
-        const otherTeams = ownedTeams.filter(t => t.id !== team.id);
-        if (otherTeams.length > 0) setMigrationDestTeamId(otherTeams[0].id);
-    } else {
-        setModalType('delete_confirm_simple');
-    }
-  };
-
-  const handleMigrationAndDeletion = async () => {
-    if (!targetId) return;
-    setIsMigrating(true);
-
     try {
-        let destinationId = migrationDestTeamId;
-
-        // 1. If creating a new team during migration
-        if (!destinationId && newTeamName) {
-            destinationId = uuidv4();
-            await saveTeam({ id: destinationId, name: newTeamName, ownerId: viewingContextId });
-        }
-
-        if (!destinationId) {
-            showAlert('alert_error', "Selecione um time de destino ou crie um novo.");
-            setIsMigrating(false);
-            return;
-        }
-
-        // 2. Perform Migration
-        const [allAthletes, allUsers, allCategories, allSessions] = await Promise.all([
-            getAthletes(), getUsers(), getCategories(), getTrainingSessions()
-        ]);
-
-        // Category Migration Logic (Updated to merge by normalized name)
-        const teamCategories = allCategories.filter(c => c.teamId === targetId);
-        const destinationCategories = allCategories.filter(c => c.teamId === destinationId);
-
-        for (const cat of teamCategories) {
-            // Check if destination already has this category (using normalized check)
-            const normalizedOld = normalizeCategoryName(cat.name);
-            const existingCat = destinationCategories.find(dc => normalizeCategoryName(dc.name) === normalizedOld);
-
-            if (existingCat) {
-                // If exists, we need to move children (athletes/sessions) to the EXISTING category, then delete old
-                
-                // Move athletes
-                const catAthletes = allAthletes.filter(a => a.categoryId === cat.id);
-                for (const ath of catAthletes) {
-                    await saveAthlete({ ...ath, categoryId: existingCat.id, teamId: destinationId });
-                }
-
-                // Move sessions
-                const catSessions = allSessions.filter(s => s.categoryId === cat.id);
-                for (const ses of catSessions) {
-                    await saveTrainingSession({ ...ses, categoryId: existingCat.id, teamId: destinationId });
-                }
-
-                // Delete old category since we merged
-                await deleteCategory(cat.id);
-
-            } else {
-                // If not exists, just move the category
-                await saveCategory({ ...cat, name: normalizedOld, teamId: destinationId });
-            }
-        }
-
-        // Move remaining athletes (without category or failed match)
-        const freshAthletes = await getAthletes(); // Refresh to be safe
-        const teamAthletes = freshAthletes.filter(a => a.teamId === targetId);
-        for (const ath of teamAthletes) {
-             if (ath.teamId === targetId) {
-                 await saveAthlete({ ...ath, teamId: destinationId });
-             }
-        }
-
-        const teamSessions = allSessions.filter(s => s.teamId === targetId);
-        for (const ses of teamSessions) {
-             if (ses.teamId === targetId) {
-                 await saveTrainingSession({ ...ses, teamId: destinationId });
-             }
-        }
-
-        const teamUsers = allUsers.filter(u => u.teamIds?.includes(targetId));
-        for (const usr of teamUsers) {
-            const newTeamIds = (usr.teamIds || []).filter(id => id !== targetId);
-            if (!newTeamIds.includes(destinationId)) {
-                newTeamIds.push(destinationId);
-            }
-            await saveUser({ ...usr, teamIds: newTeamIds });
-        }
-
-        // 3. Delete Old Team
-        await deleteTeam(targetId);
-
+        await saveTeam({ 
+            id: targetId || uuidv4(), 
+            name: formData.name, 
+            logoUrl: formData.logoUrl,
+            ownerId: viewingContextId 
+        });
         closeModal();
-        window.location.reload();
-
-    } catch (error) {
-        console.error("Migration failed", error);
-        showAlert('alert_error', "Erro ao migrar dados. Tente novamente.");
-    } finally {
-        setIsMigrating(false);
-    }
-  };
-
-  const handleSimpleDeletion = async () => {
-      if (targetId) {
-          await deleteTeam(targetId);
-          closeModal();
-          window.location.reload();
-      }
-  };
-
-  // --- LEAVE TEAM LOGIC ---
-  const handleLeaveTeamClick = (team: Team) => {
-      setTargetId(team.id);
-      setTargetName(team.name);
-      setModalType('leave_team_confirm');
-  };
-
-  const confirmLeaveTeam = async () => {
-      if (!targetId || !currentUser) return;
-      
-      const newTeamIds = (currentUser.teamIds || []).filter(id => id !== targetId);
-      const updatedUser = { ...currentUser, teamIds: newTeamIds };
-      
-      await saveUser(updatedUser);
-      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
-      
-      closeModal();
-      window.location.reload();
-  };
-
-  // --- ACCEPT INVITE LOGIC ---
-  const handleAcceptInvite = async (team: Team) => {
-      if (!currentUser) return;
-      const teamId = team.id;
-      
-      // Remove pending: prefix for this team in user's list
-      const updatedIds = (currentUser.teamIds || []).map(id => {
-          if (id === `pending:${teamId}`) return teamId;
-          return id;
-      });
-      
-      const updatedUser = { ...currentUser, teamIds: updatedIds };
-      
-      await saveUser(updatedUser);
-      // Update local storage
-      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
-      setCurrentUser(updatedUser);
-      
-      showAlert('alert_success', `Convite para ${team.name} aceito com sucesso! O time agora está disponível no menu.`);
-      setTimeout(() => window.location.reload(), 1500);
-  };
-
-
-  // --- CATEGORY MANAGEMENT LOGIC ---
-
-  const openNewCategoryModal = () => {
-      setModalType('edit_category');
-      setFormData({ name: '', logoUrl: '' });
-      setTargetId(null);
-  };
-
-  const openEditCategoryModal = (cat: Category) => {
-      setModalType('edit_category');
-      setFormData({ name: cat.name });
-      setTargetId(cat.id);
+        await refreshData(viewingContextId);
+        showAlert('alert_success', 'Time salvo com sucesso!');
+    } catch (err: any) {
+        showAlert('alert_error', `Erro ao salvar: ${err.message || 'Falha de rede'}`);
+    } finally { setLoading(false); }
   };
 
   const handleSaveCategory = async () => {
     if (!formData.name) return;
-    
-    // Normalize Category Name
-    const standardizedName = normalizeCategoryName(formData.name);
-    
-    // Check if this normalized name already exists in this team (to prevent duplicates like "Sub-15" and "sub 15")
-    // We filter by teamId (currentTeamId) and exclude current item if editing
-    const exists = categories.find(c => c.name === standardizedName && c.id !== targetId);
-    
-    if (exists) {
-        showAlert('alert_error', `A categoria "${standardizedName}" já existe neste time.`);
-        return;
-    }
-
-    await saveCategory({ 
-        id: targetId || uuidv4(), 
-        name: standardizedName, // Save strict format
-        teamId: currentTeamId 
-    });
-    closeModal();
-    window.location.reload();
+    setLoading(true);
+    try {
+        const standardizedName = normalizeCategoryName(formData.name);
+        const exists = categories.find(c => c.name === standardizedName && c.id !== targetId);
+        if (exists) {
+            showAlert('alert_error', `A categoria "${standardizedName}" já existe neste time.`);
+            return;
+        }
+        await saveCategory({ id: targetId || uuidv4(), name: standardizedName, teamId: currentTeamId });
+        closeModal();
+        await refreshData(viewingContextId);
+        showAlert('alert_success', 'Categoria salva!');
+    } catch (err: any) {
+        showAlert('alert_error', `Erro ao salvar: ${err.message}`);
+    } finally { setLoading(false); }
   };
 
-  const handleDeleteCategoryClick = (id: string, name: string) => {
-      setTargetId(id);
-      setTargetName(name);
-      setModalType('delete_category_confirm');
-  };
-  
-  const confirmDeleteCategory = async () => {
-      if (targetId) {
-          await deleteCategory(targetId);
-          window.location.reload();
-      }
-  };
-
-  // --- STANDARDIZE ALL CATEGORIES LOGIC ---
-  const handleStandardizeCategories = async () => {
-      if (!currentTeamId) return;
-      setLoading(true);
-      try {
-          const [allCats, allAthletes, allSessions] = await Promise.all([
-              getCategories(), getAthletes(), getTrainingSessions()
-          ]);
-          
-          const teamCats = allCats.filter(c => c.teamId === currentTeamId);
-          let changeCount = 0;
-
-          // We iterate through a copy to allow mutation of the source list for duplicates
-          // Actually, standardizing duplicates is tricky. 
-          // Strategy: First rename everything to standard. If collision, merge.
-          
-          for (const cat of teamCats) {
-              const newName = normalizeCategoryName(cat.name);
-              
-              if (cat.name !== newName) {
-                  // Check if the NEW name already exists in OTHER categories (collision)
-                  const collision = teamCats.find(c => c.teamId === currentTeamId && c.name === newName && c.id !== cat.id);
-                  
-                  if (collision) {
-                      // MERGE LOGIC: Move data from 'cat' to 'collision', then delete 'cat'
-                      
-                      // Move Athletes
-                      const relatedAthletes = allAthletes.filter(a => a.categoryId === cat.id);
-                      for (const ath of relatedAthletes) {
-                          await saveAthlete({ ...ath, categoryId: collision.id });
-                      }
-
-                      // Move Sessions
-                      const relatedSessions = allSessions.filter(s => s.categoryId === cat.id);
-                      for (const ses of relatedSessions) {
-                          await saveTrainingSession({ ...ses, categoryId: collision.id });
-                      }
-
-                      // Delete old
-                      await deleteCategory(cat.id);
-                      changeCount++;
-                  } else {
-                      // SIMPLE RENAME
-                      await saveCategory({ ...cat, name: newName });
-                      changeCount++;
-                  }
-              }
-          }
-          
-          if (changeCount > 0) {
-              showAlert('alert_success', `${changeCount} categoria(s) padronizada(s) com sucesso!`);
-              await refreshData(null);
-          } else {
-              showAlert('alert_success', 'Todas as categorias já estão no padrão.');
-          }
-
-      } catch (err) {
-          console.error(err);
-          showAlert('alert_error', 'Erro ao padronizar categorias.');
-      } finally {
-          setLoading(false);
-      }
-  };
-
-
-  const inputClass = "w-full bg-gray-100 border border-gray-300 text-black rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
-  const fieldBoxClass = "flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full transition-colors hover:border-gray-300";
-
-  if (loading && ownedTeams.length === 0 && activeGuestTeams.length === 0 && pendingGuestTeams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
-
-  const renderTeamCard = (team: Team, isGuest: boolean) => {
-      const publicLink = `https://performaxx.vercel.app/#/p/team/${team.id}`;
-      return (
-        <div key={team.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-5 border rounded-xl hover:bg-gray-50 transition-all gap-4 bg-white shadow-sm group">
-            <div className="flex flex-col gap-3 w-full">
-                {/* 1. Header: Logo + Name + ACTIONS (Moved here) */}
-                <div className="flex items-center gap-3 mb-1">
-                    {team.logoUrl ? (
-                        <img src={team.logoUrl} className="w-10 h-10 object-contain rounded bg-gray-100 p-1" />
-                    ) : (
-                        <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>
-                    )}
-                    <span className="font-bold text-gray-800 text-lg mr-2">{team.name}</span>
-                    
-                    {/* ACTION BUTTONS ADJACENT TO NAME */}
-                    {!isGuest ? (
-                        <div className="flex gap-1">
-                            {canEdit && (
-                                <button onClick={() => openEditTeamModal(team)} className="text-blue-600 hover:bg-blue-100 p-1.5 rounded-lg transition-colors" title="Editar Time">
-                                    <Edit size={16}/>
-                                </button>
-                            )}
-                            {canDelete && (
-                                <button onClick={() => handleDeleteTeamClick(team)} className="text-red-600 hover:bg-red-100 p-1.5 rounded-lg transition-colors" title="Excluir Time">
-                                    <Trash2 size={16}/>
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200 uppercase">Convidado</span>
-                    )}
-                </div>
-
-                {/* 2. Public Link Field */}
-                <div className={fieldBoxClass}>
-                    <LinkIcon size={14} className="text-gray-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-400 font-bold uppercase mr-1 hidden sm:inline">Link:</span>
-                    <input 
-                        type="text" 
-                        readOnly 
-                        value={publicLink} 
-                        className="text-xs text-gray-600 bg-transparent border-none focus:outline-none flex-1 min-w-0 font-mono truncate"
-                        onClick={(e) => e.currentTarget.select()}
-                    />
-                    <div className="flex items-center pl-1 ml-1 gap-1 flex-shrink-0 border-l border-gray-200">
-                        <button 
-                            onClick={() => {
-                                navigator.clipboard.writeText(publicLink);
-                                showAlert('alert_success', 'Link copiado!');
-                            }}
-                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                            title="Copiar Link"
-                        >
-                            <Copy size={14} />
-                        </button>
-                        <a 
-                            href={publicLink} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                            title="Abrir em nova aba"
-                        >
-                            <ExternalLink size={14} />
-                        </a>
-                    </div>
-                </div>
-
-                {/* 3. Team ID Field */}
-                <div className={fieldBoxClass}>
-                    <Hash size={14} className="text-gray-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-400 font-bold uppercase mr-1 hidden sm:inline">ID:</span>
-                    <input 
-                        type="text" 
-                        readOnly 
-                        value={team.id} 
-                        className="text-xs text-gray-600 bg-transparent border-none focus:outline-none flex-1 min-w-0 font-mono truncate"
-                        onClick={(e) => e.currentTarget.select()}
-                    />
-                    <div className="flex items-center pl-1 ml-1 gap-1 flex-shrink-0 border-l border-gray-200">
-                        <button 
-                            onClick={() => {
-                                navigator.clipboard.writeText(team.id);
-                                showAlert('alert_success', 'ID do time copiado!');
-                            }}
-                            className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                            title="Copiar ID"
-                        >
-                            <Copy size={14} />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Actions Column - Only Leave button for guests now */}
-            <div className="flex gap-2 w-full md:w-auto md:flex-col justify-end h-full">
-                {isGuest && (
-                    <button onClick={() => handleLeaveTeamClick(team)} className="flex items-center justify-center gap-2 text-orange-600 bg-orange-50 py-2 px-4 hover:bg-orange-100 rounded-lg transition-colors text-sm font-bold w-full md:w-32 whitespace-nowrap" title="Deixar de trabalhar neste time">
-                        <LogOut size={16}/> Sair do Time
-                    </button>
-                )}
-            </div>
-        </div>
-      );
-  };
-
-  // Helper to determine if I am owner of the current context
-  const isOwnerOrGlobal = currentUser && (currentUser.id === viewingContextId || currentUser.role === UserRole.GLOBAL);
+  if (loading && ownedTeams.length === 0) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
-      {/* ... (Existing Tabs and List UI) ... */}
       <div className="p-6 border-b border-gray-100 flex items-center gap-2">
          <Settings className="text-blue-600" />
          <h2 className="text-2xl font-bold text-gray-800">Administração</h2>
@@ -599,366 +157,101 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       </div>
 
       <div className="p-6">
-        
-        {/* Teams Tab */}
         {activeTab === 'teams' && (
           <div className="space-y-8">
-            
-            {/* SECTION 0: PENDING INVITES (Important!) */}
-            {pendingGuestTeams.length > 0 && (
-                <div className="mb-8 bg-orange-50 border border-orange-200 rounded-xl p-6 animate-fade-in">
-                    <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2 mb-4">
-                        <Mail className="text-orange-600" /> Convites Pendentes
-                    </h3>
-                    <p className="text-sm text-orange-700 mb-4">Você foi convidado para colaborar nos seguintes times. Aceite para visualizar os dados e acessar o painel.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingGuestTeams.map(team => (
-                            <div key={team.id} className="bg-white p-4 rounded-lg shadow-sm border border-orange-100 flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    {team.logoUrl ? (
-                                        <img src={team.logoUrl} className="w-10 h-10 object-contain" />
-                                    ) : (
-                                        <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center font-bold text-gray-500">{team.name.charAt(0)}</div>
-                                    )}
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{team.name}</h4>
-                                        <p className="text-xs text-gray-500">Aguardando aceite</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => handleAcceptInvite(team)}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
-                                >
-                                    <UserCheck size={16} /> Aceitar
-                                </button>
+            <div>
+                <div className="mb-4 flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">Gerenciar Meus Times</h3>
+                    {canEdit && (
+                        <button onClick={() => { setTargetId(null); setFormData({name:''}); setModalType('edit_team'); }} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm">
+                            <Plus size={16}/> Novo Time
+                        </button>
+                    )}
+                </div>
+                <div className="space-y-4">
+                    {ownedTeams.map(team => (
+                        <div key={team.id} className="p-4 border rounded-xl flex justify-between items-center bg-white shadow-sm hover:bg-gray-50 transition-all">
+                            <div className="flex items-center gap-3">
+                                {team.logoUrl ? <img src={team.logoUrl} className="w-10 h-10 object-contain" /> : <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-blue-600 font-bold">{team.name.charAt(0)}</div>}
+                                <span className="font-bold text-gray-800">{team.name}</span>
                             </div>
-                        ))}
-                    </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg"><Edit size={16}/></button>
+                                <button onClick={() => { setTargetId(team.id); setTargetName(team.name); setModalType('delete_confirm_simple'); }} className="text-red-600 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-            )}
-
-            {/* SECTION 1: MY TEAMS (Visible only if OWNER or GLOBAL) */}
-            {isOwnerOrGlobal && (
-                <div>
-                    <div className="mb-4 flex justify-between items-center">
-                        <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                            Gerenciar Meus Times
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{ownedTeams.length}</span>
-                        </h3>
-                        {canEdit && (
-                            <button onClick={openNewTeamModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm">
-                                <Plus size={16}/> Novo Time
-                            </button>
-                        )}
-                    </div>
-                    <div className="space-y-4">
-                        {ownedTeams.map(team => renderTeamCard(team, false))}
-                        {ownedTeams.length === 0 && <div className="text-gray-400 text-center py-8 italic border border-dashed border-gray-200 rounded-xl bg-gray-50">Nenhum time criado neste painel.</div>}
-                    </div>
-                </div>
-            )}
-
-            {/* SECTION 2: ACTIVE GUEST TEAMS */}
-            {activeGuestTeams.length > 0 && (
-                <div className={isOwnerOrGlobal ? "pt-6 border-t border-gray-200" : ""}>
-                    <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
-                        Times em que Colaboro
-                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{activeGuestTeams.length}</span>
-                    </h3>
-                    <div className="space-y-4">
-                        {activeGuestTeams.map(team => renderTeamCard(team, true))}
-                    </div>
-                </div>
-            )}
-
+            </div>
           </div>
         )}
 
-        {/* Categories Tab (Unchanged) */}
         {activeTab === 'categories' && (
            <div>
-             <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-               <h3 className="font-bold text-lg text-gray-800">
-                   Categorias ({[...ownedTeams, ...activeGuestTeams].find(t => t.id === currentTeamId)?.name || 'Selecione um time'})
-               </h3>
+             <div className="mb-6 flex justify-between items-center">
+               <h3 className="font-bold text-lg text-gray-800">Categorias</h3>
                {canEdit && (
-                   <div className="flex gap-2">
-                       <button onClick={handleStandardizeCategories} className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors border border-purple-200">
-                           <RefreshCw size={16}/> Padronizar Nomes
-                       </button>
-                       <button onClick={openNewCategoryModal} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                           <Plus size={16}/> Nova Categoria
-                       </button>
-                   </div>
+                   <button onClick={() => { setTargetId(null); setFormData({name:''}); setModalType('edit_category'); }} className="bg-[#4ade80] hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                       <Plus size={16}/> Nova Categoria
+                   </button>
                )}
             </div>
-
             <div className="space-y-2">
                {categories.map(cat => (
                  <div key={cat.id} className="flex justify-between items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors bg-white shadow-sm">
                     <span className="font-medium text-gray-800">{cat.name}</span>
                     <div className="flex gap-2">
-                       {canEdit && <button onClick={() => openEditCategoryModal(cat)} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg"><Edit size={16}/></button>}
-                       {canDelete && <button onClick={() => handleDeleteCategoryClick(cat.id, cat.name)} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>}
+                       <button onClick={() => { setTargetId(cat.id); setFormData({name: cat.name}); setModalType('edit_category'); }} className="text-blue-600 bg-blue-50 p-2 hover:bg-blue-100 rounded-lg"><Edit size={16}/></button>
+                       <button onClick={() => { setTargetId(cat.id); setTargetName(cat.name); setModalType('delete_category_confirm'); }} className="text-red-600 bg-red-50 p-2 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>
                     </div>
                  </div>
                ))}
-               {categories.length === 0 && <div className="text-gray-400 text-center py-4 italic">Nenhuma categoria encontrada para o time selecionado.</div>}
             </div>
            </div>
         )}
       </div>
 
-      {/* --- MODALS --- */}
-
-      {/* 1. EDIT TEAM MODAL */}
+      {/* MODAL EDIÇÃO TIME */}
       {modalType === 'edit_team' && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xl font-bold text-gray-800">{targetId ? 'Editar Time' : 'Novo Time'}</h3>
-                 <button onClick={closeModal}><X className="text-gray-400 hover:text-gray-600" /></button>
-              </div>
-              
-              <div className="flex flex-col items-center mb-6">
-                <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                    {uploading ? (
-                        <Loader2 className="animate-spin text-blue-600" size={32} />
-                    ) : formData.logoUrl ? (
-                        <img src={formData.logoUrl} className="w-full h-full object-contain p-1" alt="Logo" />
-                    ) : (
-                        <div className="text-gray-400 font-bold text-2xl">{formData.name ? formData.name.charAt(0).toUpperCase() : '?'}</div>
-                    )}
-                </div>
-                <label className={`cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {uploading ? 'Enviando...' : <><Upload size={14} /> Carregar Escudo</>}
-                    <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleTeamLogoUpload} />
-                </label>
-                <span className="text-xs text-gray-400 mt-1">Max: 150x150px, 200kb</span>
-              </div>
-
-              <div className="space-y-4">
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Nome do Time</label>
-                      <input 
-                        autoFocus
-                        type="text" 
-                        className={inputClass} 
-                        value={formData.name} 
-                        onChange={e => setFormData({...formData, name: e.target.value})} 
-                        placeholder="Ex: PerformaXX FC"
-                      />
-                  </div>
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">URL do Logo (Opcional/Manual)</label>
-                      <input 
-                        type="text" 
-                        className={inputClass} 
-                        value={formData.logoUrl} 
-                        onChange={e => setFormData({...formData, logoUrl: e.target.value})} 
-                        placeholder="https://..."
-                      />
-                  </div>
-                  <button onClick={handleSaveTeam} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors flex justify-center items-center gap-2 mt-2">
-                      <Save size={18} /> Salvar
-                  </button>
+              <h3 className="text-xl font-bold mb-6">{targetId ? 'Editar Time' : 'Novo Time'}</h3>
+              <input type="text" className="w-full bg-gray-50 border rounded p-3 mb-4 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Time" />
+              <div className="flex gap-2">
+                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg">Cancelar</button>
+                  <button onClick={handleSaveTeam} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar</button>
               </div>
            </div>
         </div>
       )}
 
-      {/* ... (Existing Edit Category Modal and Delete Confirmation Modals) ... */}
-      {/* 2. EDIT CATEGORY MODAL */}
+      {/* MODAL EDIÇÃO CATEGORIA */}
       {modalType === 'edit_category' && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xl font-bold text-gray-800">{targetId ? 'Editar Categoria' : 'Nova Categoria'}</h3>
-                 <button onClick={closeModal}><X className="text-gray-400 hover:text-gray-600" /></button>
-              </div>
-              <div className="space-y-4">
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Nome da Categoria</label>
-                      <input 
-                        autoFocus
-                        type="text" 
-                        className={inputClass} 
-                        value={formData.name} 
-                        onChange={e => setFormData({...formData, name: e.target.value})} 
-                        placeholder="Ex: Sub-15"
-                      />
-                      <p className="text-[10px] text-gray-500 mt-1">
-                          Será padronizado automaticamente para: Sub-XX ou Profissional.
-                      </p>
-                  </div>
-                  <button onClick={handleSaveCategory} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors flex justify-center items-center gap-2 mt-2">
-                      <Save size={18} /> Salvar
-                  </button>
+              <h3 className="text-xl font-bold mb-6">{targetId ? 'Editar Categoria' : 'Nova Categoria'}</h3>
+              <input type="text" className="w-full bg-gray-50 border rounded p-3 mb-4 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ex: Sub-15" />
+              <div className="flex gap-2">
+                  <button onClick={closeModal} className="flex-1 bg-gray-100 font-bold py-3 rounded-lg">Cancelar</button>
+                  <button onClick={handleSaveCategory} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar</button>
               </div>
            </div>
         </div>
       )}
 
-      {/* 3. CONFIRM DELETE TEAM SIMPLE */}
-      {modalType === 'delete_confirm_simple' && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
-                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <AlertTriangle className="text-red-600" size={32} />
-                 </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir Time?</h3>
-                 <p className="text-gray-500 mb-6">Tem certeza que deseja excluir <strong>{targetName}</strong>? Esta ação não pode ser desfeita.</p>
-                 <div className="flex gap-3">
-                     <button onClick={closeModal} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                     <button onClick={handleSimpleDeletion} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
-                 </div>
-             </div>
-         </div>
-      )}
-
-      {/* 4. MIGRATION WARNING MODAL */}
-      {modalType === 'delete_migrate_warn' && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-lg p-8 shadow-2xl relative">
-                 <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X /></button>
-                 
-                 <div className="flex items-start gap-4 mb-6">
-                     <div className="bg-orange-100 p-3 rounded-full shrink-0">
-                         <AlertTriangle className="text-orange-600" size={24} />
-                     </div>
-                     <div>
-                         <h3 className="text-xl font-bold text-gray-800">Atenção: Dados Vinculados</h3>
-                         <p className="text-sm text-gray-600 mt-1">
-                             O time <strong>{targetName}</strong> possui dados que não podem ser perdidos. Para excluí-lo, você deve transferir estes dados para outro time.
-                         </p>
-                     </div>
-                 </div>
-
-                 <div className="bg-gray-50 p-4 rounded-xl mb-6 grid grid-cols-2 gap-4 border border-gray-100">
-                     <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                         <span className="text-2xl font-bold text-blue-600">{dependencyCounts.athletes}</span>
-                         <span className="text-xs text-gray-500 font-bold uppercase">Atletas</span>
-                     </div>
-                     <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                         <span className="text-2xl font-bold text-blue-600">{dependencyCounts.users}</span>
-                         <span className="text-xs text-gray-500 font-bold uppercase">Usuários</span>
-                     </div>
-                     <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                         <span className="text-2xl font-bold text-blue-600">{dependencyCounts.categories}</span>
-                         <span className="text-xs text-gray-500 font-bold uppercase">Categorias</span>
-                     </div>
-                     <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                         <span className="text-2xl font-bold text-blue-600">{dependencyCounts.sessions}</span>
-                         <span className="text-xs text-gray-500 font-bold uppercase">Treinos</span>
-                     </div>
-                 </div>
-
-                 <div className="mb-6">
-                     <label className="block text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
-                         <ArrowRightLeft size={16} /> Migrar dados para:
-                     </label>
-                     
-                     {ownedTeams.length > 1 ? (
-                        <select 
-                            className={inputClass}
-                            value={migrationDestTeamId}
-                            onChange={(e) => {
-                                setMigrationDestTeamId(e.target.value);
-                                setNewTeamName('');
-                            }}
-                        >
-                            {ownedTeams.filter(t => t.id !== targetId).map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                            <option value="">+ Criar Novo Time</option>
-                        </select>
-                     ) : (
-                        <div className="text-sm text-gray-500 italic mb-2">Não existem outros times cadastrados.</div>
-                     )}
-
-                     {/* Create New Team Inline */}
-                     {(!migrationDestTeamId || ownedTeams.length <= 1) && (
-                         <div className="mt-3 animate-fade-in bg-blue-50 p-3 rounded-lg border border-blue-100">
-                             <label className="block text-xs font-bold text-blue-700 mb-1">Nome do Novo Time de Destino</label>
-                             <input 
-                                type="text"
-                                className="w-full border border-blue-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                                placeholder="Digite o nome para criar..."
-                                value={newTeamName}
-                                onChange={(e) => setNewTeamName(e.target.value)}
-                             />
-                         </div>
-                     )}
-                 </div>
-
-                 <div className="flex gap-3 pt-4 border-t border-gray-100">
-                     <button onClick={closeModal} className="flex-1 bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 transition-colors">
-                         Cancelar
-                     </button>
-                     <button 
-                        onClick={handleMigrationAndDeletion}
-                        disabled={isMigrating || (!migrationDestTeamId && !newTeamName)}
-                        className="flex-[2] bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200"
-                     >
-                         {isMigrating ? <Loader2 className="animate-spin" /> : <CheckCircle size={20} />}
-                         {isMigrating ? 'Processando...' : 'Migrar Dados & Excluir Time'}
-                     </button>
-                 </div>
-             </div>
-          </div>
-      )}
-
-      {/* 5. DELETE CATEGORY CONFIRM */}
-      {modalType === 'delete_category_confirm' && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
-                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <Trash2 className="text-red-600" size={32} />
-                 </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Excluir Categoria?</h3>
-                 <p className="text-gray-500 mb-6">Tem certeza que deseja excluir <strong>{targetName}</strong>?</p>
-                 <div className="flex gap-3">
-                     <button onClick={closeModal} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                     <button onClick={confirmDeleteCategory} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700">Excluir</button>
-                 </div>
-             </div>
-         </div>
-      )}
-
-      {/* 6. LEAVE TEAM CONFIRM */}
-      {modalType === 'leave_team_confirm' && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
-                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <LogOut className="text-orange-600" size={32} />
-                 </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">Sair do Time?</h3>
-                 <p className="text-gray-500 mb-6">Você perderá o acesso ao time <strong>{targetName}</strong>. Esta ação não apaga o time, apenas remove seu acesso.</p>
-                 <div className="flex gap-3">
-                     <button onClick={closeModal} className="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
-                     <button onClick={confirmLeaveTeam} className="flex-1 bg-orange-600 text-white font-bold py-2 rounded-lg hover:bg-orange-700">Sair</button>
-                 </div>
-             </div>
-         </div>
-      )}
-
-      {/* 7. GENERIC ALERTS (Success/Error) */}
+      {/* ALERTA FEEDBACK */}
       {(modalType === 'alert_success' || modalType === 'alert_error') && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
-                 <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${modalType === 'alert_success' ? 'bg-green-100' : 'bg-red-100'}`}>
                     {modalType === 'alert_success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
                  </div>
                  <h3 className="text-xl font-bold text-gray-800 mb-2">{modalType === 'alert_success' ? 'Sucesso!' : 'Atenção'}</h3>
                  <p className="text-gray-500 text-center mb-6">{modalMessage}</p>
-                 <button onClick={closeModal} className={`text-white font-bold py-2 px-6 rounded-lg transition-colors w-full ${modalType === 'alert_success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                     OK
-                 </button>
+                 <button onClick={closeModal} className={`text-white font-bold py-2 px-6 rounded-lg w-full ${modalType === 'alert_success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>OK</button>
              </div>
          </div>
       )}
-
     </div>
   );
 };
