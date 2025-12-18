@@ -7,7 +7,6 @@ import { v4 as uuidv4 } from 'uuid';
 export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');
   if (error) return [];
-  // Mapeamento manual de snake_case para camelCase
   return (data || []).map((u: any) => ({
       id: u.id,
       name: u.name,
@@ -123,6 +122,7 @@ export const getAthletes = async (): Promise<Athlete[]> => {
       position: a.position,
       birthDate: a.birth_date,
       responsibleName: a.responsible_name,
+      responsibleEmail: a.responsible_email, // Mapeado
       responsiblePhone: a.responsible_phone,
       pendingTransferTeamId: a.pending_transfer_team_id
   }));
@@ -139,6 +139,7 @@ export const saveAthlete = async (athlete: Athlete) => {
       position: athlete.position,
       birth_date: athlete.birthDate,
       responsible_name: athlete.responsibleName,
+      responsible_email: athlete.responsibleEmail, // Mapeado
       responsible_phone: athlete.responsiblePhone,
       pending_transfer_team_id: athlete.pendingTransferTeamId
   });
@@ -180,7 +181,7 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
       technical: e.technical,
       physical: e.physical,
       tactical: e.tactical,
-      heatmapPoints: e.heatmap_points,
+      heatmap_points: e.heatmap_points,
       notes: e.notes
   }));
 };
@@ -227,7 +228,6 @@ export const getPhysicalEvaluations = async (sessionId: string): Promise<Physica
 };
 
 export const saveEvaluationSession = async (session: EvaluationSession, technicals: TechnicalEvaluation[], physicals: PhysicalEvaluation[]) => {
-  // 1. Cabeçalho (Header)
   const { error: sessionError } = await supabase.from('evaluations_sessions').upsert({
     id: session.id, 
     athlete_id: session.athleteId, 
@@ -241,7 +241,6 @@ export const saveEvaluationSession = async (session: EvaluationSession, technica
   
   if (sessionError) throw sessionError;
 
-  // 2. Técnica (Delete old and insert new)
   if (technicals.length > 0) {
     await supabase.from('technical_evaluations').delete().eq('session_id', session.id);
     const { error: tError } = await supabase.from('technical_evaluations').insert(
@@ -255,7 +254,6 @@ export const saveEvaluationSession = async (session: EvaluationSession, technica
     if (tError) throw tError;
   }
 
-  // 3. Física (Delete old and insert new)
   if (physicals.length > 0) {
     await supabase.from('physical_evaluations').delete().eq('session_id', session.id);
     const { error: pError } = await supabase.from('physical_evaluations').insert(
