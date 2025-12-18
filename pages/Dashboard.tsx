@@ -52,7 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
         const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
         const avgPhys = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreFisico, 0) / myEvals.length : 0;
         
-        // NOVO ALGORITMO SMC (SCORE MÉDIO DE CAPACIDADE)
+        // CÁLCULO SMC (SCORE MÉDIO DE CAPACIDADE)
         const mt_norm = (avgTech / 5.0) * 10;
         const cf_norm = avgPhys / 10;
         const smc = (mt_norm * 0.55) + (cf_norm * 0.45);
@@ -61,15 +61,15 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
             ...athlete, 
             avgTech, 
             avgPhys,
-            globalScore: smc, // Agora o Score Global é o SMC
+            globalScore: smc,
             eventCount: myEvals.length 
         };
     }).sort((a, b) => b.globalScore - a.globalScore);
   }, [athletes, evalSessions]);
 
   const getSMCReading = (val: number) => {
-      if (val <= 3.0) return "Capacidade insuficiente no momento";
-      if (val <= 5.0) return "Capacidade em desenvolvimento";
+      if (val <= 3.0) return "Capacidade insuficiente";
+      if (val <= 5.0) return "Em desenvolvimento";
       if (val <= 6.5) return "Funcional para composição";
       if (val <= 8.0) return "Boa prontidão competitiva";
       return "Alta prontidão para jogos";
@@ -92,7 +92,6 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   const bestXI = useMemo(() => {
     const selectedIds = new Set<string>();
     const getTopForSlot = (positions: Position[]) => {
-        // Agora o SMC é o critério principal para formação do time ideal
         const pool = athletesWithMeta
             .filter(a => positions.includes(a.position) && !selectedIds.has(a.id) && (selectedCategory === 'all' || a.categoryId === selectedCategory))
             .sort((a, b) => b.globalScore - a.globalScore);
@@ -132,11 +131,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado no Algoritmo SMC_v1</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Score Médio de Capacidade</span></div>
           </div>
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Capacidade Técnica Estruturada</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Domínio de Fundamentos</span></div>
           </div>
       </div>
 
