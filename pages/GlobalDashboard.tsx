@@ -43,12 +43,21 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
   const loadData = async () => {
        setLoading(true);
-       const storedUserStr = localStorage.getItem('performax_current_user');
-       if (storedUserStr) setCurrentUser(JSON.parse(storedUserStr));
+       try {
+           const storedUserStr = localStorage.getItem('performax_current_user');
+           if (storedUserStr) setCurrentUser(JSON.parse(storedUserStr));
 
-       const all = await getUsers();
-       setUsers(all.filter(u => u.role === UserRole.MASTER || u.role === UserRole.GLOBAL));
-       setLoading(false);
+           const all = await getUsers();
+           // Filtro robusto para MASTER e GLOBAL independente de caixa ou espaços
+           setUsers(all.filter(u => {
+               const r = (u.role || '').toString().toUpperCase().trim();
+               return r === 'MASTER' || r === 'GLOBAL';
+           }));
+       } catch (err) {
+           console.error("Erro ao carregar dados globais:", err);
+       } finally {
+           setLoading(false);
+       }
   };
 
   const openCreateModal = () => {
@@ -226,12 +235,20 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       });
   };
 
-  const globalAdmins = users.filter(u => u.role === UserRole.GLOBAL);
-  const masterTenants = users.filter(u => u.role === UserRole.MASTER && (
-      u.name.toLowerCase().includes(search.toLowerCase()) || 
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.id.includes(search)
-  ));
+  // Filtros com segurança contra nulos e case-insensitivity
+  const globalAdmins = users.filter(u => (u.role || '').toString().toUpperCase() === 'GLOBAL');
+  
+  const masterTenants = users.filter(u => {
+      const isMaster = (u.role || '').toString().toUpperCase() === 'MASTER';
+      if (!isMaster) return false;
+      
+      const searchLower = search.toLowerCase();
+      return (
+          (u.name || '').toLowerCase().includes(searchLower) || 
+          (u.email || '').toLowerCase().includes(searchLower) ||
+          (u.id || '').includes(search)
+      );
+  });
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-darkBase text-white"><Loader2 className="animate-spin mr-2"/> Carregando Global...</div>;
 
