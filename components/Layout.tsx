@@ -48,7 +48,8 @@ const Layout: React.FC<LayoutProps> = ({
   const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [availableContexts, setAvailableContexts] = useState<{id: string, name: string}[]>([]);
   const [pendingInvites, setPendingInvites] = useState<Team[]>([]);
-  const [pendingTransfersCount, setPendingTransfersCount] = useState(0);
+  const [pendingTransfersIn, setPendingTransfersIn] = useState(0);
+  const [pendingTransfersOut, setPendingTransfersOut] = useState(0);
   const location = useLocation();
 
   const loadContext = async () => {
@@ -57,14 +58,19 @@ const Layout: React.FC<LayoutProps> = ({
       const freshUser = allUsers.find(u => u.id === user.id) || user;
       const userTeamIds = freshUser.teamIds || [];
 
-      // Detectar convites pendentes de usuário
+      // Convites de staff
       const pendingIds = userTeamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
       setPendingInvites(allTeams.filter(t => pendingIds.includes(t.id)));
 
-      // Detectar transferências de atletas pendentes para o time selecionado
+      // Transferências de atletas
       if (selectedTeamId) {
-          const transfers = allAthletes.filter(a => a.pendingTransferTeamId === selectedTeamId);
-          setPendingTransfersCount(transfers.length);
+          // Atletas vindo para este time
+          const transfersIn = allAthletes.filter(a => a.pendingTransferTeamId === selectedTeamId);
+          setPendingTransfersIn(transfersIn.length);
+          
+          // Atletas saindo deste time
+          const transfersOut = allAthletes.filter(a => a.teamId === selectedTeamId && a.pendingTransferTeamId && a.pendingTransferTeamId !== selectedTeamId);
+          setPendingTransfersOut(transfersOut.length);
       }
 
       let userAllowedTeams: Team[] = [];
@@ -166,14 +172,25 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
         )}
 
-        {/* Banner de Transferências de Atletas Pendentes */}
-        {pendingTransfersCount > 0 && (
+        {/* Banner de Transferências Recebidas */}
+        {pendingTransfersIn > 0 && (
             <div className="bg-emerald-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <ArrowRightLeft className="animate-pulse" size={18} />
-                    <p className="text-[10px] font-black uppercase tracking-widest">Existem {pendingTransfersCount} {pendingTransfersCount === 1 ? 'atleta' : 'atletas'} solicitando transferência para sua escola!</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest">Existem {pendingTransfersIn} {pendingTransfersIn === 1 ? 'atleta' : 'atletas'} solicitando transferência para sua escola!</p>
                 </div>
                 <Link to="/athletes" className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border border-white/30 transition-all">Ver Solicitações</Link>
+            </div>
+        )}
+
+        {/* Banner de Transferências Enviadas */}
+        {pendingTransfersOut > 0 && (
+            <div className="bg-amber-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <ArrowRightLeft className="animate-spin-slow" size={18} />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Você possui {pendingTransfersOut} {pendingTransfersOut === 1 ? 'transferência' : 'transferências'} enviadas aguardando aceite.</p>
+                </div>
+                <Link to="/athletes" className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border border-white/30 transition-all">Acompanhar Status</Link>
             </div>
         )}
 
