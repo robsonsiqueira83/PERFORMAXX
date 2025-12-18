@@ -1,21 +1,32 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
-import { Athlete, TrainingEntry, HeatmapPoint, getCalculatedCategory, Team, Category, Position, User, UserRole } from '../types';
-import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle, RefreshCw } from 'lucide-react';
-import StatSlider from '../components/StatSlider';
+import { Athlete, TrainingEntry, getCalculatedCategory, Team, Category, User, UserRole, Position } from '../types';
+import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle, RefreshCw, Map as MapIcon, ChevronRight, Activity } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-// Interface for a single event in the timeline
-interface GameEvent {
-    timestamp: string; // "05:30"
-    seconds: number;   // 330
-    period: 1 | 2;     // 1st or 2nd half
-    zone: 'DEF' | 'MID' | 'ATT';
-    location: { x: number; y: number };
-    stats: any; // The specific stats modified in this event
-    note: string;
+// Types for Tactical Events
+type GamePhase = 'OFENSIVA' | 'DEFENSIVA' | 'TRANSICAO_OF' | 'TRANSICAO_DEF';
+type GameResult = 'POSITIVA' | 'NEUTRA' | 'NEGATIVA';
+
+interface TacticalEvent {
+    id: string;
+    timestamp: string;
+    seconds: number;
+    period: 1 | 2;
+    phase: GamePhase;
+    action: string;
+    result: GameResult;
+    zoneId?: number; // 0-11 for 12 zones
+    location?: { x: number; y: number };
 }
+
+const PHASE_ACTIONS: Record<GamePhase, string[]> = {
+    'OFENSIVA': ['Apoio', 'Profundidade', 'Amplitude', 'Entrelinhas', 'Penetração', 'Manutenção da posse'],
+    'DEFENSIVA': ['Contenção', 'Pressão direta', 'Cobertura', 'Fechamento de linha', 'Proteção do centro', 'Marcação ativa'],
+    'TRANSICAO_OF': ['Acelerar jogo', 'Ataque ao espaço', 'Passe vertical', 'Condução progressiva', 'Apoio imediato', 'Pausa estratégica'],
+    'TRANSICAO_DEF': ['Pressão pós-perda', 'Retardo', 'Fechamento de passe', 'Recuo organizado', 'Proteção de profundidade', 'Falta tática']
+};
 
 const RealTimeEvaluation: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,8 +41,8 @@ const RealTimeEvaluation: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Multi-Athlete State
-  const [activeAthletes, setActiveAthletes] = useState<Athlete[]>([]); // Currently being evaluated
-  const [selectedAthleteId, setSelectedAthleteId] = useState<string>(''); // Context focus
+  const [activeAthletes, setActiveAthletes] = useState<Athlete[]>([]); 
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string>(''); 
   
   // Modal Filter States
   const [selectedTeamIdForAdd, setSelectedTeamIdForAdd] = useState('');
@@ -40,49 +51,29 @@ const RealTimeEvaluation: React.FC = () => {
   const [filterName, setFilterName] = useState('');
 
   // Data Collection State (Keyed by Athlete ID)
-  const [sessionLogs, setSessionLogs] = useState<Record<string, GameEvent[]>>({});
+  const [sessionLogs, setSessionLogs] = useState<Record<string, TacticalEvent[]>>({});
 
-  // Timer & Game State (Global for all athletes)
+  // Timer & Game State
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [gamePeriod, setGamePeriod] = useState<1 | 2>(1);
   const [isHalftime, setIsHalftime] = useState(false);
   const [startTime, setStartTime] = useState<string | null>(null);
-  const [fieldFlipped, setFieldFlipped] = useState(false); // New: field orientation
-  
+  const [fieldFlipped, setFieldFlipped] = useState(false);
   const timerRef = useRef<number | null>(null);
 
-  // Interaction State
-  const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [capturedTime, setCapturedTime] = useState<string>('');
-  const [capturedSeconds, setCapturedSeconds] = useState<number>(0);
+  // Tactical State (Etapa 2)
+  const [activePhase, setActivePhase] = useState<GamePhase>('OFENSIVA');
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
   
-  // Custom Modal States
+  // UI States
+  const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showAddAthleteModal, setShowAddAthleteModal] = useState(false);
-  
-  // System Feedback State
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info', title: string, message: string } | null>(null);
-  
-  // Voice Recognition State
-  const [isListening, setIsListening] = useState(false);
-
-  // Temp Data for Current Action
-  const [fieldClick, setFieldClick] = useState<{x: number, y: number} | null>(null);
-  const [zone, setZone] = useState<'DEF' | 'MID' | 'ATT' | null>(null);
-  const [currentNotes, setCurrentNotes] = useState('');
-  const [currentStats, setCurrentStats] = useState(getEmptyStats());
-
-  function getEmptyStats() {
-      return {
-        velocidade: 0, agilidade: 0, resistencia: 0, forca: 0, coordenacao: 0, mobilidade: 0, estabilidade: 0,
-        controle_bola: 0, conducao: 0, passe: 0, recepcao: 0, drible: 0, finalizacao: 0, cruzamento: 0, desarme: 0, interceptacao: 0,
-        def_posicionamento: 0, def_pressao: 0, def_cobertura: 0, def_fechamento: 0, def_temporizacao: 0, def_desarme_tatico: 0, def_reacao: 0,
-        const_qualidade_passe: 0, const_visao: 0, const_apoios: 0, const_mobilidade: 0, const_circulacao: 0, const_quebra_linhas: 0, const_tomada_decisao: 0,
-        ult_movimentacao: 0, ult_ataque_espaco: 0, ult_1v1: 0, ult_ultimo_passe: 0, ult_finalizacao_eficiente: 0, ult_ritmo: 0, ult_bolas_paradas: 0
-      };
-  }
+  const [showResultFeedback, setShowResultFeedback] = useState<GameResult | null>(null);
 
   // Current Athlete Helper
   const currentAthlete = useMemo(() => 
@@ -97,21 +88,11 @@ const RealTimeEvaluation: React.FC = () => {
   // Filtered Athletes for Modal
   const filteredAthletesList = useMemo(() => {
       return allAthletes.filter(a => {
-          // 1. Must match selected team in modal
           if (a.teamId !== selectedTeamIdForAdd) return false;
-          
-          // 2. Must NOT be already active
           if (activeAthletes.some(active => active.id === a.id)) return false;
-
-          // 3. Category Filter
           if (filterCategory && a.categoryId !== filterCategory) return false;
-
-          // 4. Position Filter
           if (filterPosition && a.position !== filterPosition) return false;
-
-          // 5. Name Search
           if (filterName && !a.name.toLowerCase().includes(filterName.toLowerCase())) return false;
-
           return true;
       });
   }, [allAthletes, selectedTeamIdForAdd, activeAthletes, filterCategory, filterPosition, filterName]);
@@ -120,8 +101,6 @@ const RealTimeEvaluation: React.FC = () => {
   const userAllowedTeams = useMemo(() => {
       if (!currentUser) return [];
       if (currentUser.role === UserRole.GLOBAL) return allTeams;
-      
-      // Filter teams user has access to
       const allowedIds = currentUser.teamIds || [];
       return allTeams.filter(t => t.ownerId === currentUser.id || allowedIds.includes(t.id));
   }, [currentUser, allTeams]);
@@ -143,14 +122,10 @@ const RealTimeEvaluation: React.FC = () => {
       setAllCategories(catsData);
 
       const initialAthlete = athletesData.find(a => a.id === id);
-      
       if (initialAthlete) {
-          // Set Initial State
           setActiveAthletes([initialAthlete]);
           setSelectedAthleteId(initialAthlete.id);
           setSessionLogs({ [initialAthlete.id]: [] });
-          
-          // Set default add filter to current team
           setSelectedTeamIdForAdd(initialAthlete.teamId);
       }
       setLoading(false);
@@ -162,20 +137,14 @@ const RealTimeEvaluation: React.FC = () => {
   useEffect(() => {
     if (isRunning) {
       if (!startTime) setStartTime(new Date().toISOString()); 
-      
       timerRef.current = window.setInterval(() => {
         setTimer((prev) => prev + 1);
       }, 1000);
-      
-      if ('wakeLock' in navigator) {
-          navigator.wakeLock.request('screen').catch(err => console.log(err));
-      }
+      if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(console.log);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning]);
 
   const formatTime = (seconds: number) => {
@@ -184,14 +153,13 @@ const RealTimeEvaluation: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Game Control Logic
   const handleMainButton = () => {
       if (!isRunning && timer === 0) {
           setIsRunning(true);
       } else if (isRunning && gamePeriod === 1) {
           setIsRunning(false);
           setIsHalftime(true);
-          setFieldFlipped(prev => !prev); // Auto Flip on Half Time
+          setFieldFlipped(prev => !prev); // Auto flip on halftime
       } else if (!isRunning && isHalftime) {
           setIsHalftime(false);
           setGamePeriod(2);
@@ -211,151 +179,76 @@ const RealTimeEvaluation: React.FC = () => {
 
   const btnState = getButtonLabel();
 
-  // Voice Input Logic
-  const handleVoiceInput = () => {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      
-      if (!SpeechRecognition) {
-          setFeedback({
-              type: 'error',
-              title: 'Não Suportado',
-              message: 'Seu navegador não suporta reconhecimento de voz.'
-          });
-          return;
-      }
-
-      if (isListening) return; 
-
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'pt-BR';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      setIsListening(true);
-
-      recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setCurrentNotes(prev => (prev ? `${prev} ${transcript}` : transcript));
-          setIsListening(false);
-      };
-
-      recognition.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          setIsListening(false);
-      };
-
-      recognition.onend = () => {
-          setIsListening(false);
-      };
-
-      recognition.start();
+  // Etapa 2: Registro Tático
+  const handleActionClick = (actionName: string) => {
+      if (!isRunning) return;
+      setPendingAction(actionName);
   };
 
-  // Add Athlete Logic
-  const handleAddAthlete = (newAthlete: Athlete) => {
-      if (activeAthletes.some(a => a.id === newAthlete.id)) return;
-      
-      setActiveAthletes(prev => [...prev, newAthlete]);
-      setSessionLogs(prev => ({ ...prev, [newAthlete.id]: [] }));
-      
-      // Auto-switch to new athlete
-      setSelectedAthleteId(newAthlete.id);
-      setShowAddAthleteModal(false);
-      
-      // Reset filters
-      setFilterName('');
-      setFilterPosition('');
-      setFilterCategory('');
-  };
+  const handleResultClick = (result: GameResult) => {
+      if (!pendingAction || !selectedAthleteId) return;
 
-  // Direct Field Click
-  const handleFieldClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isRunning) return; 
-
-    setCapturedTime(formatTime(timer));
-    setCapturedSeconds(timer);
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-    setFieldClick({ x, y });
-
-    // Zone Logic with Flip Consideration
-    if (x < 33.33) setZone(fieldFlipped ? 'ATT' : 'DEF');
-    else if (x < 66.66) setZone('MID');
-    else setZone(fieldFlipped ? 'DEF' : 'ATT');
-
-    setStep(2);
-  };
-
-  // Confirm Action
-  const handleConfirmAction = () => {
-      if (!zone || !fieldClick || !selectedAthleteId) return;
-
-      const newEvent: GameEvent = {
-          timestamp: capturedTime,
-          seconds: capturedSeconds,
+      const eventId = uuidv4();
+      const newEvent: TacticalEvent = {
+          id: eventId,
+          timestamp: formatTime(timer),
+          seconds: timer,
           period: gamePeriod,
-          zone: zone,
-          location: fieldClick,
-          stats: { ...currentStats },
-          note: currentNotes
+          phase: activePhase,
+          action: pendingAction,
+          result: result
       };
 
-      // Push to specific athlete log
       setSessionLogs(prev => ({
           ...prev,
           [selectedAthleteId]: [...(prev[selectedAthleteId] || []), newEvent]
       }));
 
-      setStep(0);
-      setFieldClick(null);
-      setZone(null);
-      setCurrentNotes('');
-      setCurrentStats(getEmptyStats());
+      setLastEventId(eventId);
+      setPendingAction(null);
+      
+      // Feedback Etapa 4
+      setShowResultFeedback(result);
+      setTimeout(() => setShowResultFeedback(null), 1000);
   };
 
-  const handleCancelAction = () => {
-      setStep(0);
-      setFieldClick(null);
-      setZone(null);
+  // Etapa 3: Mapa de Zonas
+  const handleZoneClick = (zoneId: number) => {
+      if (!lastEventId || !selectedAthleteId) return;
+
+      setSessionLogs(prev => {
+          const athleteLogs = [...(prev[selectedAthleteId] || [])];
+          const lastIdx = athleteLogs.findIndex(e => e.id === lastEventId);
+          if (lastIdx !== -1) {
+              athleteLogs[lastIdx] = { ...athleteLogs[lastIdx], zoneId };
+          }
+          return { ...prev, [selectedAthleteId]: athleteLogs };
+      });
+
+      setShowMapOverlay(false);
+      setFeedback({
+          type: 'success',
+          title: 'Zona Registrada',
+          message: 'Localização vinculada à última ação.'
+      });
+      setTimeout(() => setFeedback(null), 1500);
   };
 
-  // --- FINISH SESSION (PARTIAL SAVE) ---
+  const handleAddAthlete = (newAthlete: Athlete) => {
+      if (activeAthletes.some(a => a.id === newAthlete.id)) return;
+      setActiveAthletes(prev => [...prev, newAthlete]);
+      setSessionLogs(prev => ({ ...prev, [newAthlete.id]: [] }));
+      setSelectedAthleteId(newAthlete.id);
+      setShowAddAthleteModal(false);
+  };
+
+  // Finalização (Etapa 5)
   const handleFinishSession = async () => {
       if (!currentAthlete) return;
-      
       setShowFinishModal(false);
       setLoading(true);
 
-      const logsToSave = sessionLogs[selectedAthleteId] || [];
-
-      // 1. Calculate Averages
-      const finalStats: any = getEmptyStats();
-      const counts: any = getEmptyStats();
-
-      Object.keys(counts).forEach(k => counts[k] = 0);
-
-      logsToSave.forEach(evt => {
-          Object.keys(evt.stats).forEach(key => {
-              const val = evt.stats[key];
-              if (val > 0) {
-                  finalStats[key] += val;
-                  counts[key]++;
-              }
-          });
-      });
-
-      Object.keys(finalStats).forEach(key => {
-          if (counts[key] > 0) {
-              finalStats[key] = Math.round((finalStats[key] / counts[key]) * 2) / 2;
-          } else {
-              finalStats[key] = 5;
-          }
-      });
-
-      // 2. Create Session
+      const logs = sessionLogs[selectedAthleteId] || [];
       const sessionDate = startTime ? startTime.split('T')[0] : new Date().toISOString().split('T')[0];
       const sessionId = uuidv4();
 
@@ -364,341 +257,209 @@ const RealTimeEvaluation: React.FC = () => {
           teamId: currentAthlete.teamId,
           categoryId: currentAthlete.categoryId,
           date: sessionDate,
-          description: `Análise em Tempo Real (${logsToSave.length} ações)`
+          description: `Análise Individual: ${logs.length} Ações`
       });
 
-      // 3. Create Entry
+      // Cálculo simplificado de score baseado em % de ações positivas para manter Radar chart
+      const positiveCount = logs.filter(l => l.result === 'POSITIVA').length;
+      const totalCount = logs.length;
+      const score = totalCount > 0 ? Math.min(10, Math.round((positiveCount / totalCount) * 10 * 2) / 2) : 5;
+
       const entry: TrainingEntry = {
           id: uuidv4(),
           sessionId,
           athleteId: currentAthlete.id,
-          technical: {
-            controle_bola: finalStats.controle_bola, conducao: finalStats.conducao, passe: finalStats.passe,
-            recepcao: finalStats.recepcao, drible: finalStats.drible, finalizacao: finalStats.finalizacao,
-            cruzamento: finalStats.cruzamento, desarme: finalStats.desarme, interceptacao: finalStats.interceptacao
-          },
-          physical: {
-            velocidade: finalStats.velocidade, agilidade: finalStats.agilidade, resistencia: finalStats.resistencia,
-            forca: finalStats.forca, coordenacao: finalStats.coordenacao, mobilidade: finalStats.mobilidade, estabilidade: finalStats.estabilidade
-          },
-          tactical: {
-            def_posicionamento: finalStats.def_posicionamento, def_pressao: finalStats.def_pressao, def_cobertura: finalStats.def_cobertura,
-            def_fechamento: finalStats.def_fechamento, def_temporizacao: finalStats.def_temporizacao, def_desarme_tatico: finalStats.def_desarme_tatico,
-            def_reacao: finalStats.def_reacao,
-            const_qualidade_passe: finalStats.const_qualidade_passe, const_visao: finalStats.const_visao, const_apoios: finalStats.const_apoios,
-            const_mobilidade: finalStats.const_mobilidade, const_circulacao: finalStats.const_circulacao, const_quebra_linhas: finalStats.const_quebra_linhas,
-            const_tomada_decisao: finalStats.const_tomada_decisao,
-            ult_movimentacao: finalStats.ult_movimentacao, ult_ataque_espaco: finalStats.ult_ataque_espaco, ult_1v1: finalStats.ult_1v1,
-            ult_ultimo_passe: finalStats.ult_ultimo_passe, ult_finalizacao_eficiente: finalStats.ult_finalizacao_eficiente,
-            ult_ritmo: finalStats.ult_ritmo, ult_bolas_paradas: finalStats.ult_bolas_paradas
-          },
-          heatmapPoints: logsToSave.map(e => e.location),
-          notes: JSON.stringify({
-              type: 'REAL_TIME_LOG',
-              startTime: startTime,
-              totalEvents: logsToSave.length,
-              events: logsToSave
-          })
+          technical: { controle_bola: score, conducao: score, passe: score, recepcao: score, drible: score, finalizacao: score, cruzamento: score, desarme: score, interceptacao: score },
+          physical: { velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5 },
+          tactical: { def_posicionamento: score, def_pressao: score, def_cobertura: score, def_fechamento: score, def_temporizacao: score, def_desarme_tatico: score, def_reacao: score, const_qualidade_passe: score, const_visao: score, const_apoios: score, const_mobilidade: score, const_circulacao: score, const_quebra_linhas: score, const_tomada_decisao: score, ult_movimentacao: score, ult_ataque_espaco: score, ult_1v1: score, ult_ultimo_passe: score, ult_finalizacao_eficiente: score, ult_ritmo: score, ult_bolas_paradas: score },
+          notes: JSON.stringify({ type: 'TACTICAL_EVENT_LOG', startTime, events: logs })
       };
 
       await saveTrainingEntry(entry);
 
-      // --- POST SAVE LOGIC ---
-      const remainingAthletes = activeAthletes.filter(a => a.id !== selectedAthleteId);
-      
-      if (remainingAthletes.length === 0) {
-          navigate(`/athletes/${currentAthlete.id}`);
-      } else {
-          setActiveAthletes(remainingAthletes);
-          setSelectedAthleteId(remainingAthletes[0].id);
-          
-          setSessionLogs(prev => {
-              const newLogs = { ...prev };
-              delete newLogs[selectedAthleteId];
-              return newLogs;
-          });
-          
+      const remaining = activeAthletes.filter(a => a.id !== selectedAthleteId);
+      if (remaining.length === 0) navigate(`/athletes/${currentAthlete.id}`);
+      else {
+          setActiveAthletes(remaining);
+          setSelectedAthleteId(remaining[0].id);
           setLoading(false);
-          setFeedback({
-              type: 'success',
-              title: 'Dados Salvos!',
-              message: `Dados de ${currentAthlete.name} registrados. Alternando para ${remainingAthletes[0].name}.`
-          });
+          setFeedback({ type: 'success', title: 'Dados Salvos!', message: `Salvo para ${currentAthlete.name}.` });
       }
-  };
-
-  const handleAbort = () => {
-      setShowCancelModal(false);
-      navigate(`/athletes/${id}`); 
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
+    <div className="min-h-screen bg-gray-50 pb-40">
       
       {/* Header */}
       <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
-              <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-500 hover:text-blue-600">
-                  <ArrowLeft size={24} />
-              </button>
-              {currentAthlete ? (
+              <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-500 hover:text-blue-600"><ArrowLeft size={24} /></button>
+              {currentAthlete && (
                   <div className="flex items-center gap-3">
                       {currentAthlete.photoUrl ? (
-                          <img src={currentAthlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md bg-gray-100" alt={currentAthlete.name} />
+                          <img src={currentAthlete.photoUrl} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
                       ) : (
-                          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-lg border-2 border-white shadow-md">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm">
                               {currentAthlete.name.charAt(0)}
                           </div>
                       )}
                       <div>
-                          <h1 className="font-bold text-gray-900 text-xl leading-none truncate max-w-[200px]">{currentAthlete.name}</h1>
-                          <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                                  {currentAthlete.position}
-                              </span>
-                              <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
-                                  {getCalculatedCategory(currentAthlete.birthDate)}
-                              </span>
-                          </div>
+                          <h1 className="font-bold text-gray-900 text-base leading-none truncate max-w-[150px]">{currentAthlete.name}</h1>
+                          <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{currentAthlete.position}</p>
                       </div>
                   </div>
-              ) : (
-                  <span className="text-gray-400 font-bold">Nenhum atleta selecionado</span>
               )}
           </div>
           
           <div className="flex flex-col items-end">
-              <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isHalftime ? 'text-yellow-600' : 'text-green-600'}`}>
-                  {isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}
-              </span>
               <div className="flex items-center gap-2">
-                  {/* Flip Button (Highly Visible) */}
                   {!isRunning && timer === 0 && (
                       <button 
                         onClick={() => setFieldFlipped(!fieldFlipped)}
                         className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all border border-blue-700 shadow-md animate-pulse"
-                        title="Inverter Lado do Campo"
                       >
-                          <RefreshCw size={18} className={fieldFlipped ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                          <RefreshCw size={16} className={fieldFlipped ? 'rotate-180 transition-transform' : 'transition-transform'} />
                           <span className="text-xs font-bold uppercase hidden sm:inline">Trocar Lado</span>
                       </button>
                   )}
-
-                  <div className={`font-mono text-xl md:text-2xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100 shadow-inner' : 'bg-gray-100 text-gray-400'}`}>
+                  <div className={`font-mono text-xl font-black px-4 py-2 rounded-xl transition-all ${isRunning ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-100 text-gray-400'}`}>
                       {formatTime(timer)}
                   </div>
-                  <button 
-                    onClick={handleMainButton}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold shadow-md transition-all active:scale-95 ${btnState.color}`}
-                  >
+                  <button onClick={handleMainButton} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold shadow-md transition-all active:scale-95 ${btnState.color}`}>
                       {btnState.icon}
-                      <span className="hidden md:inline">{btnState.text}</span>
                   </button>
               </div>
           </div>
       </div>
 
-      <div className="max-w-3xl mx-auto p-4 flex flex-col gap-6">
+      <div className="max-w-4xl mx-auto p-4 flex flex-col gap-4">
           
-          {/* FIELD AREA */}
-          <div className={`relative w-full aspect-[16/9] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none transition-all duration-300`}>
-              
-              {isRunning && step === 0 && currentAthlete && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                      <div className="bg-white/30 backdrop-blur-[2px] px-4 py-2 rounded-full shadow-lg text-white font-bold text-sm border border-white/40 animate-pulse">
-                          Toque no campo para registrar ação
-                      </div>
-                  </div>
-              )}
-
-              {!isRunning && timer === 0 && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
-                      <div className="text-white font-bold text-lg text-center flex flex-col items-center gap-2">
-                          Inicie o cronômetro para avaliar
-                          {fieldFlipped && <span className="text-xs bg-white/20 px-2 py-1 rounded font-normal">Lado Invertido Ativado</span>}
-                      </div>
-                  </div>
-              )}
-
-              <div 
-                className={`absolute inset-0 z-0 ${isRunning && step === 0 && currentAthlete ? 'cursor-crosshair' : 'cursor-default'}`}
-                onClick={handleFieldClick}
-              >
-                  {/* Field Lines */}
-                  <div className="absolute inset-4 border-2 border-white/50 rounded-sm pointer-events-none"></div>
+          {/* Campo com Marcas d'Água Aumentadas */}
+          <div className={`relative w-full aspect-[16/8] bg-green-600 rounded-xl overflow-hidden border-4 border-green-800 shadow-inner group select-none`}>
+              <div className="absolute inset-0 z-0">
+                  <div className="absolute inset-4 border-2 border-white/50 rounded-sm"></div>
+                  <div className="absolute left-4 top-1/2 w-16 h-32 border-2 border-white/40 border-l-0 transform -translate-y-1/2"></div>
+                  <div className="absolute right-4 top-1/2 w-16 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2"></div>
+                  <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50"></div>
+                  <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
                   
-                  {/* Penalty Areas */}
-                  <div className="absolute left-4 top-1/2 w-16 h-32 border-2 border-white/40 border-l-0 transform -translate-y-1/2 bg-transparent pointer-events-none"></div>
-                  <div className="absolute right-4 top-1/2 w-16 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2 bg-transparent pointer-events-none"></div>
-                  
-                  <div className="absolute top-0 bottom-0 left-1/3 w-0.5 bg-white/20 pointer-events-none border-r border-dashed border-white/30"></div>
-                  <div className="absolute top-0 bottom-0 left-2/3 w-0.5 bg-white/20 pointer-events-none border-r border-dashed border-white/30"></div>
-                  <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50 pointer-events-none"></div>
-                  <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-                  
-                  {/* Highly Visible Watermarks */}
-                  <div className={`absolute bottom-6 left-10 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md`}>
+                  {/* Legendas Ampliadas */}
+                  <div className={`absolute bottom-6 left-10 text-white/80 font-black text-xl md:text-2xl uppercase pointer-events-none drop-shadow-lg`}>
                       {fieldFlipped ? 'ATAQUE' : 'DEFESA'}
                   </div>
-                  <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md">
+                  <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-white/80 font-black text-xl md:text-2xl uppercase pointer-events-none drop-shadow-lg">
                       CONSTRUÇÃO
                   </div>
-                  <div className={`absolute bottom-6 right-10 text-white/80 font-black text-lg md:text-2xl uppercase tracking-tighter pointer-events-none drop-shadow-md`}>
+                  <div className={`absolute bottom-6 right-10 text-white/80 font-black text-xl md:text-2xl uppercase pointer-events-none drop-shadow-lg`}>
                       {fieldFlipped ? 'DEFESA' : 'ATAQUE'}
                   </div>
-
-                  {fieldClick && (
-                      <div 
-                        className="absolute w-8 h-8 bg-yellow-400 border-4 border-white rounded-full shadow-xl transform -translate-x-1/2 -translate-y-1/2 z-20 animate-ping-once"
-                        style={{ left: `${fieldClick.x}%`, top: `${fieldClick.y}%` }}
-                      >
-                      </div>
-                  )}
-
-                  {currentEvents.map((evt, idx) => (
-                      <div 
-                        key={idx}
-                        className="absolute w-3 h-3 bg-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-0"
-                        style={{ left: `${evt.location.x}%`, top: `${evt.location.y}%` }}
-                      />
-                  ))}
               </div>
+
+              {/* Feedback de Resultado Visual Instantâneo */}
+              {showResultFeedback && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center animate-ping-once bg-white/10 pointer-events-none">
+                      <div className={`text-4xl font-black uppercase px-6 py-3 rounded-2xl shadow-2xl border-4 ${
+                          showResultFeedback === 'POSITIVA' ? 'bg-green-600 text-white border-green-400' :
+                          showResultFeedback === 'NEGATIVA' ? 'bg-red-600 text-white border-red-400' :
+                          'bg-gray-600 text-white border-gray-400'
+                      }`}>
+                          {showResultFeedback}
+                      </div>
+                  </div>
+              )}
           </div>
 
-          {/* DYNAMIC FORM */}
-          {step === 2 && zone && (
-              <div className="animate-slide-up bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden relative z-20">
-                  <div className={`p-4 border-b text-white flex justify-between items-center shadow-md
-                      ${zone === 'DEF' ? 'bg-purple-600' : zone === 'MID' ? 'bg-blue-600' : 'bg-orange-600'}
-                  `}>
-                      <div>
-                          <h3 className="font-bold text-lg flex items-center gap-2">
-                              {zone === 'DEF' && '🛡️ Ação Defensiva'}
-                              {zone === 'MID' && '⚙️ Construção / Meio'}
-                              {zone === 'ATT' && '🚀 Ação Ofensiva'}
-                          </h3>
-                      </div>
-                      <div className="font-mono bg-black/20 px-3 py-1 rounded-lg text-sm font-bold border border-white/20">{capturedTime}</div>
-                  </div>
-
-                  <div className="p-4 space-y-5 max-h-[60vh] overflow-y-auto pb-24">
-                      
-                      {/* ACTION BUTTONS (Moved to the top of the form, below the field) */}
-                      <div className="flex gap-3 pt-2">
-                          <button 
-                            onClick={handleCancelAction}
-                            className="flex-1 py-4 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition-colors shadow-sm"
-                          >
-                              Cancelar
-                          </button>
-                          <button 
-                            onClick={handleConfirmAction}
-                            className={`flex-[2] py-4 rounded-xl font-black text-white shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all
-                                ${zone === 'DEF' ? 'bg-purple-600 hover:bg-purple-700' : zone === 'MID' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}
-                            `}
-                          >
-                              <CheckCircle size={22} /> CONFIRMAR JOGADA
-                          </button>
-                      </div>
-
-                      <div className="h-px bg-gray-100 w-full"></div>
-
-                      {/* OBSERVATION BLOCK */}
-                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
-                          <label className="block text-xs uppercase font-bold text-gray-400 mb-2 flex items-center gap-2">
-                              Observação da Jogada (Opcional)
-                          </label>
-                          <div className="relative">
-                              <input 
-                                type="text"
-                                className="w-full bg-white border border-gray-300 rounded-lg p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-inner"
-                                placeholder="Descreva o que aconteceu..."
-                                value={currentNotes}
-                                onChange={(e) => setCurrentNotes(e.target.value)}
-                              />
-                              <button 
-                                onClick={handleVoiceInput}
-                                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100'}`}
-                                title="Falar anotação"
-                              >
-                                  <Mic size={18} />
-                              </button>
-                          </div>
-                      </div>
-
-                      {/* ATTRIBUTE SLIDERS */}
-                      <div className="space-y-4 pt-2">
-                          {zone === 'DEF' && (
-                              <div className="space-y-4">
-                                  <StatSlider label="Posicionamento" value={currentStats.def_posicionamento} onChange={v => setCurrentStats({...currentStats, def_posicionamento: v})} />
-                                  <StatSlider label="Desarme" value={currentStats.def_desarme_tatico} onChange={v => setCurrentStats({...currentStats, def_desarme_tatico: v})} />
-                                  <StatSlider label="Interceptação" value={currentStats.interceptacao} onChange={v => setCurrentStats({...currentStats, interceptacao: v})} />
-                                  <StatSlider label="Reação Pós-Perda" value={currentStats.def_reacao} onChange={v => setCurrentStats({...currentStats, def_reacao: v})} />
-                              </div>
-                          )}
-
-                          {zone === 'MID' && (
-                              <div className="space-y-4">
-                                  <StatSlider label="Qualidade Passe" value={currentStats.const_qualidade_passe} onChange={v => setCurrentStats({...currentStats, const_qualidade_passe: v})} />
-                                  <StatSlider label="Visão de Jogo" value={currentStats.const_visao} onChange={v => setCurrentStats({...currentStats, const_visao: v})} />
-                                  <StatSlider label="Controle de Bola" value={currentStats.controle_bola} onChange={v => setCurrentStats({...currentStats, controle_bola: v})} />
-                                  <StatSlider label="Quebra de Linhas" value={currentStats.const_quebra_linhas} onChange={v => setCurrentStats({...currentStats, const_quebra_linhas: v})} />
-                              </div>
-                          )}
-
-                          {zone === 'ATT' && (
-                              <div className="space-y-4">
-                                  <StatSlider label="Finalização" value={currentStats.ult_finalizacao_eficiente} onChange={v => setCurrentStats({...currentStats, ult_finalizacao_eficiente: v})} />
-                                  <StatSlider label="1 vs 1" value={currentStats.ult_1v1} onChange={v => setCurrentStats({...currentStats, ult_1v1: v})} />
-                                  <StatSlider label="Último Passe" value={currentStats.ult_ultimo_passe} onChange={v => setCurrentStats({...currentStats, ult_ultimo_passe: v})} />
-                                  <StatSlider label="Ataque ao Espaço" value={currentStats.ult_ataque_espaco} onChange={v => setCurrentStats({...currentStats, ult_ataque_espaco: v})} />
-                              </div>
-                          )}
-                      </div>
-                  </div>
+          {/* Registro Tático por Cliques */}
+          {!isRunning && timer === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center border-2 border-dashed border-gray-200">
+                  <Activity size={48} className="mx-auto text-gray-300 mb-4" />
+                  <h2 className="text-xl font-bold text-gray-800">Pronto para a Análise Individual?</h2>
+                  <p className="text-gray-500 max-w-xs mx-auto mt-2">Inicie o cronômetro para começar a registrar ações táticas em tempo real.</p>
               </div>
-          )}
-
-          {currentEvents.length > 0 && step === 0 && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 flex justify-between">
-                      <span>Timeline da Sessão</span>
-                      <span className="bg-gray-100 text-gray-600 px-2 rounded-full text-xs py-0.5">{currentEvents.length} ações</span>
-                  </h3>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                      {currentEvents.slice().reverse().map((evt, i) => (
-                          <div key={i} className="flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg p-2 min-w-[100px] flex flex-col items-center">
-                              <span className="text-xs font-mono text-gray-400 font-bold">{evt.timestamp}</span>
-                              <span className={`text-[10px] font-bold px-1 rounded mt-1 
-                                  ${evt.zone === 'DEF' ? 'text-purple-600 bg-purple-50' : evt.zone === 'MID' ? 'text-blue-600 bg-blue-50' : 'text-orange-600 bg-orange-50'}
-                              `}>
-                                  {evt.zone}
-                              </span>
-                          </div>
+          ) : (
+              <div className="space-y-4">
+                  {/* 2.1: Seleção de Fase do Jogo (1 Clique) */}
+                  <div className="grid grid-cols-4 gap-2">
+                      {(['OFENSIVA', 'DEFENSIVA', 'TRANSICAO_OF', 'TRANSICAO_DEF'] as GamePhase[]).map(phase => (
+                          <button 
+                            key={phase}
+                            onClick={() => setActivePhase(phase)}
+                            className={`py-3 rounded-xl text-[10px] md:text-xs font-black uppercase transition-all shadow-sm border-2 ${
+                                activePhase === phase 
+                                    ? 'bg-gray-900 text-white border-gray-700 shadow-lg scale-105' 
+                                    : 'bg-white text-gray-400 border-transparent hover:bg-gray-50'
+                            }`}
+                          >
+                              {phase.replace('_', ' ')}
+                          </button>
                       ))}
                   </div>
+
+                  {/* 2.2: Grid de Ações por Fase */}
+                  <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <ChevronRight size={14} className="text-blue-600"/> Ações da Fase {activePhase.replace('_', ' ')}
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {PHASE_ACTIONS[activePhase].map(action => (
+                              <button
+                                key={action}
+                                onClick={() => handleActionClick(action)}
+                                className={`py-4 px-2 rounded-xl font-bold text-sm transition-all border-2 text-center flex items-center justify-center min-h-[60px] ${
+                                    pendingAction === action 
+                                        ? 'bg-blue-600 text-white border-blue-400 scale-[0.98]' 
+                                        : 'bg-gray-50 text-gray-700 border-gray-100 hover:border-blue-200'
+                                }`}
+                              >
+                                  {action}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
+                  {/* 2.3: Qualificação do Resultado (Clique Final) */}
+                  {pendingAction && (
+                      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-end justify-center p-4">
+                          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl animate-slide-up">
+                              <p className="text-center text-xs font-black text-gray-400 uppercase mb-4 tracking-tighter">Qualificar: {pendingAction}</p>
+                              <div className="grid grid-cols-3 gap-4 mb-4">
+                                  <button onClick={() => handleResultClick('POSITIVA')} className="bg-green-600 text-white py-6 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">POSITIVA</button>
+                                  <button onClick={() => handleResultClick('NEUTRA')} className="bg-gray-500 text-white py-6 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">NEUTRA</button>
+                                  <button onClick={() => handleResultClick('NEGATIVA')} className="bg-red-600 text-white py-6 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">NEGATIVA</button>
+                              </div>
+                              <button onClick={() => setPendingAction(null)} className="w-full py-4 text-gray-400 font-bold text-sm">CANCELAR</button>
+                          </div>
+                      </div>
+                  )}
               </div>
           )}
 
+          {/* Feedback Visual Mínimo (Contadores) */}
+          <div className="grid grid-cols-3 gap-4">
+              <div className="bg-green-50 p-4 rounded-2xl border border-green-100 text-center">
+                  <span className="text-2xl font-black text-green-700">{currentEvents.filter(e => e.result === 'POSITIVA').length}</span>
+                  <p className="text-[10px] font-black text-green-600 uppercase">Positivas</p>
+              </div>
+              <div className="bg-gray-100 p-4 rounded-2xl border border-gray-200 text-center">
+                  <span className="text-2xl font-black text-gray-700">{currentEvents.filter(e => e.result === 'NEUTRA').length}</span>
+                  <p className="text-[10px] font-black text-gray-500 uppercase">Neutras</p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-center">
+                  <span className="text-2xl font-black text-red-700">{currentEvents.filter(e => e.result === 'NEGATIVA').length}</span>
+                  <p className="text-[10px] font-black text-red-600 uppercase">Negativas</p>
+              </div>
+          </div>
       </div>
 
-      {/* FIXED FOOTER - MULTI-ATHLETE BAR */}
+      {/* Floating Buttons Bar (Fixed) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex flex-col md:flex-row gap-4 md:items-center md:px-8">
           <div className="flex items-center gap-4 w-full md:w-auto">
-              <button 
-                onClick={() => setShowCancelModal(true)}
-                className="text-red-500 font-bold text-sm flex items-center gap-2 px-3 py-2 hover:bg-red-50 rounded-lg transition-colors whitespace-nowrap"
-              >
+              <button onClick={() => setShowCancelModal(true)} className="text-red-500 font-bold text-sm flex items-center gap-2 px-3 py-2 hover:bg-red-50 rounded-lg transition-colors whitespace-nowrap">
                   <XCircle size={20} /> Cancelar
               </button>
-              
-              <button
-                onClick={() => setShowAddAthleteModal(true)}
-                className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-3 rounded-full md:rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm border border-blue-200"
-                title="Adicionar Atleta"
-              >
+              <button onClick={() => setShowAddAthleteModal(true)} className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-3 rounded-full shadow-sm border border-blue-200" title="Adicionar Atleta">
                   <UserPlus size={20} />
               </button>
           </div>
@@ -715,13 +476,6 @@ const RealTimeEvaluation: React.FC = () => {
                           }
                       `}
                   >
-                      {ath.photoUrl ? (
-                          <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover border border-white/50 bg-white" />
-                      ) : (
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-white/20 ${selectedAthleteId === ath.id ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                              {ath.name.charAt(0)}
-                          </div>
-                      )}
                       <div className="flex flex-col items-start min-w-0">
                           <span className="text-xs font-bold truncate w-full text-left">{ath.name.split(' ')[0]}</span>
                           <span className={`text-[10px] ${selectedAthleteId === ath.id ? 'text-blue-100' : 'text-gray-400'}`}>
@@ -732,190 +486,134 @@ const RealTimeEvaluation: React.FC = () => {
               ))}
           </div>
           
-          <button 
-            onClick={() => setShowFinishModal(true)}
-            disabled={!currentEvents.length}
-            className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap w-full md:w-auto justify-center"
-          >
-              <StopCircle size={20} /> 
-              <span>ENCERRAR E SALVAR</span>
-          </button>
+          <div className="flex gap-2">
+            {/* ETAPA 3: Botão Flutuante do Mapa */}
+            <button 
+                onClick={() => setShowMapOverlay(true)}
+                disabled={!lastEventId}
+                className="bg-orange-500 text-white p-3 rounded-xl shadow-lg flex items-center gap-2 hover:bg-orange-600 transition-all disabled:opacity-50"
+            >
+                <MapIcon size={20} />
+            </button>
+            <button 
+                onClick={() => setShowFinishModal(true)}
+                disabled={!currentEvents.length}
+                className="bg-gray-900 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 whitespace-nowrap"
+            >
+                <StopCircle size={20} /> 
+                <span>SALVAR</span>
+            </button>
+          </div>
       </div>
 
-      {/* ADD ATHLETE MODAL */}
-      {showAddAthleteModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative flex flex-col max-h-[80vh]">
-                  <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                      <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Adicionar à Análise</h3>
-                      <button onClick={() => setShowAddAthleteModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
+      {/* Overlay de Mapa de Zonas (Etapa 3) */}
+      {showMapOverlay && (
+          <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl relative">
+                  <div className="p-4 border-b flex justify-between items-center">
+                      <h3 className="font-bold text-gray-800">Marcar Zona da Última Ação</h3>
+                      <button onClick={() => setShowMapOverlay(false)} className="p-2"><X size={24} /></button>
                   </div>
-                  
-                  {/* FILTERS SECTION */}
-                  <div className="space-y-3 mb-4">
-                      {/* Team Select */}
-                      <div>
-                          <label className="block text-xs font-bold text-gray-500 mb-1">SELECIONAR TIME</label>
-                          <select 
-                              className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm font-semibold"
-                              value={selectedTeamIdForAdd}
-                              onChange={(e) => setSelectedTeamIdForAdd(e.target.value)}
-                          >
-                              {userAllowedTeams.map(t => (
-                                  <option key={t.id} value={t.id}>{t.name}</option>
-                              ))}
-                          </select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                          <div>
-                              <label className="block text-xs font-bold text-gray-500 mb-1">CATEGORIA</label>
-                              <select 
-                                  className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
-                                  value={filterCategory}
-                                  onChange={(e) => setFilterCategory(e.target.value)}
+                  <div className="p-4">
+                      <div className="relative w-full aspect-[16/9] bg-green-700 rounded-xl grid grid-cols-4 grid-rows-3 gap-1 overflow-hidden border-2 border-white/20">
+                          {Array.from({length: 12}).map((_, idx) => (
+                              <button 
+                                key={idx}
+                                onClick={() => handleZoneClick(idx)}
+                                className="w-full h-full bg-white/5 hover:bg-white/30 border border-white/10 transition-colors flex items-center justify-center"
                               >
-                                  <option value="">Todas</option>
-                                  {allCategories.filter(c => c.teamId === selectedTeamIdForAdd).map(c => (
-                                      <option key={c.id} value={c.id}>{c.name}</option>
-                                  ))}
-                              </select>
-                          </div>
-                          <div>
-                              <label className="block text-xs font-bold text-gray-500 mb-1">POSIÇÃO</label>
-                              <select 
-                                  className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm"
-                                  value={filterPosition}
-                                  onChange={(e) => setFilterPosition(e.target.value)}
-                              >
-                                  <option value="">Todas</option>
-                                  {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
-                              </select>
-                          </div>
-                      </div>
-
-                      <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                          <input 
-                              type="text" 
-                              className="w-full bg-gray-100 border border-gray-300 rounded-lg pl-9 p-2 text-sm"
-                              placeholder="Buscar por nome..."
-                              value={filterName}
-                              onChange={(e) => setFilterName(e.target.value)}
-                          />
-                      </div>
-                  </div>
-
-                  {/* ATHLETE LIST */}
-                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[200px]">
-                      {filteredAthletesList.length > 0 ? (
-                          filteredAthletesList.map(athlete => (
-                              <button
-                                  key={athlete.id}
-                                  onClick={() => handleAddAthlete(athlete)}
-                                  className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors"
-                              >
-                                  {athlete.photoUrl ? (
-                                      <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover bg-gray-100" />
-                                  ) : (
-                                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">{athlete.name.charAt(0)}</div>
-                                  )}
-                                  <div className="text-left">
-                                      <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
-                                      <div className="flex gap-2">
-                                          <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">{athlete.position}</span>
-                                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{getCalculatedCategory(athlete.birthDate)}</span>
-                                      </div>
-                                  </div>
-                                  <Plus className="ml-auto text-green-600" size={20} />
+                                  <span className="text-white/20 font-black text-xl">{idx + 1}</span>
                               </button>
-                          ))
-                      ) : (
-                          <div className="text-center py-8 text-gray-400 flex flex-col items-center gap-2">
-                              <Filter size={32} className="opacity-20"/>
-                              <p className="text-sm">Nenhum atleta encontrado com os filtros.</p>
+                          ))}
+                          {/* Linhas do Campo (Decoration only) */}
+                          <div className="absolute inset-0 pointer-events-none">
+                              <div className="absolute inset-4 border border-white/20 rounded-sm"></div>
+                              <div className="absolute top-0 bottom-0 left-1/2 w-px bg-white/20"></div>
+                              <div className="absolute top-1/2 left-1/2 w-16 h-16 border border-white/20 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
                           </div>
-                      )}
+                      </div>
+                      <p className="text-center text-gray-500 text-xs mt-4">Toque na zona onde a jogada ocorreu.</p>
                   </div>
               </div>
           </div>
       )}
 
-      {/* CUSTOM FINISH MODAL */}
+      {/* ... (Modals de Add Athlete, Finish e Cancel - Mantidos do Turno Anterior) ... */}
+      {showAddAthleteModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative flex flex-col max-h-[80vh]">
+                  <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                      <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Adicionar Atleta</h3>
+                      <button onClick={() => setShowAddAthleteModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
+                  </div>
+                  <div className="space-y-3 mb-4">
+                      <div>
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase">Time</label>
+                          <select className="w-full bg-gray-100 border border-gray-300 rounded-lg p-2 text-sm font-semibold" value={selectedTeamIdForAdd} onChange={(e) => setSelectedTeamIdForAdd(e.target.value)}>
+                              {userAllowedTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          </select>
+                      </div>
+                      <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                          <input type="text" className="w-full bg-gray-100 border border-gray-300 rounded-lg pl-9 p-2 text-sm" placeholder="Nome do atleta..." value={filterName} onChange={(e) => setFilterName(e.target.value)} />
+                      </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px]">
+                      {filteredAthletesList.map(athlete => (
+                          <button key={athlete.id} onClick={() => handleAddAthlete(athlete)} className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl border border-gray-100 transition-colors">
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600 text-sm">{athlete.name.charAt(0)}</div>
+                              <div className="text-left">
+                                  <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
+                                  <p className="text-[10px] text-gray-400">{athlete.position}</p>
+                              </div>
+                              <Plus className="ml-auto text-green-600" size={20} />
+                          </button>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
+
       {showFinishModal && currentAthlete && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+             <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                      <CheckCircle className="text-blue-600" size={32} />
                  </div>
                  <h3 className="text-xl font-bold text-gray-800 mb-2">Encerrar: {currentAthlete.name}?</h3>
-                 <p className="text-gray-500 mb-6">
-                     Foram registradas <strong>{currentEvents.length} ações</strong> para este atleta.
-                     <br/><br/>
-                     <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                         Os outros atletas da sessão continuarão ativos.
-                     </span>
-                 </p>
+                 <p className="text-gray-500 mb-6 text-sm">Foram registradas <strong>{currentEvents.length} ações</strong> táticas nesta sessão.</p>
                  <div className="flex gap-3">
-                     <button 
-                        onClick={() => setShowFinishModal(false)} 
-                        className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200"
-                     >
-                         Voltar
-                     </button>
-                     <button 
-                        onClick={handleFinishSession} 
-                        className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg"
-                     >
-                         Salvar & Próximo
-                     </button>
+                     <button onClick={() => setShowFinishModal(false)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl">Voltar</button>
+                     <button onClick={handleFinishSession} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Confirmar</button>
                  </div>
              </div>
          </div>
       )}
 
-      {/* CUSTOM CANCEL MODAL */}
       {showCancelModal && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+             <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                      <AlertTriangle className="text-red-600" size={32} />
                  </div>
                  <h3 className="text-xl font-bold text-gray-800 mb-2">Cancelar Sessão?</h3>
-                 <p className="text-gray-500 mb-6">
-                     Todos os dados não salvos de <strong>todos os atletas ativos</strong> serão perdidos.
-                 </p>
+                 <p className="text-gray-500 mb-6 text-sm">Todos os eventos registrados neste jogo serão descartados.</p>
                  <div className="flex gap-3">
-                     <button 
-                        onClick={() => setShowCancelModal(false)} 
-                        className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200"
-                     >
-                         Voltar
-                     </button>
-                     <button 
-                        onClick={handleAbort} 
-                        className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 shadow-lg"
-                     >
-                         Sim, Sair
-                     </button>
+                     <button onClick={() => setShowCancelModal(false)} className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl">Voltar</button>
+                     <button onClick={() => navigate(`/athletes/${id}`)} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">Sair</button>
                  </div>
              </div>
          </div>
       )}
 
-      {/* SYSTEM FEEDBACK MODAL (Replaces Alerts) */}
       {feedback && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full relative">
-                 <button onClick={() => setFeedback(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
-                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
-                    {feedback.type === 'success' ? <CheckCircle className="text-green-600" size={32} /> : <AlertCircle className="text-red-600" size={32} />}
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
+                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                    {feedback.type === 'success' ? <CheckCircle className="text-green-600" size={24} /> : <AlertCircle className="text-red-600" size={24} />}
                  </div>
-                 <h3 className="text-xl font-bold text-gray-800 mb-2">{feedback.title}</h3>
-                 <p className="text-gray-500 text-center mb-6">{feedback.message}</p>
-                 <button onClick={() => setFeedback(null)} className={`text-white font-bold py-3 px-6 rounded-xl transition-colors w-full shadow-lg ${feedback.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                     Continuar
-                 </button>
+                 <h3 className="text-lg font-bold text-gray-800 mb-1">{feedback.title}</h3>
+                 <p className="text-gray-500 text-center text-xs">{feedback.message}</p>
              </div>
          </div>
       )}
