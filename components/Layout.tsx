@@ -17,10 +17,11 @@ import {
   Bell,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRightLeft
 } from 'lucide-react';
-import { Team, User, UserRole, canEditData } from '../types';
-import { getTeams, getUsers, saveUser } from '../services/storageService';
+import { Team, User, UserRole, canEditData, Athlete } from '../types';
+import { getTeams, getUsers, saveUser, getAthletes } from '../services/storageService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -47,17 +48,24 @@ const Layout: React.FC<LayoutProps> = ({
   const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [availableContexts, setAvailableContexts] = useState<{id: string, name: string}[]>([]);
   const [pendingInvites, setPendingInvites] = useState<Team[]>([]);
+  const [pendingTransfersCount, setPendingTransfersCount] = useState(0);
   const location = useLocation();
 
   const loadContext = async () => {
-      const [allTeams, allUsers] = await Promise.all([getTeams(), getUsers()]);
+      const [allTeams, allUsers, allAthletes] = await Promise.all([getTeams(), getUsers(), getAthletes()]);
       
       const freshUser = allUsers.find(u => u.id === user.id) || user;
       const userTeamIds = freshUser.teamIds || [];
 
-      // Detectar convites pendentes
+      // Detectar convites pendentes de usuário
       const pendingIds = userTeamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
       setPendingInvites(allTeams.filter(t => pendingIds.includes(t.id)));
+
+      // Detectar transferências de atletas pendentes para o time selecionado
+      if (selectedTeamId) {
+          const transfers = allAthletes.filter(a => a.pendingTransferTeamId === selectedTeamId);
+          setPendingTransfersCount(transfers.length);
+      }
 
       let userAllowedTeams: Team[] = [];
       if (freshUser.role === UserRole.GLOBAL) {
@@ -65,7 +73,6 @@ const Layout: React.FC<LayoutProps> = ({
       } else {
           const ownedTeams = allTeams.filter(t => t.ownerId === freshUser.id);
           const activeInvites = userTeamIds.filter(id => !id.startsWith('pending:'));
-          // Fix: replaced undefined activeTeamIds with defined activeInvites to fix reference error
           const invitedTeams = allTeams.filter(t => activeInvites.includes(t.id));
           userAllowedTeams = [...ownedTeams, ...invitedTeams];
       }
@@ -89,13 +96,12 @@ const Layout: React.FC<LayoutProps> = ({
       }
   };
 
-  useEffect(() => { loadContext(); }, [user, viewingAsMasterId]);
+  useEffect(() => { loadContext(); }, [user, viewingAsMasterId, selectedTeamId]);
 
   const handleAcceptInvite = async (teamId: string) => {
       const updatedIds = (user.teamIds || []).map(id => id === `pending:${teamId}` ? teamId : id);
       const updatedUser = { ...user, teamIds: updatedIds };
       await saveUser(updatedUser);
-      // Sincroniza localStorage para que a página Admin veja a mudança após o reload
       localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
       window.location.reload();
   };
@@ -120,7 +126,6 @@ const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row relative">
       
-      {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex flex-col items-center border-b border-blue-800">
            <img src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" alt="PERFORMAXX" className="w-32 object-contain mb-4" />
@@ -142,7 +147,7 @@ const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Banner de Convites Pendentes */}
+        {/* Banner de Convites Pendentes de Usuário */}
         {pendingInvites.length > 0 && (
             <div className="bg-indigo-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 animate-pulse-slow">
                 <div className="flex items-center gap-3">
@@ -158,6 +163,17 @@ const Layout: React.FC<LayoutProps> = ({
                         </div>
                     ))}
                 </div>
+            </div>
+        )}
+
+        {/* Banner de Transferências de Atletas Pendentes */}
+        {pendingTransfersCount > 0 && (
+            <div className="bg-emerald-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <ArrowRightLeft className="animate-pulse" size={18} />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Existem {pendingTransfersCount} {pendingTransfersCount === 1 ? 'atleta' : 'atletas'} solicitando transferência para sua escola!</p>
+                </div>
+                <Link to="/athletes" className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border border-white/30 transition-all">Ver Solicitações</Link>
             </div>
         )}
 
