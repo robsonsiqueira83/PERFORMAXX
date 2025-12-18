@@ -44,7 +44,7 @@ const AthleteProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'realtime' | 'snapshots'>('realtime');
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [showCalendar, setShowCalendar] = useState(false); // Sanfona recolhida por padrão
+  const [showCalendar, setShowCalendar] = useState(false); // Inicia recolhido
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
@@ -78,7 +78,6 @@ const AthleteProfile: React.FC = () => {
      load();
   }, [id, refreshKey]);
 
-  // --- LOGICA DE FILTRO POR CALENDARIO ---
   const filteredEntries = useMemo(() => {
       if (!filterDate) return entries;
       const sessionIdsInDate = sessions.filter(s => s.date === filterDate).map(s => s.id);
@@ -90,7 +89,6 @@ const AthleteProfile: React.FC = () => {
       return evalSessions.filter(s => s.date === filterDate);
   }, [evalSessions, filterDate]);
 
-  // --- PROCESSAMENTO TATICO (ABA REALTIME) ---
   const tacticalEvents = useMemo(() => {
       let events: any[] = [];
       filteredEntries.forEach(entry => {
@@ -141,7 +139,6 @@ const AthleteProfile: React.FC = () => {
       };
   }, [filteredTacticalEvents]);
 
-  // --- COMPONENTE CALENDARIO ---
   const activityDates = useMemo(() => {
       const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
       sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
@@ -242,7 +239,7 @@ const AthleteProfile: React.FC = () => {
             </div>
             
             <div className="text-center px-10 py-5 bg-gray-50 rounded-3xl border border-gray-100 min-w-[160px] shadow-inner">
-                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impacto Global</span>
+                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impacto Global (Jogo)</span>
                 <span className={`block text-5xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(1)}</span>
                 <span className={`text-[9px] font-black uppercase ${impact.text}`}>{impact.label}</span>
             </div>
@@ -250,32 +247,31 @@ const AthleteProfile: React.FC = () => {
       </div>
 
       {/* BLOCO 2: CALENDÁRIO INDEPENDENTE (SANFONA) */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-in">
-        <button 
-          onClick={() => setShowCalendar(!showCalendar)}
-          className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-400 tracking-widest">
-            <CalendarIcon size={16} className="text-blue-500" />
-            Calendário de Atividades {filterDate && `(Filtro: ${new Date(filterDate).toLocaleDateString()})`}
-          </div>
-          {showCalendar ? <ChevronUp size={20} className="text-gray-400" /> : <ChevronDown size={20} className="text-gray-400" />}
-        </button>
-        
-        {showCalendar && (
-          <div className="p-4 bg-gray-50/30 border-t border-gray-50">
-            {renderCalendar()}
-          </div>
-        )}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <button 
+            onClick={() => setShowCalendar(!showCalendar)}
+            className="w-full p-5 flex justify-between items-center hover:bg-gray-50 transition-all text-left"
+          >
+              <div className="flex items-center gap-3">
+                  <CalendarIcon size={18} className="text-blue-500" />
+                  <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Calendário de Atividades {filterDate && `(Filtro: ${new Date(filterDate).toLocaleDateString()})`}</span>
+              </div>
+              {showCalendar ? <ChevronUp size={20} className="text-gray-400"/> : <ChevronDown size={20} className="text-gray-400"/>}
+          </button>
+          {showCalendar && (
+              <div className="p-4 bg-gray-50/30 border-t border-gray-50 animate-fade-in">
+                {renderCalendar()}
+              </div>
+          )}
       </div>
 
       {/* BLOCO 3: ABAS DE NAVEGAÇÃO */}
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm w-full max-w-lg mx-auto">
           <button onClick={() => setActiveTab('realtime')} className={`flex-1 flex items-center justify-center gap-3 py-3.5 rounded-xl text-[11px] font-black uppercase transition-all ${activeTab === 'realtime' ? 'bg-gray-900 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>
-              <Activity size={18}/> Desempenho em Jogo
+              <Activity size={18}/> Scout Tático (RealTime)
           </button>
           <button onClick={() => setActiveTab('snapshots')} className={`flex-1 flex items-center justify-center gap-3 py-3.5 rounded-xl text-[11px] font-black uppercase transition-all ${activeTab === 'snapshots' ? 'bg-gray-900 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>
-              <ClipboardCheck size={18}/> Técnica & Física
+              <ClipboardCheck size={18}/> Avaliação Estruturada
           </button>
       </div>
 
@@ -318,8 +314,8 @@ const AthleteProfile: React.FC = () => {
                             </div>
                         </div>
                 </div>
-                {/* BLOCO TOP IMPACTO - Ajustado para não ter barra de rolagem */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-full min-h-[300px]">
+                {/* BLOCO TOP IMPACTO - Removido Scroll */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
                         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Top Impacto</h3>
                             <TrendingUp size={14} className="text-gray-300"/>
@@ -328,7 +324,7 @@ const AthleteProfile: React.FC = () => {
                             {impactRanking.best.length > 0 ? (
                                 <>
                                     <div>
-                                        <span className="text-[9px] font-bold text-green-600 uppercase mb-2 block tracking-wider">Pontos Fortes</span>
+                                        <span className="text-[9px] font-bold text-green-600 uppercase mb-2 block tracking-wider text-center">Pontos Fortes</span>
                                         {impactRanking.best.map((a, i) => (
                                             <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-green-50 border border-green-100 mb-1.5">
                                                 <span className="text-[10px] font-black text-green-800 truncate pr-2">{a.name}</span>
@@ -337,7 +333,7 @@ const AthleteProfile: React.FC = () => {
                                         ))}
                                     </div>
                                     <div className="border-t border-dashed border-gray-100 pt-4">
-                                        <span className="text-[9px] font-bold text-red-500 uppercase mb-2 block tracking-wider">Fragilidades</span>
+                                        <span className="text-[9px] font-bold text-red-500 uppercase mb-2 block tracking-wider text-center">Fragilidades</span>
                                         {impactRanking.worst.map((a, i) => (
                                             <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-red-50 border border-red-100 mb-1.5">
                                                 <span className="text-[10px] font-black text-red-800 truncate pr-2">{a.name}</span>
@@ -346,7 +342,7 @@ const AthleteProfile: React.FC = () => {
                                         ))}
                                     </div>
                                 </>
-                            ) : <div className="h-full flex items-center justify-center text-[9px] text-gray-300 font-bold uppercase text-center italic">Volume insuficiente para ranking</div>}
+                            ) : <div className="h-full flex items-center justify-center py-10 text-[9px] text-gray-300 font-bold uppercase text-center italic">Aguardando dados</div>}
                         </div>
                 </div>
               </div>
@@ -417,7 +413,7 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAL DE EDIÇÃO */}
+      {/* MODAL DE EDIÇÃO (Simplificado para o contexto) */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-slide-up">
@@ -453,30 +449,6 @@ const AthleteProfile: React.FC = () => {
                  <div>
                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nome Completo</label>
                    <input required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">RG / ID</label>
-                      <input className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nascimento</label>
-                      <input type="date" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.birthDate || ''} onChange={e => setEditFormData({...editFormData, birthDate: e.target.value})} />
-                    </div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Posição</label>
-                        <select className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
-                            {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Categoria</label>
-                        <select className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
-                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    </div>
                  </div>
                  <button type="submit" className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl mt-4 hover:bg-blue-700 transition-all uppercase tracking-widest text-[11px] shadow-xl shadow-blue-100">Atualizar Atleta</button>
               </form>

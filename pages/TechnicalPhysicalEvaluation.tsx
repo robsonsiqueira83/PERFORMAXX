@@ -49,10 +49,15 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
 
         const load = async () => {
             setLoading(true);
-            const allAthletes = await getAthletes();
-            const found = allAthletes.find(a => a.id === id);
-            if (found) setAthlete(found);
-            setLoading(false);
+            try {
+                const allAthletes = await getAthletes();
+                const found = allAthletes.find(a => a.id === id);
+                if (found) setAthlete(found);
+            } catch (err) {
+                console.error("Erro ao carregar atleta:", err);
+            } finally {
+                setLoading(false);
+            }
         };
         load();
     }, [id]);
@@ -74,7 +79,6 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
         const techVals = Object.values(techScores) as number[];
         const avgTech = techVals.length > 0 ? (techVals.reduce((a, b) => a + b, 0) / techVals.length) : 0;
         
-        // Físico é normalizado para 0-100 para persistência no BD e exibição
         const physVals = (Object.values(physInputs) as { val: string, score: number }[]).map(i => i.score);
         const avgPhysRaw = physVals.length > 0 ? (physVals.reduce((a, b) => a + b, 0) / physVals.length) : 0;
         const avgPhysNormalized = (avgPhysRaw / 5) * 100;
@@ -83,11 +87,16 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
     };
 
     const handleSave = async () => {
-        if (!athlete || !currentUser) return;
+        if (!athlete || !currentUser) {
+            alert("Sessão inválida ou usuário não autenticado.");
+            return;
+        }
+
         setSaving(true);
         const { avgTech, avgPhysNormalized } = calculateScores();
         const sessionId = uuidv4();
 
+        // Preparação cuidadosa dos dados para o DB
         const session: EvaluationSession = {
             id: sessionId, 
             athleteId: athlete.id, 
@@ -112,19 +121,20 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
         }));
 
         try {
-            // Chamada ao serviço de persistência
+            // Persistência coordenada
             await saveEvaluationSession(session, technicals, physicals);
             navigate(`/athletes/${athlete.id}`);
         } catch (err: any) { 
-            console.error("Erro detalhado ao salvar snapshot:", err);
-            alert("Erro ao salvar avaliação. Verifique a conexão ou as permissões do banco."); 
+            console.error("Erro técnico detalhado:", err);
+            // Mensagem de erro mais rica
+            alert(`Erro ao salvar avaliação: ${err.message || "Erro de conexão"}. Verifique as permissões de gravação.`); 
         } finally { 
             setSaving(false); 
         }
     };
 
     if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
-    if (!athlete) return <div className="p-10 text-center">Atleta não encontrado.</div>;
+    if (!athlete) return <div className="p-10 text-center text-gray-500">Atleta não encontrado.</div>;
 
     const fillProgress = (Object.keys(techScores).length + Object.keys(physInputs).length) / (TECH_CONFIG.reduce((a,c)=>a+c.subs.length,0) + PHYS_CONFIG.reduce((a,c)=>a+c.caps.length,0));
 
@@ -132,16 +142,16 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
         <div className="min-h-screen bg-gray-50 pb-32">
             <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-400 hover:text-blue-600"><ArrowLeft size={24}/></button>
-                    <div className="flex items-center gap-3">
+                    <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-400 hover:text-blue-600 transition-colors"><ArrowLeft size={24}/></button>
+                    <div className="flex items-center gap-4">
                         {athlete.photoUrl ? (
-                            <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-blue-50 shadow-sm" alt="" />
+                            <img src={athlete.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-blue-50 shadow-sm" alt={athlete.name} />
                         ) : (
                             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 uppercase">{athlete.name.charAt(0)}</div>
                         )}
                         <div>
                             <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2">
-                                <ClipboardCheck className="text-blue-600" size={20} /> Avaliação TÉC & FIS
+                                <ClipboardCheck className="text-blue-600" size={20} /> Avaliação Estruturada
                             </h2>
                             <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{athlete.name} • {athlete.position}</p>
                         </div>
@@ -149,7 +159,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="hidden md:flex flex-col items-end">
-                        <span className="text-[8px] font-black text-gray-400 uppercase">Preenchimento</span>
+                        <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Preenchimento</span>
                         <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
                             <div className="h-full bg-blue-600 transition-all duration-700" style={{ width: `${fillProgress * 100}%` }}></div>
                         </div>
@@ -157,37 +167,39 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-10">
-                <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+            <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-10 animate-fade-in">
+                {/* Cabeçalho de Contexto */}
+                <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="md:col-span-3 pb-2 border-b border-gray-100">
                         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Contexto da Sessão</h3>
                     </div>
                     <div>
                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Data da Avaliação</label>
-                        <input type="date" value={evalDate} onChange={e=>setEvalDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500" />
+                        <input type="date" value={evalDate} onChange={e=>setEvalDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                     <div>
                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Objetivo</label>
-                        <select value={evalType} onChange={e=>setEvalType(e.target.value as EvaluationType)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500">
+                        <select value={evalType} onChange={e=>setEvalType(e.target.value as EvaluationType)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none">
                             {Object.values(EvaluationType).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Avaliador Responsável</label>
                         <div className="w-full bg-gray-100 border border-gray-200 rounded-xl p-3 text-xs font-bold text-gray-500 flex items-center gap-2">
-                            <UserIcon size={12} /> {currentUser?.name}
+                            <UserIcon size={12} /> {currentUser?.name || 'Sistema'}
                         </div>
                     </div>
                     <div className="md:col-span-3">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Observações Técnicas</label>
-                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-blue-500 h-16" placeholder="Notas sobre histórico, comportamento ou objetivos específicos..."></textarea>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas da Sessão</label>
+                        <textarea value={notes} onChange={e=>setNotes(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-blue-500 h-16 outline-none" placeholder="Contexto de treino, condições de campo ou observações comportamentais..."></textarea>
                     </div>
                 </section>
 
+                {/* Fundamentos */}
                 <section className="space-y-6">
                     <div className="flex items-center gap-3 pb-3 border-b-2 border-blue-100">
                         <TrendingUp className="text-blue-600" />
-                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Fundamentos Técnicos</h2>
+                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Fundamentos Técnicos (1-5)</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {TECH_CONFIG.map((group, idx) => (
@@ -200,7 +212,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                                         <div key={sub} className="space-y-3">
                                             <div className="flex justify-between items-center">
                                                 <span className="text-[11px] font-bold text-gray-600">{sub}</span>
-                                                <span className="text-[9px] font-black text-blue-500 uppercase">{techScores[`${group.fundamento}|${sub}`] ? `Nota ${techScores[`${group.fundamento}|${sub}`]}` : 'Aguardando'}</span>
+                                                <span className="text-[9px] font-black text-blue-500 uppercase">{techScores[`${group.fundamento}|${sub}`] ? `Nota ${techScores[`${group.fundamento}|${sub}`]}` : 'Pendente'}</span>
                                             </div>
                                             <div className="grid grid-cols-5 gap-1.5">
                                                 {[1, 2, 3, 4, 5].map(score => (
@@ -224,10 +236,11 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                     </div>
                 </section>
 
+                {/* Física */}
                 <section className="space-y-6">
                     <div className="flex items-center gap-3 pb-3 border-b-2 border-orange-100">
                         <Activity className="text-orange-600" />
-                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Condição Física & Capacidades</h2>
+                        <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Capacidades Físicas</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {PHYS_CONFIG.map((group, idx) => (
@@ -249,7 +262,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                                             <div className="flex gap-2">
                                                 <input 
                                                     type="text" 
-                                                    placeholder="Valor bruto (ex: 30m)" 
+                                                    placeholder="Valor bruto (ex: 30m, 5kg)" 
                                                     value={physInputs[cap]?.val || ''}
                                                     onChange={e => handlePhysInput(cap, e.target.value)}
                                                     className="flex-1 bg-white border border-gray-200 rounded-lg p-3 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none"
@@ -285,7 +298,7 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                         className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
-                        {saving ? 'Processando...' : 'Salvar Snapshot de Avaliação'}
+                        {saving ? 'Consolidando...' : 'Salvar Avaliação Estruturada'}
                     </button>
                 </div>
             </div>
