@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -31,7 +31,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [modalType, setModalType] = useState<ModalType>('none');
   const [targetId, setTargetId] = useState<string | null>(null);
-  const [deleteType, setDeleteType] = useState<'team' | 'category' | 'staff' | 'leave'>('team');
+  const [deleteType, setDeleteType] = useState<'team' | 'category' | 'staff'>('team');
   
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [selectedTeamForStaff, setSelectedTeamForStaff] = useState<string | null>(null);
@@ -122,15 +122,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
               const updatedTeamIds = (selectedStaff.teamIds || []).filter(id => id !== selectedTeamForStaff);
               await saveUser({ ...selectedStaff, teamIds: updatedTeamIds });
               setModalMessage('Colaborador removido da equipe.');
-          } else if (deleteType === 'leave' && selectedTeamForStaff) {
-              const userStr = localStorage.getItem('performax_current_user');
-              const currentUser: User = userStr ? JSON.parse(userStr) : null;
-              if (currentUser) {
-                  const updatedTeamIds = (currentUser.teamIds || []).filter(id => id !== selectedTeamForStaff);
-                  await saveUser({ ...currentUser, teamIds: updatedTeamIds });
-                  setModalMessage('Você saiu do clube selecionado.');
-                  localStorage.setItem('performax_current_user', JSON.stringify({ ...currentUser, teamIds: updatedTeamIds }));
-              }
           }
           setModalType('alert_success');
           refreshData();
@@ -163,7 +154,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
     const pubLink = `${window.location.origin}/#/p/team/${team.id}`;
     
     return (
-        <div key={team.id} className="p-6 border border-gray-100 rounded-3xl bg-white shadow-sm hover:shadow-md transition-all space-y-6 relative group/card">
+        <div key={team.id} className="p-6 border border-gray-100 rounded-3xl bg-white shadow-sm hover:shadow-md transition-all space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-5">
                     {team.logoUrl ? <img src={team.logoUrl} className="w-16 h-16 object-contain rounded-2xl border border-gray-100" /> : <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-xl">{team.name.charAt(0)}</div>}
@@ -175,16 +166,12 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    {isOwner ? (
-                        <>
-                            <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="flex-1 md:flex-none bg-gray-50 text-indigo-600 hover:bg-indigo-50 p-3 rounded-xl border border-gray-100 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2"><Edit size={16}/> Editar</button>
-                            <button onClick={() => { setTargetId(team.id); setDeleteType('team'); setModalMessage(`Deseja realmente excluir a equipe "${team.name}"?`); setModalType('confirm_delete'); }} className="bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 transition-all"><Trash2 size={16}/></button>
-                        </>
-                    ) : (
-                        <button onClick={() => { setSelectedTeamForStaff(team.id); setDeleteType('leave'); setModalMessage(`Deseja sair do staff do clube "${team.name}"?`); setModalType('confirm_delete'); }} className="bg-orange-50 text-orange-600 hover:bg-orange-100 p-3 rounded-xl border border-orange-100 transition-all flex items-center gap-2 font-black text-[10px] uppercase"><LogOut size={16}/> Sair do Clube</button>
-                    )}
-                </div>
+                {isOwner && (
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <button onClick={() => { setTargetId(team.id); setFormData({name: team.name, logoUrl: team.logoUrl}); setModalType('edit_team'); }} className="flex-1 md:flex-none bg-gray-50 text-indigo-600 hover:bg-indigo-50 p-3 rounded-xl border border-gray-100 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2"><Edit size={16}/> Editar</button>
+                        <button onClick={() => { setTargetId(team.id); setDeleteType('team'); setModalMessage(`Deseja realmente excluir a equipe "${team.name}"?`); setModalType('confirm_delete'); }} className="bg-red-50 text-red-500 hover:bg-red-100 p-3 rounded-xl border border-red-100 transition-all"><Trash2 size={16}/></button>
+                    </div>
+                )}
             </div>
             
             {isOwner && (
