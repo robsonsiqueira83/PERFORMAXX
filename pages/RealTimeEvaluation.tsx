@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
 import { Athlete, TrainingEntry, getCalculatedCategory, Team, Category, User, UserRole, Position } from '../types';
-import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle, RefreshCw, Activity, ChevronRight, Clock } from 'lucide-react';
+import { ArrowLeft, Play, Pause, XCircle, CheckCircle, StopCircle, Flag, Mic, UserPlus, Users, X, Plus, Search, Filter, Loader2, AlertTriangle, AlertCircle, RefreshCw, Activity, ChevronRight, Clock, Rocket, Shield, Zap, ShieldAlert } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 // Types for Tactical Events
@@ -25,6 +25,13 @@ const PHASE_ACTIONS: Record<GamePhase, string[]> = {
     'DEFENSIVA': ['Contenção', 'Pressão direta', 'Cobertura', 'Fechamento de linha', 'Proteção do centro', 'Marcação ativa'],
     'TRANSICAO_OF': ['Acelerar jogo', 'Ataque ao espaço', 'Passe vertical', 'Condução progressiva', 'Apoio imediato', 'Pausa estratégica'],
     'TRANSICAO_DEF': ['Pressão pós-perda', 'Retardo', 'Fechamento de passe', 'Recuo organizado', 'Proteção de profundidade', 'Falta tática']
+};
+
+const PHASE_ICONS: Record<GamePhase, React.ReactNode> = {
+    'OFENSIVA': <Rocket size={14} />,
+    'DEFENSIVA': <Shield size={14} />,
+    'TRANSICAO_OF': <Zap size={14} />,
+    'TRANSICAO_DEF': <ShieldAlert size={14} />
 };
 
 const RealTimeEvaluation: React.FC = () => {
@@ -62,7 +69,7 @@ const RealTimeEvaluation: React.FC = () => {
   const timerRef = useRef<number | null>(null);
 
   // Interaction State
-  const [step, setStep] = useState<0 | 1 | 2>(0); // 0: Idle, 1: Action Selected, 2: Final Result Choice
+  const [step, setStep] = useState<0 | 1 | 2>(0); 
   const [capturedLocation, setCapturedLocation] = useState<{x: number, y: number} | null>(null);
   const [capturedTime, setCapturedTime] = useState('');
   const [capturedSeconds, setCapturedSeconds] = useState(0);
@@ -165,7 +172,7 @@ const RealTimeEvaluation: React.FC = () => {
       } else if (!isRunning && isHalftime) {
           setIsHalftime(false);
           setGamePeriod(2);
-          setFieldFlipped(prev => !prev); // Auto flip when starting 2nd half
+          setFieldFlipped(prev => !prev); 
           setIsRunning(true);
       } else {
           setIsRunning(!isRunning);
@@ -220,11 +227,9 @@ const RealTimeEvaluation: React.FC = () => {
           [selectedAthleteId]: [...(prev[selectedAthleteId] || []), newEvent]
       }));
 
-      // Feedback Etapa 4
       setShowResultFeedback(result);
       setTimeout(() => setShowResultFeedback(null), 1000);
 
-      // Reset for next action
       setStep(0);
       setCapturedLocation(null);
       setPendingAction(null);
@@ -407,13 +412,14 @@ const RealTimeEvaluation: React.FC = () => {
                               <button 
                                 key={phase}
                                 onClick={() => setActivePhase(phase)}
-                                className={`py-4 rounded-xl text-[9px] md:text-xs font-black uppercase transition-all shadow-sm border-2 ${
+                                className={`py-4 rounded-xl text-[9px] md:text-[10px] font-black uppercase transition-all shadow-sm border-2 flex flex-col items-center justify-center gap-1 leading-tight ${
                                     activePhase === phase 
                                         ? 'bg-gray-900 text-white border-gray-700 scale-105 shadow-xl' 
                                         : 'bg-white text-gray-400 border-gray-100'
                                 }`}
                               >
-                                  {phase.replace('_', ' ')}
+                                  {PHASE_ICONS[phase]}
+                                  <span>{phase.replace('_', ' ')}</span>
                               </button>
                           ))}
                       </div>
@@ -423,8 +429,12 @@ const RealTimeEvaluation: React.FC = () => {
                   {step > 0 && (
                       <div className="bg-white rounded-2xl shadow-xl border-2 border-blue-100 overflow-hidden animate-slide-up">
                           <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center">
-                              <h3 className="font-black uppercase tracking-tighter flex items-center gap-2">
-                                  {step === 1 ? '1. SELECIONE A AÇÃO' : '2. QUALIFIQUE O RESULTADO'}
+                              <h3 className="font-black uppercase tracking-tighter flex items-center gap-2 text-sm md:text-base">
+                                  {step === 1 ? (
+                                      <>1. SELECIONE A AÇÃO - <span className="bg-white/20 px-2 py-0.5 rounded ml-1">{activePhase.replace('_', ' ')}</span></>
+                                  ) : (
+                                      '2. QUALIFIQUE O RESULTADO'
+                                  )}
                               </h3>
                               <span className="font-mono bg-black/20 px-2 py-0.5 rounded font-bold text-sm">{capturedTime}</span>
                           </div>
@@ -472,9 +482,9 @@ const RealTimeEvaluation: React.FC = () => {
                               {/* Botão de Cancelamento / Voltar */}
                               <button 
                                 onClick={handleCancelAction}
-                                className="w-full py-4 text-gray-400 font-bold text-xs uppercase tracking-widest"
+                                className="w-full py-3 flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 text-gray-400 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-all active:scale-95 mt-2"
                               >
-                                  Cancelar Registro
+                                  <XCircle size={14} /> Cancelar Registro Atual
                               </button>
                           </div>
                       </div>
@@ -533,6 +543,13 @@ const RealTimeEvaluation: React.FC = () => {
                           }
                       `}
                   >
+                      {ath.photoUrl ? (
+                          <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover border border-white/30" alt="" />
+                      ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] ${selectedAthleteId === ath.id ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                              {ath.name.charAt(0)}
+                          </div>
+                      )}
                       <div className="flex flex-col items-start min-w-0">
                           <span className="text-xs font-bold truncate w-full text-left">{ath.name.split(' ')[0]}</span>
                           <span className={`text-[10px] ${selectedAthleteId === ath.id ? 'text-blue-100' : 'text-gray-400'}`}>
@@ -576,7 +593,11 @@ const RealTimeEvaluation: React.FC = () => {
                   <div className="flex-1 overflow-y-auto space-y-2 min-h-[300px]">
                       {filteredAthletesList.map(athlete => (
                           <button key={athlete.id} onClick={() => handleAddAthlete(athlete)} className="w-full flex items-center gap-3 p-4 hover:bg-blue-50 rounded-xl border border-gray-100 transition-colors">
-                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600 text-sm">{athlete.name.charAt(0)}</div>
+                              {athlete.photoUrl ? (
+                                  <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover" alt="" />
+                              ) : (
+                                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600 text-sm">{athlete.name.charAt(0)}</div>
+                              )}
                               <div className="text-left flex-1">
                                   <p className="font-bold text-gray-800 text-sm">{athlete.name}</p>
                                   <p className="text-[10px] text-gray-500 font-black uppercase">{athlete.position}</p>
