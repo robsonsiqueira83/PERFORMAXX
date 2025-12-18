@@ -65,6 +65,7 @@ const Layout: React.FC<LayoutProps> = ({
       } else {
           const ownedTeams = allTeams.filter(t => t.ownerId === freshUser.id);
           const activeInvites = userTeamIds.filter(id => !id.startsWith('pending:'));
+          // Fix: replaced undefined activeTeamIds with defined activeInvites to fix reference error
           const invitedTeams = allTeams.filter(t => activeInvites.includes(t.id));
           userAllowedTeams = [...ownedTeams, ...invitedTeams];
       }
@@ -92,13 +93,18 @@ const Layout: React.FC<LayoutProps> = ({
 
   const handleAcceptInvite = async (teamId: string) => {
       const updatedIds = (user.teamIds || []).map(id => id === `pending:${teamId}` ? teamId : id);
-      await saveUser({ ...user, teamIds: updatedIds });
+      const updatedUser = { ...user, teamIds: updatedIds };
+      await saveUser(updatedUser);
+      // Sincroniza localStorage para que a página Admin veja a mudança após o reload
+      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
       window.location.reload();
   };
 
   const handleDeclineInvite = async (teamId: string) => {
       const updatedIds = (user.teamIds || []).filter(id => id !== `pending:${teamId}`);
-      await saveUser({ ...user, teamIds: updatedIds });
+      const updatedUser = { ...user, teamIds: updatedIds };
+      await saveUser(updatedUser);
+      localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
       loadContext();
   };
 
@@ -114,7 +120,7 @@ const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row relative">
       
-      {/* Sidebar (Simplificada para foco no conteúdo) */}
+      {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1e3a8a] text-white transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex flex-col items-center border-b border-blue-800">
            <img src="https://raw.githubusercontent.com/robsonsiqueira83/PERFORMAXX/main/PERFORMAXX_LOGO3.png" alt="PERFORMAXX" className="w-32 object-contain mb-4" />
@@ -136,7 +142,7 @@ const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Banner de Convites Pendentes (ROSA/AZUL) */}
+        {/* Banner de Convites Pendentes */}
         {pendingInvites.length > 0 && (
             <div className="bg-indigo-600 text-white px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 animate-pulse-slow">
                 <div className="flex items-center gap-3">
