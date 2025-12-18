@@ -8,7 +8,8 @@ import {
   saveAthlete,
   getCategories,
   deleteTrainingEntry,
-  getTeams
+  getTeams,
+  getEvaluationSessions
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { calculateTotalScore, TrainingEntry, Athlete, Position, TrainingSession, getCalculatedCategory, HeatmapPoint, User, canEditData, canDeleteData, Team, UserRole } from '../types';
@@ -18,8 +19,8 @@ import {
 } from 'recharts';
 import { 
   Edit, Trash2, ArrowLeft, ClipboardList, User as UserIcon, Save, X, FileText, Loader2, 
-  Calendar, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, 
-  Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, Activity, Target, Zap, Info, Filter, MousePointer2, AlertCircle, AlertTriangle, RefreshCw, ArrowRightLeft, Search
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Upload, 
+  Clock, Copy, CheckCircle, Timer, PlayCircle, PauseCircle, Activity, Target, Zap, Info, Filter, MousePointer2, AlertCircle, AlertTriangle, RefreshCw, ArrowRightLeft, Search, ClipboardCheck
 } from 'lucide-react';
 import HeatmapField from '../components/HeatmapField';
 import { v4 as uuidv4 } from 'uuid';
@@ -44,23 +45,24 @@ const AthleteProfile: React.FC = () => {
   const [athlete, setAthlete] = useState<Athlete | null>(null);
   const [entries, setEntries] = useState<TrainingEntry[]>([]);
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
+  const [evalSessions, setEvalSessions] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
   // Motor de Filtros
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [filterPhase, setFilterPhase] = useState<string>('all');
   const [filterResult, setFilterResult] = useState<string>('all');
-  const [selectedTimePoint, setSelectedTimePoint] = useState<string | null>(null); // Filtro por jogo (sessionId)
+  const [selectedTimePoint, setSelectedTimePoint] = useState<string | null>(null); 
   const [mapMode, setMapMode] = useState<'all' | 'positiva' | 'negativa'>('all');
 
   // Modais e UI
   const [showEditModal, setShowEditModal] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; type: 'athlete' | 'entry' | null; id?: string }>({ isOpen: false, type: null });
   const [editFormData, setEditFormData] = useState<Partial<Athlete>>({});
   const [uploading, setUploading] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  // Calendário
+  const [calendarDate, setCalendarDate] = useState(new Date());
 
   useEffect(() => {
      const storedUser = localStorage.getItem('performax_current_user');
@@ -68,12 +70,13 @@ const AthleteProfile: React.FC = () => {
 
      const load = async () => {
          setLoading(true);
-         const [allAthletes, allEntries, allSessions, allCats, teams] = await Promise.all([
+         const [allAthletes, allEntries, allSessions, allCats, teams, allEvals] = await Promise.all([
              getAthletes(),
              getTrainingEntries(),
              getTrainingSessions(),
              getCategories(),
-             getTeams()
+             getTeams(),
+             getEvaluationSessions(id)
          ]);
          
          setAllTeams(teams);
@@ -85,6 +88,7 @@ const AthleteProfile: React.FC = () => {
              setCategories(allCats.filter(c => c.teamId === foundAthlete.teamId));
              setEntries(allEntries.filter(e => e.athleteId === id));
              setSessions(allSessions);
+             setEvalSessions(allEvals);
          }
          setLoading(false);
      };
@@ -98,7 +102,6 @@ const AthleteProfile: React.FC = () => {
           try {
               const notes = JSON.parse(entry.notes || '{}');
               if (notes.events) {
-                  // Adiciona o ID da sessão para filtro temporal
                   events = [...events, ...notes.events.map((e: any) => ({ ...e, sessionId: entry.sessionId }))];
               }
           } catch (e) { /* ignore */ }
@@ -112,22 +115,8 @@ const AthleteProfile: React.FC = () => {
       if (filterPhase !== 'all') ds = ds.filter(e => e.phase === filterPhase);
       if (filterResult !== 'all') ds = ds.filter(e => e.result === filterResult);
       if (selectedTimePoint) ds = ds.filter(e => e.sessionId === selectedTimePoint);
-      
-      // Filtro de Período (Últimos treinos)
-      const now = new Date();
-      if (selectedPeriod !== 'all') {
-          ds = ds.filter(e => {
-              const session = sessions.find(s => s.id === e.sessionId);
-              if (!session) return false;
-              const sDate = new Date(session.date);
-              if (selectedPeriod === 'today') return session.date === now.toISOString().split('T')[0];
-              if (selectedPeriod === 'week') return sDate >= new Date(now.setDate(now.getDate() - 7));
-              if (selectedPeriod === 'month') return sDate >= new Date(now.setMonth(now.getMonth() - 1));
-              return true;
-          });
-      }
       return ds;
-  }, [allEvents, filterPhase, filterResult, selectedTimePoint, selectedPeriod, sessions]);
+  }, [allEvents, filterPhase, filterResult, selectedTimePoint]);
 
   // --- CAMADA 1: PERFIL (ESTÁVEL) ---
   const globalStats = useMemo(() => {
@@ -148,7 +137,6 @@ const AthleteProfile: React.FC = () => {
       };
   }, [allEvents]);
 
-  // --- CAMADA 2: CONTEXTO (REATIVO) ---
   const dominantChartData = useMemo(() => {
       if (filterPhase === 'all') {
           return globalStats?.radarData.map(d => ({ name: d.phase, score: d.A }));
@@ -177,7 +165,6 @@ const AthleteProfile: React.FC = () => {
       };
   }, [filteredEvents]);
 
-  // --- CAMADA 3: ESPAÇO E TEMPO ---
   const timelineData = useMemo(() => {
       return entries.map(entry => {
           const session = sessions.find(s => s.id === entry.sessionId);
@@ -190,6 +177,53 @@ const AthleteProfile: React.FC = () => {
       }).filter(Boolean).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [entries, sessions]);
 
+  // Activity dates for calendar
+  const activityDates = useMemo(() => {
+      const dates = new Set<string>();
+      sessions.forEach(s => dates.add(s.date));
+      evalSessions.forEach(s => dates.add(s.date));
+      return dates;
+  }, [sessions, evalSessions]);
+
+  const renderCalendar = () => {
+    const month = calendarDate.getMonth();
+    const year = calendarDate.getFullYear();
+    const firstDay = new Date(year, month, 1).getDay();
+    const lastDate = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(<div key={`e-${i}`} />);
+    for (let d = 1; d <= lastDate; d++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const hasActivity = activityDates.has(dateStr);
+        days.push(
+            <div key={d} className={`h-8 w-8 flex items-center justify-center text-xs rounded-full border transition-colors ${hasActivity ? 'bg-blue-600 text-white border-blue-700 font-bold' : 'bg-white text-gray-400 border-gray-100'}`}>
+                {d}
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex-shrink-0 w-full md:w-auto min-w-[260px]">
+            <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-black uppercase text-gray-500 tracking-widest">{calendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                <div className="flex gap-1">
+                    <button onClick={() => setCalendarDate(new Date(year, month - 1))} className="p-1 hover:bg-gray-200 rounded text-gray-600"><ChevronLeft size={14}/></button>
+                    <button onClick={() => setCalendarDate(new Date(year, month + 1))} className="p-1 hover:bg-gray-200 rounded text-gray-600"><ChevronRight size={14}/></button>
+                </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center">
+                {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-[10px] font-bold text-gray-300">{d}</div>)}
+                {days}
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Datas com Atividade</span>
+            </div>
+        </div>
+    );
+  };
+
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center text-gray-500">Atleta não encontrado</div>;
 
@@ -199,45 +233,38 @@ const AthleteProfile: React.FC = () => {
     <div className="space-y-6 pb-20 relative">
       
       {/* CAMADA 1 – PERFIL DO ATLETA (Topo Fixo) */}
-      {/* Bloco de dados do atleta mantido conforme solicitado */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+            <div className="flex items-center gap-6 flex-1">
               {athlete.photoUrl ? (
                  <img src={athlete.photoUrl} className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-white shadow-md" alt="" />
               ) : (
                  <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-blue-100 flex items-center justify-center text-4xl font-bold text-blue-600">{athlete.name.charAt(0)}</div>
               )}
-              <div>
+              <div className="flex-1">
                 <h1 className="text-3xl font-bold text-gray-900">{athlete.name}</h1>
                 <div className="flex flex-wrap gap-2 mt-2 items-center">
                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">{athlete.position}</span>
                    <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded font-bold">{getCalculatedCategory(athlete.birthDate)}</span>
-                   {athlete.rg && <span className="text-[10px] bg-gray-50 text-gray-500 border border-gray-200 px-2 py-1 rounded font-mono">RG: {athlete.rg}</span>}
                 </div>
-                <div className="mt-4 flex gap-2">
+                
+                <div className="mt-6 flex flex-wrap gap-3">
                     {canEditData(currentUser?.role || UserRole.TECNICO) && (
                         <>
-                            <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-md"><Timer size={14} /> Análise RealTime</button>
-                            <button onClick={() => setShowEditModal(true)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-lg text-xs font-bold transition-all">Editar Perfil</button>
+                            <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-tighter"><Timer size={16} /> Análise RealTime</button>
+                            <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-tighter"><ClipboardCheck size={16} /> Avaliação Técnica & Física</button>
+                            <button onClick={() => setShowEditModal(true)} className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2.5 rounded-xl text-xs font-black transition-all uppercase tracking-tighter">Editar Perfil</button>
                         </>
                     )}
                 </div>
               </div>
             </div>
             
+            {renderCalendar()}
+
             <div className="flex flex-col items-end gap-2 w-full md:w-auto">
-                 <div className="flex items-center gap-2 mb-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contexto Temporal:</label>
-                    <select value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)} className="bg-gray-100 border-none rounded-lg px-3 py-1 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="all">Todo o Histórico</option>
-                        <option value="today">Hoje</option>
-                        <option value="week">Últimos 7 dias</option>
-                        <option value="month">Últimos 30 dias</option>
-                    </select>
-                 </div>
                  <div className="text-center px-8 py-3 bg-gray-50 rounded-2xl border border-gray-100 min-w-[160px] shadow-inner">
-                    <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Média Tática Global</span>
+                    <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impacto Global</span>
                     <span className={`block text-5xl font-black ${impact.text}`}>{(globalStats?.avgGlobal || 0).toFixed(1)}</span>
                     <span className={`text-[10px] font-bold uppercase ${impact.text}`}>{impact.label}</span>
                  </div>
@@ -401,33 +428,33 @@ const AthleteProfile: React.FC = () => {
           </div>
       </div>
 
-      {/* --- MODAIS DE EDIÇÃO --- */}
+      {/* --- MODAL DE EDIÇÃO RESTAURADO --- */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
-           <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl relative my-8">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xl font-bold text-gray-800">Editar Perfil do Atleta</h3>
-                 <button onClick={() => setShowEditModal(false)}><X className="text-gray-400 hover:text-gray-600" /></button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fade-in">
+           <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6 border-b pb-2">
+                <h3 className="text-xl font-bold flex items-center gap-2"><Edit className="text-blue-500"/> Editar Perfil do Atleta</h3>
+                <button onClick={() => setShowEditModal(false)}><X size={24} className="text-gray-400 hover:text-red-500" /></button>
               </div>
+              
               <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!editFormData.name || !athlete) return;
+                  if (!editFormData.name || !editFormData.categoryId || !athlete) return;
                   await saveAthlete({ ...athlete, ...editFormData } as Athlete);
                   setShowEditModal(false);
                   setRefreshKey(prev => prev + 1);
               }} className="space-y-4">
-                 <div className="flex flex-col items-center mb-6">
+                 <div className="flex flex-col items-center mb-4">
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-300">
-                        {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={32} className="text-gray-400" />}
+                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <UserIcon size={32} className="text-gray-400" />)}
                     </div>
                     <label className={`cursor-pointer text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                        {uploading ? 'Enviando...' : <><Upload size={14} /> Alterar Foto</>}
-                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={async (ev) => {
+                       {uploading ? 'Enviando...' : <><Upload size={14} /> Carregar Foto</>}
+                       <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={async (ev) => {
                             const file = ev.target.files?.[0];
                             if (file) {
                                 setUploading(true);
                                 try {
-                                    ev.target.value = ''; 
                                     const url = await processImageUpload(file);
                                     setEditFormData(prev => ({ ...prev, photoUrl: url }));
                                 } catch (err) { alert("Erro no upload"); } finally { setUploading(false); }
@@ -435,25 +462,52 @@ const AthleteProfile: React.FC = () => {
                         }} />
                     </label>
                  </div>
+
                  <div>
-                     <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Nome Completo</label>
-                     <input className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
+                   <input required type="text" className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} />
                  </div>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">RG / Identificador</label>
+                   <input type="text" className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} />
+                 </div>
+                 
                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Posição</label>
-                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
-                             {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
-                         </select>
-                     </div>
-                     <div>
-                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Categoria</label>
-                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editFormData.categoryId} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
-                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                         </select>
-                     </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Data Nasc.</label>
+                      <input type="date" className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.birthDate || ''} onChange={e => setEditFormData({...editFormData, birthDate: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Categoria</label>
+                      <select required className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>
+                         <option value="">Selecione...</option>
+                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
                  </div>
-                 <button type="submit" className="w-full bg-blue-600 text-white font-black py-3 rounded-xl mt-2 hover:bg-blue-700 transition-all shadow-lg uppercase tracking-widest text-xs" disabled={uploading}>Salvar Alterações</button>
+
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-700 mb-1">Posição</label>
+                   <select className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>
+                      {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
+                   </select>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-sm font-semibold text-gray-700 mb-1">Responsável</label>
+                     <input type="text" className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-semibold text-gray-700 mb-1">Telefone</label>
+                     <input type="text" className="w-full bg-gray-100 border border-gray-300 rounded p-2 text-black" value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} />
+                   </div>
+                 </div>
+
+                 <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-4 hover:bg-blue-700 transition-colors">
+                    Salvar Alterações
+                 </button>
               </form>
            </div>
         </div>
