@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
@@ -7,7 +8,8 @@ import {
   getTeams,
   getCategories
 } from '../services/storageService';
-import { calculateTotalScore, TrainingEntry, Athlete, TrainingSession, getCalculatedCategory, calculateCategoryAverage, HeatmapPoint } from '../types';
+// Removed non-existent calculateCategoryAverage from import
+import { calculateTotalScore, TrainingEntry, Athlete, TrainingSession, getCalculatedCategory, HeatmapPoint } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
