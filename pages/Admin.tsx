@@ -44,26 +44,34 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const refreshData = async () => {
     setLoading(true);
     try {
-        const allTeams = await getTeams();
+        const [allTeams, u] = await Promise.all([getTeams(), getUsers()]);
+        setAllUsers(u);
+        
         const userStr = localStorage.getItem('performax_current_user');
-        const loggedUser: User = userStr ? JSON.parse(userStr) : null;
+        const localUser: User = userStr ? JSON.parse(userStr) : null;
+        
+        // Busca a versão mais recente do usuário no banco para ter os teamIds atualizados (sem o pending:)
+        const loggedUser = u.find(user => user.id === localUser?.id) || localUser;
         setCurrentUser(loggedUser);
+        
+        // Sincroniza o localStorage caso tenha mudado
+        if (loggedUser) localStorage.setItem('performax_current_user', JSON.stringify(loggedUser));
+
         const ctxId = localStorage.getItem('performax_context_id');
 
         if (ctxId) {
             setOwnedTeams(allTeams.filter(t => t.ownerId === ctxId));
             if (loggedUser) {
                 const teamIds = loggedUser.teamIds || [];
+                // Equipes ativas são as que não começam com pending:
                 const activeTeamIds = teamIds.filter(id => !id.startsWith('pending:'));
+                // Filtra equipes onde o usuário é convidado (não é o dono do contexto atual)
                 setInvitedTeams(allTeams.filter(t => activeTeamIds.includes(t.id) && t.ownerId !== ctxId));
             }
         }
         
         const c = await getCategories();
         setCategories(c.filter(item => item.teamId === currentTeamId));
-
-        const u = await getUsers();
-        setAllUsers(u);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -287,7 +295,16 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
                   <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded">Meu Cadastro</span>
                   <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter mt-1">{currentUser?.name}</h2>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{currentUser?.email} • {currentUser?.role}</p>
-                  <p className="text-[9px] text-gray-300 font-mono mt-1 select-all">ID: {currentUser?.id}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                      <p className="text-[9px] text-gray-300 font-mono select-all">ID: {currentUser?.id}</p>
+                      <button 
+                        onClick={() => currentUser?.id && copyToClipboard(currentUser.id, 'ID de usuário copiado!')} 
+                        className="text-gray-300 hover:text-indigo-500 transition-colors"
+                        title="Copiar ID"
+                      >
+                        <Copy size={12} />
+                      </button>
+                  </div>
               </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
