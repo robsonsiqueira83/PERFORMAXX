@@ -52,8 +52,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               getEvaluationSessions()
           ]);
           setAllSystemAthletes(a);
-          // Atletas que pertencem a este time OU estão vindo para este time
-          setAthletes(a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId));
+          // Filtro: Atletas do time OU atletas de fora que solicitaram vir para este time
+          const localAthletes = a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId);
+          setAthletes(localAthletes);
           setCategories(c.filter(item => item.teamId === teamId));
           setEvaluations(ev);
       } catch (err) {
@@ -90,7 +91,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       try {
           const targetAthlete = allSystemAthletes.find(a => a.rg === transferRg.trim());
           if (!targetAthlete) {
-              setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado no sistema.' });
+              setFeedback({ type: 'error', message: 'Atleta com este RG/ID não encontrado.' });
               return;
           }
           if (targetAthlete.teamId === teamId) {
@@ -99,12 +100,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           }
           
           await saveAthlete({ ...targetAthlete, pendingTransferTeamId: teamId });
-          setFeedback({ type: 'success', message: `Solicitação de transferência enviada com sucesso para ${targetAthlete.name}!` });
+          setFeedback({ type: 'success', message: `Solicitação enviada! Aguardando aceite do time de origem.` });
           setShowTransferModal(false);
           setTransferRg('');
           setRefreshKey(prev => prev + 1);
-      } catch (err) { 
-          setFeedback({ type: 'error', message: 'Erro ao processar solicitação de transferência.' }); 
+      } catch (err: any) { 
+          setFeedback({ type: 'error', message: 'Erro ao solicitar. Verifique as políticas de banco de dados.' }); 
       } finally { 
           setTransferLoading(false); 
       }
@@ -113,18 +114,22 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const handleAcceptTransfer = async (athlete: Athlete) => {
       setLoading(true);
       try {
-          // IMPORTANTE: Limpar categoryId ao aceitar, pois a categoria antiga não existe no novo time.
-          // O gestor do novo time deverá editar o atleta e escolher uma de suas categorias.
+          // Muda o vínculo e limpa solicitações e categorias antigas
           await saveAthlete({ 
               ...athlete, 
               teamId: teamId, 
               categoryId: '', 
               pendingTransferTeamId: undefined 
           });
-          setFeedback({ type: 'success', message: `Atleta ${athlete.name} agora faz parte da sua equipe! Lembre-se de definir a categoria dele.` });
+          
+          setFeedback({ 
+              type: 'success', 
+              message: `Transferência concluída! Atribua agora uma categoria ao atleta.` 
+          });
           setRefreshKey(prev => prev + 1);
-      } catch (err) {
-          setFeedback({ type: 'error', message: 'Erro ao aceitar transferência.' });
+      } catch (err: any) {
+          console.error("Erro ao aceitar:", err);
+          setFeedback({ type: 'error', message: 'Falha no banco de dados. Execute o script SQL de correção.' });
       } finally {
           setLoading(false);
       }
@@ -134,10 +139,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       setLoading(true);
       try {
           await saveAthlete({ ...athlete, pendingTransferTeamId: undefined });
-          setFeedback({ type: 'success', message: 'Solicitação de transferência recusada.' });
+          setFeedback({ type: 'success', message: 'Solicitação recusada.' });
           setRefreshKey(prev => prev + 1);
       } catch (err) {
-          setFeedback({ type: 'error', message: 'Erro ao recusar transferência.' });
+          setFeedback({ type: 'error', message: 'Erro ao recusar.' });
       } finally {
           setLoading(false);
       }
@@ -150,7 +155,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       try {
         const url = await processImageUpload(file);
         setPreviewUrl(url);
-      } catch (error) { setFeedback({ type: 'error', message: 'Erro no processamento da imagem.' }); }
+      } catch (error) { setFeedback({ type: 'error', message: 'Erro na imagem.' }); }
       finally { setUploading(false); }
     }
   };
@@ -174,7 +179,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
         setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: '' });
         setPreviewUrl('');
         setRefreshKey(prev => prev + 1);
-        setFeedback({ type: 'success', message: 'Cadastro do atleta atualizado com sucesso!' });
+        setFeedback({ type: 'success', message: 'Salvo com sucesso!' });
     } catch (err: any) { setFeedback({ type: 'error', message: 'Erro ao salvar atleta.' }); }
     finally { setLoading(false); }
   };
@@ -214,9 +219,8 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
            return (
            <div key={athlete.id} className={`bg-white rounded-3xl shadow-sm border p-6 flex flex-col items-center hover:shadow-xl transition-all group relative ${isIncoming ? 'border-emerald-200 bg-emerald-50/20' : isOutgoing ? 'border-amber-200 bg-amber-50/20' : 'border-gray-100'}`}>
                
-               {/* Badges de Transferência */}
                {isIncoming && (
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-bounce">
                        <ArrowRightLeft size={10}/> Solicitação de Vínculo
                    </div>
                )}
@@ -254,17 +258,16 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    </div>
                </Link>
 
-               {/* Botões de Ação para Transferência Recebida */}
                {isIncoming && (
-                   <div className="mt-6 flex gap-2 w-full">
-                       <button onClick={() => handleAcceptTransfer(athlete)} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition-all"><CheckCircle size={14}/> Aceitar</button>
-                       <button onClick={() => handleDeclineTransfer(athlete)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar</button>
+                   <div className="mt-6 flex flex-col gap-2 w-full">
+                       <button onClick={() => handleAcceptTransfer(athlete)} className="w-full bg-emerald-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition-all active:scale-95"><CheckCircle size={14}/> Aceitar Atleta</button>
+                       <button onClick={() => handleDeclineTransfer(athlete)} className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar</button>
                    </div>
                )}
                
                {isOutgoing && (
                    <div className="mt-4 p-2 bg-amber-50 rounded-xl border border-amber-100 text-center w-full animate-pulse">
-                       <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">Aguardando novo clube...</span>
+                       <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">Aguardando aceite...</span>
                    </div>
                )}
            </div>
@@ -276,14 +279,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
                   <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner"><ArrowRightLeft size={36} /></div>
                   <h2 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Solicitar Transferência</h2>
-                  <p className="text-[10px] text-gray-400 mb-8 font-black uppercase tracking-widest leading-relaxed">Informe o código identificador (RG) do atleta para vinculá-lo à sua escola.</p>
+                  <p className="text-[10px] text-gray-400 mb-8 font-black uppercase tracking-widest leading-relaxed">Informe o RG para vincular o atleta à sua escola.</p>
                   <form onSubmit={handleTransferRequest} className="space-y-4">
                       <input autoFocus type="text" className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="RG-000000" value={transferRg} onChange={e => setTransferRg(e.target.value)} required />
                       <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
-                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Pesquisar e Vincular Atleta'}
+                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Pesquisar e Vincular'}
                       </button>
                   </form>
-                  <button onClick={() => setShowTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar e Voltar</button>
+                  <button onClick={() => setShowTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
               </div>
           </div>
       )}
@@ -296,7 +299,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                     <div className={`p-2 rounded-xl text-white ${formData.id ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
                         {formData.id ? <Edit size={24}/> : <Plus size={24}/>}
                     </div>
-                    {formData.id ? 'Editar Cadastro Atleta' : 'Novo Cadastro Atleta'}
+                    {formData.id ? 'Editar Atleta' : 'Novo Atleta'}
                 </h3>
                 <button onClick={() => setShowModal(false)} className="p-2 hover:bg-red-50 rounded-full transition-colors text-gray-300 hover:text-red-500"><X size={28}/></button>
               </div>
@@ -306,7 +309,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                        {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <Users size={48} className="text-gray-200" />)}
                     </div>
                     <label className={`cursor-pointer text-indigo-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-4 py-2 rounded-full hover:bg-indigo-100 transition-all ${uploading ? 'opacity-50' : ''}`}>
-                       {uploading ? 'Processando Imagem...' : <><Upload size={14} /> Enviar Foto</>}
+                       {uploading ? 'Aguarde...' : <><Upload size={14} /> Foto</>}
                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageChange} />
                     </label>
                  </div>
@@ -324,7 +327,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                                 <input type="date" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG / Identificador</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG</label>
                                 <input type="text" className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Automático" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} />
                             </div>
                         </div>
@@ -363,7 +366,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                  </div>
 
                  <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-xs transition-all hover:bg-indigo-700 disabled:opacity-50 active:scale-95">
-                    {loading ? 'Processando Informações...' : 'Finalizar Cadastro do Atleta'}
+                    {loading ? 'Aguarde...' : 'Salvar Cadastro'}
                  </button>
               </form>
            </div>
@@ -372,7 +375,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
-             <div className="bg-white rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+             <div className="bg-white rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-indigo-50">
                  <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner ${feedback.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
                     {feedback.type === 'success' ? <CheckCircle size={40} /> : <AlertCircle size={40} />}
                  </div>
