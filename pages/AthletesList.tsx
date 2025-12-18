@@ -5,11 +5,12 @@ import {
   getAthletes, 
   getCategories, 
   saveAthlete, 
-  getTeams 
+  getTeams,
+  getEvaluationSessions
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession } from '../types';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -20,6 +21,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [allSystemAthletes, setAllSystemAthletes] = useState<Athlete[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationSession[]>([]);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('all');
   const [filterPos, setFilterPos] = useState('all');
@@ -47,13 +49,15 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
 
     const load = async () => {
         setLoading(true);
-        const [a, c] = await Promise.all([
+        const [a, c, ev] = await Promise.all([
             getAthletes(),
-            getCategories()
+            getCategories(),
+            getEvaluationSessions()
         ]);
         setAllSystemAthletes(a);
         setAthletes(a.filter(item => item.teamId === teamId));
         setCategories(c.filter(item => item.teamId === teamId));
+        setEvaluations(ev);
         setLoading(false);
     };
     load();
@@ -63,8 +67,16 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       let list = athletes.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
       if (filterCat !== 'all') list = list.filter(a => a.categoryId === filterCat);
       if (filterPos !== 'all') list = list.filter(a => a.position === filterPos);
-      return list;
+      
+      // PADRONIZAÇÃO POR ORDEM ALFABÉTICA
+      return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [athletes, search, filterCat, filterPos]);
+
+  const getAthleteTechScore = (athleteId: string) => {
+      const athleteEvals = evaluations.filter(ev => ev.athleteId === athleteId);
+      if (athleteEvals.length === 0) return null;
+      return (athleteEvals.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / athleteEvals.length).toFixed(1);
+  };
 
   const handleTransferRequest = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -153,7 +165,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-         {filtered.map(athlete => (
+         {filtered.map(athlete => {
+           const score = getAthleteTechScore(athlete.id);
+           return (
            <div key={athlete.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col items-center hover:shadow-xl transition-all group relative">
                <div className="absolute top-4 right-4 flex gap-2">
                    <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
@@ -162,13 +176,19 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-24 h-24 rounded-full object-cover mb-4 border-4 border-gray-50 shadow-sm" /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
+                   
+                   <div className="mt-4 flex flex-col items-center p-2 bg-gray-50 rounded-2xl w-full border border-gray-100 group-hover:bg-indigo-50/50 transition-colors">
+                        <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1"><Target size={10} className="text-emerald-500"/> Média Técnica</span>
+                        <span className={`text-xl font-black ${score ? 'text-emerald-600' : 'text-gray-300'}`}>{score || '--'}</span>
+                   </div>
+
                    <div className="flex flex-col items-center gap-1 mt-3">
                        <span className="text-[10px] text-gray-400 font-bold">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
                        <span className="text-[9px] text-gray-300 font-mono tracking-widest">RG: {athlete.rg}</span>
                    </div>
                </Link>
            </div>
-         ))}
+         )})}
       </div>
 
       {/* MODAL TRANSFERÊNCIA PADRONIZADO */}

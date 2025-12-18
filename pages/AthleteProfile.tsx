@@ -88,11 +88,11 @@ const AthleteProfile: React.FC = () => {
     if (entries.length === 0) return null;
     
     const techKeys: Record<string, string> = {
-        controle_bola: 'Controle', conducao: 'Condução', passe: 'Passe', recepcao: 'Recepção',
+        controle_bola: 'Controle', conducao: 'Condução', padding_1: '', passe: 'Passe', recepcao: 'Recepção', padding_2: '',
         drible: 'Drible', finalizacao: 'Finaliz.', cruzamento: 'Cruzam.', desarme: 'Desarme', interceptacao: 'Intercep.'
     };
 
-    const techGroup = Object.keys(techKeys).map(key => {
+    const techGroup = Object.keys(techKeys).filter(k => !k.startsWith('padding')).map(key => {
         const sum = entries.reduce((acc, curr) => acc + (Number((curr.technical as any)[key]) || 0), 0);
         const avg = sum / entries.length;
         const displayVal = avg > 5 ? avg / 2 : avg; 
@@ -107,7 +107,7 @@ const AthleteProfile: React.FC = () => {
     const physGroup = Object.keys(physKeys).map(key => {
         const sum = entries.reduce((acc, curr) => acc + (Number((curr.physical as any)[key]) || 0), 0);
         const avg = sum / entries.length;
-        const displayVal = avg > 5 ? avg / 2 : avg;
+        const displayVal = avg > 5 ? avg / 2 : avg; 
         return { subject: physKeys[key], A: displayVal };
     });
 
@@ -249,36 +249,6 @@ const AthleteProfile: React.FC = () => {
   return (
     <div className="space-y-6 pb-20 relative animate-fade-in">
       
-      {/* RADARES INICIAIS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
-              <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Médias Fundamentos Técnicos (1-5)</h3>
-              {radarAveragesData?.tech ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.tech}>
-                        <PolarGrid stroke="#f3f4f6" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
-                        <Radar name="Nota" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.4} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase italic">Sem dados técnicos</div>}
-          </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
-              <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Activity size={16}/> Médias Condição Física (1-5)</h3>
-              {radarAveragesData?.phys ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.phys}>
-                        <PolarGrid stroke="#f3f4f6" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
-                        <Radar name="Nota" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.4} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase italic">Sem dados físicos</div>}
-          </div>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-8">
               <div className="relative group">
@@ -341,38 +311,97 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'realtime' && (
           <div className="space-y-6 animate-fade-in">
-              {/* BLOCO DESEMPENHO POR FASE - ÚNICO NA LINHA */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[400px] w-full">
-                  <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Desempenho Tático por Fase</h3>
-                  {globalStats ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={globalStats.radarData}>
-                              <PolarGrid stroke="#e5e7eb" />
-                              <PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 9, fontWeight: 800 }} />
-                              <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
-                              <Radar name="Score" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
-                          </RadarChart>
-                      </ResponsiveContainer>
-                  ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase bg-gray-50 rounded-xl italic">Sem registros táticos</div>}
+              {/* BLOCO DE RADARES UNIFICADO (TÁTICO, TÉCNICO, FÍSICO) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Radar Tático */}
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
+                      <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Desempenho Tático por Fase</h3>
+                      {globalStats ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                              <RadarChart cx="50%" cy="50%" outerRadius="75%" data={globalStats.radarData}>
+                                  <PolarGrid stroke="#e5e7eb" />
+                                  <PolarAngleAxis dataKey="phase" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 800 }} />
+                                  <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
+                                  <Radar name="Score" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
+                              </RadarChart>
+                          </ResponsiveContainer>
+                      ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase italic">Sem dados táticos</div>}
+                  </div>
+
+                  {/* Radar Técnico */}
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
+                      <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Target size={16}/> Médias Fundamentos (1-5)</h3>
+                      {radarAveragesData?.tech ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.tech}>
+                                <PolarGrid stroke="#f3f4f6" />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} />
+                                <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                                <Radar name="Nota" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.4} />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                      ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase italic">Sem dados técnicos</div>}
+                  </div>
+
+                  {/* Radar Físico */}
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm h-[320px]">
+                      <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Activity size={16}/> Médias Condição Física (1-5)</h3>
+                      {radarAveragesData?.phys ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarAveragesData.phys}>
+                                <PolarGrid stroke="#f3f4f6" />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8, fontWeight: 700 }} />
+                                <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                                <Radar name="Nota" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.4} />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                      ) : <div className="h-full flex items-center justify-center text-gray-300 text-[10px] font-bold uppercase italic">Sem dados físicos</div>}
+                  </div>
               </div>
 
-              {/* FILTROS INTEGRADOS */}
+              {/* FILTROS INTEGRADOS - TRANSFORMADOS EM BOTÕES */}
               <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-xl">
                   <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-4"><Filter size={14}/> Filtros de Visualização (Mapa e Impacto)</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
-                          <option value="all">Todas as Fases</option>
-                          <option value="OFENSIVA">Org. Ofensiva</option>
-                          <option value="DEFENSIVA">Org. Defensiva</option>
-                          <option value="TRANSICAO_OF">Trans. Ofensiva</option>
-                          <option value="TRANSICAO_DEF">Trans. Defensiva</option>
-                      </select>
-                      <select value={filterResult} onChange={(e) => setFilterResult(e.target.value)} className="w-full bg-indigo-800 border-none rounded-xl p-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-400">
-                          <option value="all">Todos os Resultados (Mapa)</option>
-                          <option value="POSITIVA">Sucesso (Acerto)</option>
-                          <option value="NEUTRA">Neutro</option>
-                          <option value="NEGATIVA">Erro</option>
-                      </select>
+                  <div className="space-y-4">
+                      <div>
+                          <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-2">Fase do Jogo</p>
+                          <div className="flex flex-wrap gap-2">
+                              {[
+                                { id: 'all', label: 'Todas as Fases' },
+                                { id: 'OFENSIVA', label: 'Org. Ofensiva' },
+                                { id: 'DEFENSIVA', label: 'Org. Defensiva' },
+                                { id: 'TRANSICAO_OF', label: 'Trans. Ofensiva' },
+                                { id: 'TRANSICAO_DEF', label: 'Trans. Defensiva' }
+                              ].map(p => (
+                                <button 
+                                  key={p.id} 
+                                  onClick={() => setFilterPhase(p.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${filterPhase === p.id ? 'bg-indigo-500 text-white border-indigo-400 shadow-md' : 'bg-indigo-800 text-indigo-300 border-indigo-700 hover:bg-indigo-700'}`}
+                                >
+                                  {p.label}
+                                </button>
+                              ))}
+                          </div>
+                      </div>
+                      <div>
+                          <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-2">Resultado da Ação (Mapa)</p>
+                          <div className="flex flex-wrap gap-2">
+                              {[
+                                { id: 'all', label: 'Todos' },
+                                { id: 'POSITIVA', label: 'Sucesso' },
+                                { id: 'NEUTRA', label: 'Neutro' },
+                                { id: 'NEGATIVA', label: 'Erro' }
+                              ].map(r => (
+                                <button 
+                                  key={r.id} 
+                                  onClick={() => setFilterResult(r.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${filterResult === r.id ? 'bg-indigo-500 text-white border-indigo-400 shadow-md' : 'bg-indigo-800 text-indigo-300 border-indigo-700 hover:bg-indigo-700'}`}
+                                >
+                                  {r.label}
+                                </button>
+                              ))}
+                          </div>
+                      </div>
                   </div>
               </div>
 
@@ -412,7 +441,7 @@ const AthleteProfile: React.FC = () => {
                 </div>
               </div>
 
-              {/* BLOCO NOVO: DETALHAMENTO DAS FASES (GRÁFICO DE RESUMO) */}
+              {/* BLOCO: DETALHAMENTO DAS FASES (GRÁFICO DE RESUMO) */}
               <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm w-full h-[400px]">
                   <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Activity size={16} className="text-indigo-500"/> Detalhamento das Fases (Resumo de Impacto)</h3>
                   {globalStats ? (

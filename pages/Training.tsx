@@ -1,12 +1,12 @@
 
 // Fix: Added explicit typing to the reduce call to resolve arithmetic operation errors on unknown types.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   getAthletes, getCategories, saveTrainingEntry, saveTrainingSession, getTrainingSessions
 } from '../services/storageService';
 import { Athlete, Category, TrainingEntry, TrainingSession, Position, User, canEditData } from '../types';
-import { Save, Users, ClipboardList, Loader2, Search, Target, AlertOctagon } from 'lucide-react';
+import { Save, Users, ClipboardList, Loader2, Search, Target, AlertOctagon, Activity, CheckCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 const TECH_CONFIG = [
@@ -16,6 +16,14 @@ const TECH_CONFIG = [
     { fundamento: 'Finalização', subs: ['Bola rolando', 'Primeira finalização'] },
     { fundamento: '1x1 Ofensivo', subs: ['Drible curto', 'Mudança de direção'] },
     { fundamento: '1x1 Defensivo', subs: ['Desarme', 'Postura corporal'] }
+];
+
+const PHYS_CONFIG = [
+    { label: 'Força', key: 'forca' },
+    { label: 'Agilidade', key: 'agilidade' },
+    { label: 'Velocidade', key: 'velocidade' },
+    { label: 'Resistência', key: 'resistencia' },
+    { label: 'Coordenação', key: 'coordenacao' }
 ];
 
 interface TrainingProps {
@@ -39,6 +47,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const [techScores, setTechScores] = useState<Record<string, number>>({});
+  const [physScores, setPhysScores] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -77,52 +86,68 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   const handleSelectAthlete = (athlete: Athlete) => {
     setSelectedAthlete(athlete);
     setTechScores({});
+    setPhysScores({});
     setNotes('');
   };
+
+  const avgTechScore = useMemo(() => {
+      const vals = Object.values(techScores) as number[];
+      if (vals.length === 0) return 0;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }, [techScores]);
 
   const handleSaveEntry = async () => {
     if (!selectedAthlete || !selectedCategory || !date) return;
     let sessionIdToUse = currentSessionId;
     if (!sessionIdToUse) {
         sessionIdToUse = uuidv4();
-        await saveTrainingSession({ id: sessionIdToUse, date, categoryId: selectedCategory, teamId, description: 'Atuação de Treino' });
+        await saveTrainingSession({ id: sessionIdToUse, date, categoryId: selectedCategory, teamId, description: 'Avaliação Estruturada de Atuação' });
         setCurrentSessionId(sessionIdToUse);
     }
 
-    // Fix: Explicitly cast values to number array and type the reduce parameters to avoid arithmetic operation errors on unknown types
-    const avgScore = Object.values(techScores).length > 0 
-        ? (Object.values(techScores) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.values(techScores).length 
-        : 5;
+    const finalAvgTech = avgTechScore || 5;
 
     const entry: TrainingEntry = {
       id: uuidv4(), sessionId: sessionIdToUse, athleteId: selectedAthlete.id,
       technical: {
-        controle_bola: techScores['Domínio e Controle|Orientado'] || avgScore,
-        conducao: techScores['Condução|Progressão'] || avgScore,
-        passe: techScores['Passe|Curto'] || avgScore,
-        recepcao: techScores['Domínio e Controle|Sob pressão'] || avgScore,
-        drible: techScores['1x1 Ofensivo|Drible curto'] || avgScore,
-        finalizacao: techScores['Finalização|Bola rolando'] || avgScore,
-        cruzamento: avgScore,
-        desarme: techScores['1x1 Defensivo|Desarme'] || avgScore,
-        interceptacao: techScores['1x1 Defensivo|Postura corporal'] || avgScore
+        controle_bola: techScores['Domínio e Controle|Orientado'] || finalAvgTech,
+        conducao: techScores['Condução|Progressão'] || finalAvgTech,
+        passe: techScores['Passe|Curto'] || finalAvgTech,
+        recepcao: techScores['Domínio e Controle|Sob pressão'] || finalAvgTech,
+        drible: techScores['1x1 Ofensivo|Drible curto'] || finalAvgTech,
+        finalizacao: techScores['Finalização|Bola rolando'] || finalAvgTech,
+        cruzamento: finalAvgTech,
+        desarme: techScores['1x1 Defensivo|Desarme'] || finalAvgTech,
+        interceptacao: techScores['1x1 Defensivo|Postura corporal'] || finalAvgTech
       },
-      physical: { velocidade: 5, agilidade: 5, resistencia: 5, forca: 5, coordenacao: 5, mobilidade: 5, estabilidade: 5 },
+      physical: { 
+        velocidade: physScores['velocidade'] || 5, 
+        agilidade: physScores['agilidade'] || 5, 
+        resistencia: physScores['resistencia'] || 5, 
+        forca: physScores['forca'] || 5, 
+        coordenacao: physScores['coordenacao'] || 5, 
+        mobilidade: 5, 
+        estabilidade: 5 
+      },
       tactical: {
-        def_posicionamento: avgScore, def_pressao: avgScore, def_cobertura: avgScore, def_fechamento: avgScore, def_temporizacao: avgScore, def_desarme_tatico: avgScore, def_reacao: avgScore,
-        const_qualidade_passe: techScores['Passe|Médio'] || avgScore, const_visao: avgScore, const_apoios: avgScore, const_mobilidade: avgScore, const_circulacao: avgScore, const_quebra_linhas: avgScore, const_tomada_decisao: avgScore,
-        ult_movimentacao: avgScore, ult_ataque_espaco: avgScore, ult_1v1: techScores['1x1 Ofensivo|Mudança de direção'] || avgScore, ult_ultimo_passe: avgScore, ult_finalizacao_eficiente: techScores['Finalização|Primeira finalização'] || avgScore, ult_ritmo: avgScore, ult_bolas_paradas: avgScore
+        def_posicionamento: finalAvgTech, def_pressao: finalAvgTech, def_cobertura: finalAvgTech, def_fechamento: finalAvgTech, def_temporizacao: finalAvgTech, def_desarme_tatico: finalAvgTech, def_reacao: finalAvgTech,
+        const_qualidade_passe: techScores['Passe|Médio'] || finalAvgTech, const_visao: finalAvgTech, const_apoios: finalAvgTech, const_mobilidade: finalAvgTech, const_circulacao: finalAvgTech, const_quebra_linhas: finalAvgTech, const_tomada_decisao: finalAvgTech,
+        ult_movimentacao: finalAvgTech, ult_ataque_espaco: finalAvgTech, ult_1v1: techScores['1x1 Ofensivo|Mudança de direção'] || finalAvgTech, ult_ultimo_passe: finalAvgTech, ult_finalizacao_eficiente: techScores['Finalização|Primeira finalização'] || finalAvgTech, ult_ritmo: finalAvgTech, ult_bolas_paradas: finalAvgTech
       },
       heatmapPoints: [], 
-      notes: `[Treino] ${notes}`
+      notes: `[Avaliação Estruturada] ${notes}`
     };
     await saveTrainingEntry(entry);
-    setNotification(`Atuação de ${selectedAthlete.name} salva!`);
+    setNotification(`Avaliação de ${selectedAthlete.name} salva!`);
     setTimeout(() => { setNotification(null); setSelectedAthlete(null); }, 1500);
   };
 
   const handleScoreClick = (fund: string, sub: string, score: number) => {
       setTechScores(prev => ({ ...prev, [`${fund}|${sub}`]: score }));
+  };
+
+  const handlePhysScoreClick = (key: string, score: number) => {
+      setPhysScores(prev => ({ ...prev, [key]: score }));
   };
 
   if (currentUser && !canEditData(currentUser.role)) return <div className="p-20 text-center"><AlertOctagon className="mx-auto text-red-500" size={48}/><h2 className="text-xl font-black mt-4">Acesso Restrito</h2></div>;
@@ -159,44 +184,73 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
       {selectedAthlete && (
           <div className="space-y-6 animate-fade-in">
               <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl">
-                  <div className="flex items-center justify-between mb-8 border-b pb-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b pb-6 gap-4">
                       <div className="flex items-center gap-4">
-                          {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-14 h-14 rounded-full object-cover border-2 border-blue-50" />}
+                          {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-blue-50 shadow-sm" />}
                           <div>
                               <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliar Atuação: {selectedAthlete.name}</h3>
-                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Critérios de Fundamentos Técnicos (1-5)</p>
+                              <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Snapshot de Treino Controlado</span>
+                                  <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border border-emerald-100 flex items-center gap-1"><Target size={12}/> Média Técnica: {avgTechScore.toFixed(1)}</span>
+                              </div>
                           </div>
                       </div>
-                      {notification && <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse">{notification}</div>}
+                      {notification && <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse shadow-sm border border-emerald-200">{notification}</div>}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {TECH_CONFIG.map((group, idx) => (
-                          <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100">
-                               <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                   <Target size={14} className="text-blue-400"/> {group.fundamento}
-                               </h4>
-                               <div className="space-y-4">
-                                   {group.subs.map(sub => (
-                                       <div key={sub} className="space-y-2">
-                                           <div className="flex justify-between items-center">
-                                                <span className="text-[10px] font-bold text-gray-600 uppercase">{sub}</span>
-                                                <span className="text-[9px] font-black text-blue-600">{techScores[`${group.fundamento}|${sub}`] || '-'}</span>
-                                           </div>
-                                           <div className="grid grid-cols-5 gap-1">
-                                               {[1, 2, 3, 4, 5].map(v => (
-                                                   <button key={v} onClick={() => handleScoreClick(group.fundamento, sub, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${techScores[`${group.fundamento}|${sub}`] === v ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-300 border-gray-100'}`}>{v}</button>
-                                               ))}
-                                           </div>
-                                       </div>
-                                   ))}
-                               </div>
-                          </div>
-                      ))}
+                  <div className="mb-10">
+                      <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-blue-600 pl-3">
+                          <Target size={18} className="text-blue-600"/> Fundamentos Técnicos (1-5)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {TECH_CONFIG.map((group, idx) => (
+                              <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100 hover:border-blue-100 transition-colors">
+                                  <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                      <Target size={14} className="text-blue-400"/> {group.fundamento}
+                                  </h4>
+                                  <div className="space-y-4">
+                                      {group.subs.map(sub => (
+                                          <div key={sub} className="space-y-2">
+                                              <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">{sub}</span>
+                                                    <span className="text-[9px] font-black text-blue-600 bg-white px-1.5 rounded border border-gray-100 shadow-sm">{techScores[`${group.fundamento}|${sub}`] || '-'}</span>
+                                              </div>
+                                              <div className="grid grid-cols-5 gap-1">
+                                                  {[1, 2, 3, 4, 5].map(v => (
+                                                      <button key={v} onClick={() => handleScoreClick(group.fundamento, sub, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${techScores[`${group.fundamento}|${sub}`] === v ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-95' : 'bg-white text-gray-300 border-gray-100 hover:border-blue-200'}`}>{v}</button>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
                   </div>
 
-                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Observações do Treino</label><textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-20 outline-none" placeholder="Feedback qualitativo sobre a sessão..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
-                  <div className="mt-8 flex justify-end"><button onClick={handleSaveEntry} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 uppercase tracking-widest text-[10px] active:scale-95 transition-all"><Save size={18}/> Salvar Atuação</button></div>
+                  <div className="mb-10">
+                      <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-emerald-500 pl-3">
+                          <Activity size={18} className="text-emerald-500"/> Condição Física (1-5)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                          {PHYS_CONFIG.map((group, idx) => (
+                              <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                                  <div className="flex justify-between items-center mb-4">
+                                      <span className="text-[11px] font-black text-emerald-900 uppercase tracking-widest">{group.label}</span>
+                                      <span className="text-[9px] font-black text-emerald-600 bg-white px-1.5 rounded border border-gray-100 shadow-sm">{physScores[group.key] || '-'}</span>
+                                  </div>
+                                  <div className="grid grid-cols-5 gap-1">
+                                      {[1, 2, 3, 4, 5].map(v => (
+                                          <button key={v} onClick={() => handlePhysScoreClick(group.key, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${physScores[group.key] === v ? 'bg-emerald-500 text-white border-emerald-600 shadow-md scale-95' : 'bg-white text-gray-300 border-gray-100 hover:border-emerald-200'}`}>{v}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Observações Qualitativas</label><textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-20 outline-none transition-all" placeholder="Feedback sobre comportamento, foco e aspectos específicos da sessão..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
+                  <div className="mt-8 flex justify-end"><button onClick={handleSaveEntry} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 uppercase tracking-widest text-[10px] active:scale-95 transition-all border-b-4 border-indigo-900"><CheckCircle size={18}/> Salvar Avaliação Estruturada</button></div>
               </div>
           </div>
       )}
