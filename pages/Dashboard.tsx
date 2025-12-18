@@ -50,38 +50,29 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
     return athletes.map(athlete => {
         const myEvals = evalSessions.filter(ev => ev.athleteId === athlete.id);
         const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
+        const avgPhys = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreFisico, 0) / myEvals.length : 0;
         
-        const myEntries = entries.filter(e => e.athleteId === athlete.id);
-        let rawImpactSum = 0;
-        let scoutCount = 0;
-        let eventTotal = 0;
-        
-        myEntries.forEach(entry => {
-            try {
-                const notes = JSON.parse(entry.notes || '{}');
-                if (notes.avgScore !== undefined) {
-                    rawImpactSum += notes.avgScore;
-                    scoutCount++;
-                    if (notes.events) eventTotal += notes.events.length;
-                }
-            } catch(e) {}
-        });
+        // NOVO ALGORITMO SMC (SCORE MÉDIO DE CAPACIDADE)
+        const mt_norm = (avgTech / 5.0) * 10;
+        const cf_norm = avgPhys / 10;
+        const smc = (mt_norm * 0.55) + (cf_norm * 0.45);
 
-        const avgRawImpact = scoutCount > 0 ? rawImpactSum / scoutCount : 0;
-        // Normalização Motor Analítico: -1.5/+1.5 -> 0/10
-        const globalScore = Math.max(0, Math.min(10, 5 + (avgRawImpact * 3.33)));
-
-        return { ...athlete, avgTech, globalScore, eventCount: eventTotal };
+        return { 
+            ...athlete, 
+            avgTech, 
+            avgPhys,
+            globalScore: smc, // Agora o Score Global é o SMC
+            eventCount: myEvals.length 
+        };
     }).sort((a, b) => b.globalScore - a.globalScore);
-  }, [athletes, evalSessions, entries]);
+  }, [athletes, evalSessions]);
 
-  const getSemanticReading = (score: number, eventCount: number) => {
-      if (eventCount < 5) return "Leitura inicial — mais dados aumentam a precisão";
-      if (score >= 8.0) return "Alto impacto e boa consistência nas decisões";
-      if (score >= 6.5) return "Bom nível de impacto nas ações de jogo";
-      if (score >= 5.0) return "Desempenho funcional dentro da proposta";
-      if (score >= 3.0) return "Abaixo do nível desejado para o contexto atual";
-      return "Participação ainda em construção";
+  const getSMCReading = (val: number) => {
+      if (val <= 3.0) return "Capacidade insuficiente no momento";
+      if (val <= 5.0) return "Capacidade em desenvolvimento";
+      if (val <= 6.5) return "Funcional para composição";
+      if (val <= 8.0) return "Boa prontidão competitiva";
+      return "Alta prontidão para jogos";
   };
 
   const rankedByScore = useMemo(() => {
@@ -98,13 +89,13 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       return { tech: sumTech / list.length, score: sumScore / list.length };
   }, [athletesWithMeta, selectedCategory]);
 
-  // Fix: Added missing bestXI useMemo hook to resolve "Cannot find name 'bestXI'" error
   const bestXI = useMemo(() => {
     const selectedIds = new Set<string>();
     const getTopForSlot = (positions: Position[]) => {
+        // Agora o SMC é o critério principal para formação do time ideal
         const pool = athletesWithMeta
             .filter(a => positions.includes(a.position) && !selectedIds.has(a.id) && (selectedCategory === 'all' || a.categoryId === selectedCategory))
-            .sort((a, b) => b.avgTech - a.avgTech);
+            .sort((a, b) => b.globalScore - a.globalScore);
         if (pool.length > 0) {
             selectedIds.add(pool[0].id);
             return pool[0];
@@ -135,17 +126,17 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Filtro de Grupo</label><select className="bg-gray-50 dark:bg-darkInput dark:text-gray-300 dark:border-darkBorder border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)}><option value="all">Todas Categorias</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Período de Análise</label><select className="bg-gray-50 dark:bg-darkInput dark:text-gray-300 dark:border-darkBorder border border-gray-200 text-gray-700 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none min-w-[160px]" value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)}><option value="all">Todo o Histórico</option><option value="week">Últimos 7 dias</option><option value="month">Últimos 30 dias</option><option value="year">Este Ano</option></select></div>
           <div className="flex-1"></div>
-          {currentUser && canEditData(currentUser.role) && <Link to="/training" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"><ClipboardList size={16}/> Nova Atuação</Link>}
+          {currentUser && canEditData(currentUser.role) && <Link to="/training" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"><ClipboardList size={16}/> Nova Avaliação</Link>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> Score Global do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado no Motor Analítico Ativo</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado no Algoritmo SMC_v1</span></div>
           </div>
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
-              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Baseado em Snapshots Estruturados</span></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Capacidade Técnica Estruturada</span></div>
           </div>
       </div>
 
@@ -161,9 +152,9 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                  </div>
                  
                  <div className="bg-gray-50 dark:bg-darkInput/50 rounded-2xl p-4 text-center border border-gray-100 dark:border-darkBorder">
-                     <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1 block">Score do Atleta</span>
+                     <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1 block">Score SMC</span>
                      <span className="text-4xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{athlete.globalScore.toFixed(1)}</span>
-                     <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-2 leading-tight uppercase tracking-widest">{getSemanticReading(athlete.globalScore, athlete.eventCount)}</p>
+                     <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-2 leading-tight uppercase tracking-widest">{getSMCReading(athlete.globalScore)}</p>
                  </div>
 
                  <div className="mt-6 flex justify-end">
@@ -174,7 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
       </div>
 
       <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden">
-         <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Técnica do Momento (4-3-3)</h3>
+         <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-6 flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Prontidão SMC (4-3-3)</h3>
          <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
              <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
              <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
@@ -186,7 +177,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                       <Link to={`/athletes/${pos.player.id}`} className="flex flex-col items-center group">
                           <div className="relative">
                             {pos.player.photoUrl ? <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white" /> : <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">{pos.player.name.charAt(0)}</div>}
-                            <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">{pos.player.avgTech.toFixed(1)}</div>
+                            <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">{pos.player.globalScore.toFixed(1)}</div>
                           </div>
                           <div className="mt-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] font-black uppercase tracking-tighter">{pos.player.name.split(' ')[0]}</div>
                       </Link>

@@ -36,7 +36,7 @@ const AthleteProfile: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
 
-  // Aba inicial: Avaliações
+  // Aba inicial: Snapshots (Avaliações)
   const [activeTab, setActiveTab] = useState<'snapshots' | 'realtime'>('snapshots');
   
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -75,7 +75,6 @@ const AthleteProfile: React.FC = () => {
              setEvalSessions(allEvals);
              setAllTeams(teamsData);
 
-             // Busca detalhes de todas as avaliações para as médias da aba snapshots
              const techPromises = allEvals.map(s => getTechnicalEvaluations(s.id));
              const physPromises = allEvals.map(s => getPhysicalEvaluations(s.id));
              const techResults = await Promise.all(techPromises);
@@ -130,7 +129,7 @@ const AthleteProfile: React.FC = () => {
       };
   }, [allEvents, filterDate]);
 
-  // --- LOGICA DE AVALIAÇÕES AGREGADAS (Snapshot Tab) ---
+  // --- LOGICA SMC (SCORE MÉDIO DE CAPACIDADE) ---
   const avgStructuredTech = useMemo(() => {
     if (evalSessions.length === 0) return 0;
     return evalSessions.reduce((acc, curr) => acc + curr.scoreTecnico, 0) / evalSessions.length;
@@ -140,6 +139,43 @@ const AthleteProfile: React.FC = () => {
     if (evalSessions.length === 0) return 0;
     return evalSessions.reduce((acc, curr) => acc + curr.scoreFisico, 0) / evalSessions.length;
   }, [evalSessions]);
+
+  const smcCalculated = useMemo(() => {
+      // Normalização
+      const mt_norm = (avgStructuredTech / 5.0) * 10;
+      const cf_norm = avgStructuredPhys / 10;
+      
+      // Pesos
+      const p_tec = 0.55;
+      const p_fis = 0.45;
+      
+      // Validações
+      const isTechValid = evalSessions.length >= 2;
+      const lastPhysEval = [...evalSessions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      let isPhysValid = false;
+      if (lastPhysEval) {
+          const diffDays = (new Date().getTime() - new Date(lastPhysEval.date).getTime()) / (1000 * 3600 * 24);
+          isPhysValid = diffDays <= 30;
+      }
+
+      const smc = (mt_norm * p_tec) + (cf_norm * p_fis);
+
+      return {
+          value: smc,
+          isTechValid,
+          isPhysValid,
+          mt_norm,
+          cf_norm
+      };
+  }, [avgStructuredTech, avgStructuredPhys, evalSessions]);
+
+  const getSMCReading = (val: number) => {
+      if (val <= 3.0) return "Capacidade insuficiente no momento";
+      if (val <= 5.0) return "Capacidade em desenvolvimento";
+      if (val <= 6.5) return "Funcional para composição";
+      if (val <= 8.0) return "Boa prontidão competitiva";
+      return "Alta prontidão para jogos";
+  };
 
   const radarAggregatedTech = useMemo(() => {
     const groups = ['Passe', 'Domínio e Controle', 'Condução', 'Finalização', '1x1 Ofensivo', '1x1 Defensivo'];
@@ -166,31 +202,6 @@ const AthleteProfile: React.FC = () => {
         phys: s.scoreFisico / 20 
     }));
   }, [evalSessions]);
-
-  // Score Global 0-10 para o bloco EXECUTIVE
-  const globalScore = useMemo(() => {
-      const raw = layer1Stats?.avgGlobal || 0;
-      return Math.max(0, Math.min(10, 5 + (raw * 3.33)));
-  }, [layer1Stats]);
-
-  const getSemanticReading = (score: number, eventCount: number) => {
-      if (eventCount < 5) return "Leitura inicial — mais dados aumentam a precisão";
-      if (score >= 8.0) return "Alto impacto e boa consistência nas decisões";
-      if (score >= 6.5) return "Bom nível de impacto nas ações de jogo";
-      if (score >= 5.0) return "Desempenho funcional dentro da proposta";
-      if (score >= 3.0) return "Abaixo do nível desejado para o contexto atual";
-      return "Participação ainda em construção";
-  };
-
-  const activityDates = useMemo(() => {
-      const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
-      sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
-      evalSessions.forEach(s => {
-          const current = map.get(s.date);
-          map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
-      });
-      return map;
-  }, [sessions, entries, evalSessions]);
 
   const dominantChartData = useMemo(() => {
       if (filteredEvents.length === 0) return [];
@@ -245,6 +256,20 @@ const AthleteProfile: React.FC = () => {
       return pts.map(e => e.location);
   }, [filteredEvents, mapToggle]);
 
+  const handleTransferOut = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferTargetId || !athlete) return;
+    setTransferLoading(true);
+    try {
+        const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
+        if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
+        await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
+        setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
+        setTransferTargetId(''); setRefreshKey(prev => prev + 1);
+    } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
+    finally { setTransferLoading(false); }
+  };
+
   const handleDeleteAthlete = async () => {
       if (!athlete) return;
       setLoading(true);
@@ -260,23 +285,28 @@ const AthleteProfile: React.FC = () => {
     if (!selectedEvalId) return;
     setLoading(true);
     try {
-        // Exclusão recursiva de todos os dados da seção de avaliação
         await supabase.from('technical_evaluations').delete().eq('session_id', selectedEvalId);
         await supabase.from('physical_evaluations').delete().eq('session_id', selectedEvalId);
         const { error } = await supabase.from('evaluations_sessions').delete().eq('id', selectedEvalId);
         if (error) throw error;
-
-        setModalType('success');
-        setModalMessage('Sessão de avaliação excluída com sucesso.');
+        setModalType('success'); setModalMessage('Sessão de avaliação excluída com sucesso.');
         setRefreshKey(prev => prev + 1);
     } catch (err: any) {
-        setModalType('error');
-        setModalMessage('Erro ao excluir avaliação: ' + err.message);
+        setModalType('error'); setModalMessage('Erro ao excluir avaliação: ' + err.message);
     } finally {
-        setLoading(false);
-        setSelectedEvalId(null);
+        setLoading(false); setSelectedEvalId(null);
     }
   };
+
+  const activityDates = useMemo(() => {
+    const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
+    sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
+    evalSessions.forEach(s => {
+        const current = map.get(s.date);
+        map.set(s.date, current === 'realtime' ? 'both' : 'snapshot');
+    });
+    return map;
+  }, [sessions, entries, evalSessions]);
 
   const renderCalendar = () => {
     const month = calendarMonth.getMonth();
@@ -313,7 +343,7 @@ const AthleteProfile: React.FC = () => {
                 </div>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center mb-1">
-                {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-[8px] font-bold text-gray-300 dark:text-gray-600">{d}</div>)}
+                {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-[8px] font-bold text-gray-300 dark:text-gray-600 uppercase">{d}</div>)}
                 {days}
             </div>
         </div>
@@ -326,7 +356,7 @@ const AthleteProfile: React.FC = () => {
   return (
     <div className="space-y-6 pb-20 relative animate-fade-in transition-colors duration-300">
       
-      {/* HEADER INTEGRADO COM SCORE EXECUTIVE */}
+      {/* HEADER INTEGRADO COM SCORE SMC */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white dark:bg-darkCard rounded-[32px] shadow-sm border border-gray-100 dark:border-darkBorder p-8 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="flex flex-col md:flex-row items-center gap-8 flex-1">
@@ -348,17 +378,34 @@ const AthleteProfile: React.FC = () => {
                     </div>
                     <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
                         <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
-                        <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Target size={16} /> Iniciar Avaliação</button>
+                        <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><ClipboardCheck size={16} /> Iniciar Avaliação</button>
                     </div>
                   </div>
               </div>
 
-              {/* Bloco Score EXECUTIVE */}
+              {/* Bloco SMC (Score Médio de Capacidade) */}
               <div className="w-full md:w-64 bg-gray-50 dark:bg-darkInput/50 p-6 rounded-3xl border border-gray-100 dark:border-darkBorder flex flex-col items-center text-center shrink-0 shadow-inner">
-                  <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Score do Atleta</span>
-                  <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{globalScore.toFixed(1)}</span>
-                  <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSemanticReading(globalScore, allEvents.length)}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Score SMC</span>
+                      <div className="group relative cursor-help">
+                          <Info size={12} className="text-gray-300 dark:text-gray-700" />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[8px] font-bold uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl border border-gray-700">
+                              SMC: (Média Téc Norm. * 0.55) + (Cond. Fís Norm. * 0.45). Score justo baseado em treinos.
+                          </div>
+                      </div>
+                  </div>
+                  <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{smcCalculated.value.toFixed(1)}</span>
+                  <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSMCReading(smcCalculated.value)}</p>
                   
+                  {(!smcCalculated.isTechValid || !smcCalculated.isPhysValid) && (
+                      <div className="mt-2 flex items-center gap-1 bg-amber-50 dark:bg-amber-900/10 px-2 py-1 rounded-full border border-amber-100 dark:border-amber-900/30">
+                          <AlertCircle size={10} className="text-amber-600 dark:text-amber-400" />
+                          <span className="text-[7px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                              {!smcCalculated.isTechValid ? 'Dados Téc. Insuficientes' : 'Aval. Fís. Desatualizada'}
+                          </span>
+                      </div>
+                  )}
+
                   <div className="mt-4 pt-4 border-t dark:border-darkBorder w-full space-y-2">
                       <div className="flex justify-between items-center">
                           <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Impacto Tático</span>
@@ -372,10 +419,6 @@ const AthleteProfile: React.FC = () => {
                           <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Condição Física</span>
                           <span className="text-[9px] font-mono font-black text-blue-500">{avgStructuredPhys.toFixed(0)}%</span>
                       </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-center text-gray-300 dark:text-gray-700" title="Este score resume o impacto das ações do atleta no jogo.">
-                      <HelpCircle size={14} />
                   </div>
               </div>
           </div>
@@ -552,7 +595,6 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'snapshots' && (
           <div className="space-y-12 animate-fade-in">
-              {/* SEÇÃO ANALÍTICA AGREGADA (ESTILO EVAL-VIEW) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Radar Técnico Média */}
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col">
@@ -645,7 +687,7 @@ const AthleteProfile: React.FC = () => {
           </div>
       )}
 
-      {/* MODAIS (MANTIDOS E ATUALIZADOS) */}
+      {/* MODAIS */}
       {modalType === 'edit' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
@@ -718,8 +760,8 @@ const AthleteProfile: React.FC = () => {
       )}
 
       {modalType === 'confirm_delete' && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center animate-slide-up">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-slide-up">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center">
                   <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-400 shadow-inner"><AlertCircle size={40} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Excluir?</h2>
                   <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-8 font-bold uppercase tracking-widest leading-relaxed">Esta ação é irreversível.</p>
@@ -734,8 +776,8 @@ const AthleteProfile: React.FC = () => {
       )}
 
       {modalType === 'confirm_delete_eval' && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center animate-slide-up">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-slide-up">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-sm p-10 shadow-2xl text-center">
                   <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-400 shadow-inner"><AlertCircle size={40} /></div>
                   <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Apagar Dados?</h2>
                   <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-8 font-bold uppercase tracking-widest">{modalMessage}</p>
@@ -745,34 +787,6 @@ const AthleteProfile: React.FC = () => {
                       </button>
                       <button onClick={() => { setModalType('none'); setSelectedEvalId(null); }} className="w-full bg-gray-50 dark:bg-darkInput text-gray-400 dark:text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-100 transition-all uppercase tracking-widest text-[11px]">Cancelar</button>
                   </div>
-              </div>
-          </div>
-      )}
-
-      {modalType === 'transfer_athlete' && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
-                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><ArrowRightLeft size={36} /></div>
-                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Transferir</h2>
-                  <form onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!transferTargetId || !athlete) return;
-                      setTransferLoading(true);
-                      try {
-                          const targetTeam = allTeams.find(t => t.id === transferTargetId.trim());
-                          if (!targetTeam) { setModalType('error'); setModalMessage('ID do Clube receptor não localizado.'); return; }
-                          await saveAthlete({ ...athlete, pendingTransferTeamId: targetTeam.id });
-                          setModalType('success'); setModalMessage(`Solicitação enviada para ${targetTeam.name}!`);
-                          setTransferTargetId(''); setRefreshKey(prev => prev + 1);
-                      } catch (err) { setModalType('error'); setModalMessage('Erro ao processar.'); } 
-                      finally { setTransferLoading(false); }
-                  }} className="space-y-4">
-                      <input autoFocus type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="ID DO CLUBE" value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)} required />
-                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
-                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Solicitar Envio'}
-                      </button>
-                  </form>
-                  <button onClick={() => setModalType('edit')} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Voltar</button>
               </div>
           </div>
       )}
