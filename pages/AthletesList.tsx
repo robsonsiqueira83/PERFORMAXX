@@ -10,7 +10,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -43,31 +43,31 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: ''
   });
 
+  const loadData = async () => {
+      setLoading(true);
+      try {
+          const [a, c, ev] = await Promise.all([
+              getAthletes(),
+              getCategories(),
+              getEvaluationSessions()
+          ]);
+          setAllSystemAthletes(a);
+          // Atletas que pertencem a este time OU estão vindo para este time
+          setAthletes(a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId));
+          setCategories(c.filter(item => item.teamId === teamId));
+          setEvaluations(ev);
+      } catch (err) {
+          console.error(err);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('performax_current_user');
     if (storedUser) setCurrentUser(JSON.parse(storedUser));
-
-    const load = async () => {
-        setLoading(true);
-        try {
-            const [a, c, ev] = await Promise.all([
-                getAthletes(),
-                getCategories(),
-                getEvaluationSessions()
-            ]);
-            setAllSystemAthletes(a);
-            // Incluir atletas que já são do time OU que estão solicitando transferência para este time
-            setAthletes(a.filter(item => item.teamId === teamId || item.pendingTransferTeamId === teamId));
-            setCategories(c.filter(item => item.teamId === teamId));
-            setEvaluations(ev);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-    load();
-  }, [teamId, showModal, refreshKey]);
+    loadData();
+  }, [teamId, refreshKey]);
 
   const filtered = useMemo(() => {
       let list = athletes.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
@@ -113,10 +113,15 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const handleAcceptTransfer = async (athlete: Athlete) => {
       setLoading(true);
       try {
-          // Se o time destino não tiver categorias, o primeiro passo é garantir que uma seja selecionada ou criada
-          // Para simplificar aqui, movemos o atleta e limpamos a pendência.
-          await saveAthlete({ ...athlete, teamId: teamId, pendingTransferTeamId: undefined });
-          setFeedback({ type: 'success', message: `Atleta ${athlete.name} agora faz parte da sua equipe!` });
+          // IMPORTANTE: Limpar categoryId ao aceitar, pois a categoria antiga não existe no novo time.
+          // O gestor do novo time deverá editar o atleta e escolher uma de suas categorias.
+          await saveAthlete({ 
+              ...athlete, 
+              teamId: teamId, 
+              categoryId: '', 
+              pendingTransferTeamId: undefined 
+          });
+          setFeedback({ type: 'success', message: `Atleta ${athlete.name} agora faz parte da sua equipe! Lembre-se de definir a categoria dele.` });
           setRefreshKey(prev => prev + 1);
       } catch (err) {
           setFeedback({ type: 'error', message: 'Erro ao aceitar transferência.' });
@@ -211,12 +216,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                
                {/* Badges de Transferência */}
                {isIncoming && (
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
                        <ArrowRightLeft size={10}/> Solicitação de Vínculo
                    </div>
                )}
                {isOutgoing && (
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
                        <ArrowRightLeft size={10}/> Transferência em Saída
                    </div>
                )}
@@ -228,7 +233,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                </div>
 
                <Link to={isIncoming ? '#' : `/athletes/${athlete.id}`} className={`flex flex-col items-center w-full ${isIncoming ? 'cursor-default' : ''}`}>
-                   {athlete.photoUrl ? <img src={athlete.photoUrl} className={`w-24 h-24 rounded-full object-cover mb-4 border-4 shadow-sm ${isIncoming ? 'border-emerald-200 grayscale' : 'border-gray-50'}`} /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200 mb-4">{athlete.name.charAt(0)}</div>}
+                   <div className="relative mb-4">
+                        {athlete.photoUrl ? <img src={athlete.photoUrl} className={`w-24 h-24 rounded-full object-cover border-4 shadow-sm ${isIncoming ? 'border-emerald-200 grayscale' : isOutgoing ? 'border-amber-200 opacity-50' : 'border-gray-50'}`} /> : <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-3xl font-black text-gray-200">{athlete.name.charAt(0)}</div>}
+                        {isOutgoing && <div className="absolute inset-0 flex items-center justify-center"><Info className="text-amber-600" size={32} /></div>}
+                   </div>
+                   
                    <h3 className="font-black text-gray-800 text-center uppercase tracking-tighter truncate w-full">{athlete.name}</h3>
                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-2 uppercase tracking-widest">{athlete.position}</span>
                    
@@ -250,6 +259,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    <div className="mt-6 flex gap-2 w-full">
                        <button onClick={() => handleAcceptTransfer(athlete)} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition-all"><CheckCircle size={14}/> Aceitar</button>
                        <button onClick={() => handleDeclineTransfer(athlete)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 border border-red-100 hover:bg-red-100 transition-all"><XCircle size={14}/> Recusar</button>
+                   </div>
+               )}
+               
+               {isOutgoing && (
+                   <div className="mt-4 p-2 bg-amber-50 rounded-xl border border-amber-100 text-center w-full animate-pulse">
+                       <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">Aguardando novo clube...</span>
                    </div>
                )}
            </div>
