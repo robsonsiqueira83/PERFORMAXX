@@ -100,21 +100,21 @@ const PublicTeamDashboard: React.FC = () => {
     ];
   }, [athletesWithMeta, selectedCategory]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600"><Loader2 className="animate-spin" size={40} /></div>;
-  if (!team) return <div className="p-10 text-center text-gray-500 font-black uppercase tracking-widest">Equipe não localizada</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-darkBase text-blue-600"><Loader2 className="animate-spin" size={40} /></div>;
+  if (!team) return <div className="p-10 text-center text-gray-500 font-black uppercase tracking-widest dark:bg-darkBase">Equipe não localizada</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
+    <div className="min-h-screen bg-gray-50 dark:bg-darkBase pb-20 animate-fade-in transition-colors duration-300">
       <PublicHeader team={team} />
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 space-y-8">
         
         {/* Filtros Premium */}
-        <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 flex flex-wrap items-end gap-6">
+        <div className="bg-white dark:bg-darkCard p-6 rounded-[32px] shadow-sm border border-gray-100 dark:border-darkBorder flex flex-wrap items-end gap-6">
             <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Categoria de Visualização</label>
+                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">Categoria de Visualização</label>
                 <div className="relative">
-                    <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
+                    <select className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder text-gray-700 dark:text-gray-200 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
                         <option value="all">Todas as Categorias</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -122,9 +122,9 @@ const PublicTeamDashboard: React.FC = () => {
                 </div>
             </div>
             <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Posição Tática</label>
+                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">Posição Tática</label>
                 <div className="relative">
-                    <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedPosition} onChange={e => setSelectedPosition(e.target.value)}>
+                    <select className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder text-gray-700 dark:text-gray-200 rounded-2xl p-3.5 text-xs font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" value={selectedPosition} onChange={e => setSelectedPosition(e.target.value)}>
                         <option value="all">Todas as Posições</option>
                         {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
@@ -132,27 +132,27 @@ const PublicTeamDashboard: React.FC = () => {
                 </div>
             </div>
             <div className="hidden lg:flex flex-col items-end flex-1">
-                <span className="text-[10px] font-black text-gray-400 uppercase mb-2">Total de Atletas</span>
-                <span className="text-3xl font-black text-indigo-600 tracking-tighter">{displayAthletes.length}</span>
+                <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase mb-2">Total de Atletas</span>
+                <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{displayAthletes.length}</span>
             </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Lista de Ranking */}
-            <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-                <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-                    <h3 className="font-black text-gray-800 uppercase tracking-tighter text-xl flex items-center gap-3">
-                        <Users className="text-indigo-600"/> Ranking de Performance
+            <div className="bg-white dark:bg-darkCard rounded-[40px] shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden flex flex-col">
+                <div className="p-8 border-b border-gray-50 dark:border-darkBorder flex items-center justify-between bg-gray-50/30 dark:bg-darkInput/20">
+                    <h3 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter text-xl flex items-center gap-3">
+                        <Users className="text-indigo-600 dark:text-indigo-400"/> Ranking de Performance
                     </h3>
                 </div>
-                <div className="divide-y divide-gray-50 max-h-[800px] overflow-y-auto custom-scrollbar">
+                <div className="divide-y divide-gray-50 dark:divide-darkBorder max-h-[800px] overflow-y-auto custom-scrollbar">
                     {displayAthletes.map((athlete, index) => (
-                        <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center p-6 hover:bg-indigo-50/30 transition-all group">
+                        <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center p-6 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-all group">
                             <div className="flex-shrink-0 relative mr-6">
                                 {athlete.photoUrl ? (
-                                    <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-md group-hover:scale-105 transition-transform" />
+                                    <img src={athlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-4 border-white dark:border-darkBorder shadow-md group-hover:scale-105 transition-transform" />
                                 ) : (
-                                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center font-black text-gray-300 text-xl border-2 border-white shadow-sm">
+                                    <div className="w-16 h-16 bg-gray-100 dark:bg-darkInput rounded-full flex items-center justify-center font-black text-gray-300 dark:text-gray-700 text-xl border-2 border-white dark:border-darkBorder shadow-sm">
                                         {athlete.name.charAt(0)}
                                     </div>
                                 )}
@@ -161,22 +161,22 @@ const PublicTeamDashboard: React.FC = () => {
                                 </div>
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h4 className="font-black text-gray-800 uppercase tracking-tighter text-base truncate group-hover:text-indigo-600 transition-colors">{athlete.name}</h4>
+                                <h4 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter text-base truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{athlete.name}</h4>
                                 <div className="flex items-center gap-3 mt-2">
-                                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded uppercase tracking-widest">{athlete.position}</span>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{getCalculatedCategory(athlete.birthDate)}</span>
+                                    <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded uppercase tracking-widest">{athlete.position}</span>
+                                    <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">{getCalculatedCategory(athlete.birthDate)}</span>
                                 </div>
                             </div>
-                            <div className="text-right pl-6 border-l border-gray-50 ml-4">
-                                <span className="block text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Média Téc.</span>
-                                <span className="text-2xl font-black text-emerald-600 tracking-tighter">
+                            <div className="text-right pl-6 border-l border-gray-50 dark:border-darkBorder ml-4">
+                                <span className="block text-[8px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-widest mb-1">Média Téc.</span>
+                                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">
                                     {athlete.avgTech > 0 ? athlete.avgTech.toFixed(1) : '--'}
                                 </span>
                             </div>
                         </Link>
                     ))}
                     {displayAthletes.length === 0 && (
-                        <div className="p-20 text-center text-gray-300 font-bold uppercase tracking-widest italic text-xs">
+                        <div className="p-20 text-center text-gray-300 dark:text-gray-700 font-bold uppercase tracking-widest italic text-xs">
                             Nenhum atleta localizado nestes filtros.
                         </div>
                     )}
@@ -184,9 +184,9 @@ const PublicTeamDashboard: React.FC = () => {
             </div>
 
             {/* Seleção do Momento */}
-            <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 p-8 flex flex-col">
-                <h3 className="font-black text-gray-800 uppercase tracking-tighter text-xl flex items-center gap-3 mb-8">
-                    <Shirt className="text-emerald-600"/> Seleção Técnica (4-3-3)
+            <div className="bg-white dark:bg-darkCard rounded-[40px] shadow-sm border border-gray-100 dark:border-darkBorder p-8 flex flex-col">
+                <h3 className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter text-xl flex items-center gap-3 mb-8">
+                    <Shirt className="text-emerald-600 dark:text-emerald-400"/> Seleção Técnica (4-3-3)
                 </h3>
 
                 <div className="relative w-full aspect-[16/9] bg-green-600 rounded-[32px] overflow-hidden border-4 border-green-800 shadow-inner">
@@ -221,9 +221,9 @@ const PublicTeamDashboard: React.FC = () => {
                         </div>
                     ))}
                 </div>
-                <div className="mt-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3">
-                    <Trophy size={20} className="text-emerald-600" />
-                    <p className="text-[10px] text-emerald-800 font-black uppercase tracking-widest leading-relaxed">Os atletas acima foram escalados automaticamente com base na maior média técnica recente registrada pela comissão.</p>
+                <div className="mt-6 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800 flex items-center gap-3">
+                    <Trophy size={20} className="text-emerald-600 dark:text-emerald-400" />
+                    <p className="text-[10px] text-emerald-800 dark:text-emerald-300 font-black uppercase tracking-widest leading-relaxed">Os atletas acima foram escalados automaticamente com base na maior média técnica recente registrada pela comissão.</p>
                 </div>
             </div>
         </div>

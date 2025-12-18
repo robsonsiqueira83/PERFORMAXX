@@ -1,5 +1,4 @@
 
-// Fix: Added explicit typing to the reduce call to resolve arithmetic operation errors on unknown types.
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -153,71 +152,71 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
   if (currentUser && !canEditData(currentUser.role)) return <div className="p-20 text-center"><AlertOctagon className="mx-auto text-red-500" size={48}/><h2 className="text-xl font-black mt-4">Acesso Restrito</h2></div>;
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-20 transition-colors duration-300">
       <div className="flex items-center gap-2 mb-4">
-        <ClipboardList className="text-blue-600" size={28} />
-        <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Lançamento de Atuação</h2>
+        <ClipboardList className="text-blue-600 dark:text-blue-400" size={28} />
+        <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Lançamento de Atuação</h2>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Data</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Categoria</label><select value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Selecione...</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Posição</label><select value={selectedPosition} onChange={e=>setSelectedPosition(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Todas</option>{Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
-          <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Buscar Atleta</label><div className="relative"><Search className="absolute left-3 top-3.5 text-gray-400" size={14}/><input type="text" placeholder="Filtrar nome..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div></div>
+      <div className="bg-white dark:bg-darkCard p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-darkBorder grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div><label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Data</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} className="w-full bg-gray-50 dark:bg-darkInput dark:text-gray-200 border border-gray-200 dark:border-darkBorder rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+          <div><label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Categoria</label><select value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="w-full bg-gray-50 dark:bg-darkInput dark:text-gray-200 border border-gray-200 dark:border-darkBorder rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Selecione...</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Posição</label><select value={selectedPosition} onChange={e=>setSelectedPosition(e.target.value)} className="w-full bg-gray-50 dark:bg-darkInput dark:text-gray-200 border border-gray-200 dark:border-darkBorder rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Todas</option>{Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+          <div><label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Buscar Atleta</label><div className="relative"><Search className="absolute left-3 top-3.5 text-gray-400" size={14}/><input type="text" placeholder="Filtrar nome..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-darkInput dark:text-gray-200 border border-gray-200 dark:border-darkBorder rounded-xl pl-9 p-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div></div>
       </div>
 
       {selectedCategory && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Users size={14}/> Atletas da Categoria</h3>
+        <div className="bg-white dark:bg-darkCard p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-x-auto">
+            <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Users size={14}/> Atletas da Categoria</h3>
             <div className="flex gap-4 pb-2">
                 {athletes.map(a => (
-                    <button key={a.id} onClick={() => handleSelectAthlete(a)} className={`flex-shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${selectedAthlete?.id === a.id ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-105' : 'bg-gray-50 text-gray-700 border-gray-100 hover:bg-blue-50'}`}>
-                        {a.photoUrl ? <img src={a.photoUrl} className="w-12 h-12 rounded-full object-cover" /> : <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-xs">{a.name.charAt(0)}</div>}
+                    <button key={a.id} onClick={() => handleSelectAthlete(a)} className={`flex-shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${selectedAthlete?.id === a.id ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-105' : 'bg-gray-50 dark:bg-darkInput text-gray-700 dark:text-gray-300 border-gray-100 dark:border-darkBorder hover:bg-blue-50 dark:hover:bg-indigo-900/20'}`}>
+                        {a.photoUrl ? <img src={a.photoUrl} className="w-12 h-12 rounded-full object-cover" /> : <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-xs">{a.name.charAt(0)}</div>}
                         <span className="text-[10px] font-black uppercase tracking-tighter truncate max-w-[80px]">{a.name.split(' ')[0]}</span>
                     </button>
                 ))}
-                {athletes.length === 0 && <p className="text-gray-400 text-xs py-4">Nenhum atleta nesta filtragem.</p>}
+                {athletes.length === 0 && <p className="text-gray-400 dark:text-gray-600 text-xs py-4 italic uppercase font-bold tracking-widest">Nenhum atleta nesta filtragem.</p>}
             </div>
         </div>
       )}
 
       {selectedAthlete && (
           <div className="space-y-6 animate-fade-in">
-              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b pb-6 gap-4">
+              <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-xl">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b dark:border-darkBorder pb-6 gap-4">
                       <div className="flex items-center gap-4">
-                          {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-blue-50 shadow-sm" />}
+                          {selectedAthlete.photoUrl && <img src={selectedAthlete.photoUrl} className="w-16 h-16 rounded-full object-cover border-2 border-blue-50 dark:border-darkBorder shadow-sm" />}
                           <div>
-                              <h3 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Avaliar Atuação: {selectedAthlete.name}</h3>
+                              <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Avaliar Atuação: {selectedAthlete.name}</h3>
                               <div className="flex items-center gap-3 mt-1">
-                                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Snapshot de Treino Controlado</span>
-                                  <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border border-emerald-100 flex items-center gap-1"><Target size={12}/> Média Técnica: {avgTechScore.toFixed(1)}</span>
+                                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">Snapshot de Treino Controlado</span>
+                                  <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border border-emerald-100 dark:border-emerald-800 flex items-center gap-1"><Target size={12}/> Média Técnica: {avgTechScore.toFixed(1)}</span>
                               </div>
                           </div>
                       </div>
-                      {notification && <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse shadow-sm border border-emerald-200">{notification}</div>}
+                      {notification && <div className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse shadow-sm border border-emerald-200 dark:border-emerald-800">{notification}</div>}
                   </div>
 
                   <div className="mb-10">
-                      <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-blue-600 pl-3">
+                      <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-blue-600 pl-3">
                           <Target size={18} className="text-blue-600"/> Fundamentos Técnicos (1-5)
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {TECH_CONFIG.map((group, idx) => (
-                              <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100 hover:border-blue-100 transition-colors">
-                                  <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                              <div key={idx} className="bg-gray-50/50 dark:bg-darkInput/50 p-5 rounded-2xl border border-gray-100 dark:border-darkBorder hover:border-blue-100 dark:hover:border-blue-900 transition-colors">
+                                  <h4 className="text-[11px] font-black text-blue-900 dark:text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                       <Target size={14} className="text-blue-400"/> {group.fundamento}
                                   </h4>
                                   <div className="space-y-4">
                                       {group.subs.map(sub => (
                                           <div key={sub} className="space-y-2">
                                               <div className="flex justify-between items-center">
-                                                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">{sub}</span>
-                                                    <span className="text-[9px] font-black text-blue-600 bg-white px-1.5 rounded border border-gray-100 shadow-sm">{techScores[`${group.fundamento}|${sub}`] || '-'}</span>
+                                                    <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-tighter">{sub}</span>
+                                                    <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 bg-white dark:bg-darkInput px-1.5 rounded border border-gray-100 dark:border-darkBorder shadow-sm">{techScores[`${group.fundamento}|${sub}`] || '-'}</span>
                                               </div>
                                               <div className="grid grid-cols-5 gap-1">
                                                   {[1, 2, 3, 4, 5].map(v => (
-                                                      <button key={v} onClick={() => handleScoreClick(group.fundamento, sub, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${techScores[`${group.fundamento}|${sub}`] === v ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-95' : 'bg-white text-gray-300 border-gray-100 hover:border-blue-200'}`}>{v}</button>
+                                                      <button key={v} onClick={() => handleScoreClick(group.fundamento, sub, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${techScores[`${group.fundamento}|${sub}`] === v ? 'bg-blue-600 text-white border-blue-700 shadow-md scale-95' : 'bg-white dark:bg-darkInput text-gray-300 dark:text-gray-600 border-gray-100 dark:border-darkBorder hover:border-blue-200'}`}>{v}</button>
                                                   ))}
                                               </div>
                                           </div>
@@ -229,19 +228,19 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                   </div>
 
                   <div className="mb-10">
-                      <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-emerald-500 pl-3">
+                      <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-emerald-500 pl-3">
                           <Activity size={18} className="text-emerald-500"/> Condição Física (1-5)
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                           {PHYS_CONFIG.map((group, idx) => (
-                              <div key={idx} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                              <div key={idx} className="bg-gray-50/50 dark:bg-darkInput/50 p-5 rounded-2xl border border-gray-100 dark:border-darkBorder hover:border-emerald-100 dark:hover:border-emerald-900 transition-colors">
                                   <div className="flex justify-between items-center mb-4">
-                                      <span className="text-[11px] font-black text-emerald-900 uppercase tracking-widest">{group.label}</span>
-                                      <span className="text-[9px] font-black text-emerald-600 bg-white px-1.5 rounded border border-gray-100 shadow-sm">{physScores[group.key] || '-'}</span>
+                                      <span className="text-[11px] font-black text-emerald-900 dark:text-emerald-400 uppercase tracking-widest">{group.label}</span>
+                                      <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-white dark:bg-darkInput px-1.5 rounded border border-gray-100 dark:border-darkBorder shadow-sm">{physScores[group.key] || '-'}</span>
                                   </div>
                                   <div className="grid grid-cols-5 gap-1">
                                       {[1, 2, 3, 4, 5].map(v => (
-                                          <button key={v} onClick={() => handlePhysScoreClick(group.key, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${physScores[group.key] === v ? 'bg-emerald-500 text-white border-emerald-600 shadow-md scale-95' : 'bg-white text-gray-300 border-gray-100 hover:border-emerald-200'}`}>{v}</button>
+                                          <button key={v} onClick={() => handlePhysScoreClick(group.key, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${physScores[group.key] === v ? 'bg-emerald-500 text-white border-emerald-600 shadow-md scale-95' : 'bg-white dark:bg-darkInput text-gray-300 dark:text-gray-600 border-gray-100 dark:border-darkBorder hover:border-emerald-200'}`}>{v}</button>
                                       ))}
                                   </div>
                               </div>
@@ -249,7 +248,7 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       </div>
                   </div>
 
-                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Observações Qualitativas</label><textarea className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-20 outline-none transition-all" placeholder="Feedback sobre comportamento, foco e aspectos específicos da sessão..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
+                  <div className="mt-8"><label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">Observações Qualitativas</label><textarea className="w-full bg-gray-50 dark:bg-darkInput dark:text-gray-200 border border-gray-200 dark:border-darkBorder rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 h-20 outline-none transition-all" placeholder="Feedback sobre comportamento, foco e aspectos específicos da sessão..." value={notes} onChange={e=>setNotes(e.target.value)}></textarea></div>
                   <div className="mt-8 flex justify-end"><button onClick={handleSaveEntry} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 uppercase tracking-widest text-[10px] active:scale-95 transition-all border-b-4 border-indigo-900"><CheckCircle size={18}/> Salvar Avaliação Estruturada</button></div>
               </div>
           </div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAthletes, saveTrainingEntry, saveTrainingSession, getTeams, getCategories } from '../services/storageService';
@@ -205,7 +206,7 @@ const RealTimeEvaluation: React.FC = () => {
 
       const sessionId = uuidv4();
       await saveTrainingSession({
-          id: sessionId, teamId: currentAthlete.teamId, categoryId: currentAthlete.categoryId,
+          id: sessionId, teamId: currentAthlete.teamId, categoryId: currentAthlete.categoryId!,
           date: new Date().toISOString().split('T')[0],
           description: `Scout Tático: ${logs.length} ações. Impacto: ${semanticImpact.replace('_', ' ')}`
       });
@@ -241,30 +242,30 @@ const RealTimeEvaluation: React.FC = () => {
       return { text: "Retomar", icon: <Play size={20} />, color: "bg-blue-600 hover:bg-blue-700" };
   }, [isRunning, timer, gamePeriod, isHalftime]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-darkBase transition-colors"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-40">
+    <div className="min-h-screen bg-gray-50 dark:bg-darkBase pb-40 transition-colors">
       {/* Header */}
-      <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex items-center justify-between sticky top-0 z-30">
+      <div className="bg-white dark:bg-darkCard p-4 shadow-sm border-b border-gray-100 dark:border-darkBorder flex items-center justify-between sticky top-0 z-30 transition-colors">
           <div className="flex items-center gap-3">
-              <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-500 hover:text-blue-600"><ArrowLeft size={24} /></button>
+              <button onClick={() => navigate(`/athletes/${id}`)} className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"><ArrowLeft size={24} /></button>
               {currentAthlete && (
                   <div className="flex items-center gap-3">
-                      {currentAthlete.photoUrl ? <img src={currentAthlete.photoUrl} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" alt="" /> : <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm">{currentAthlete.name.charAt(0)}</div>}
+                      {currentAthlete.photoUrl ? <img src={currentAthlete.photoUrl} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-darkBorder shadow-sm" alt="" /> : <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-darkInput flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-sm border dark:border-darkBorder">{currentAthlete.name.charAt(0)}</div>}
                       <div>
-                          <h1 className="font-bold text-gray-900 text-base leading-none truncate max-w-[150px]">{currentAthlete.name}</h1>
-                          <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{currentAthlete.position}</p>
+                          <h1 className="font-bold text-gray-900 dark:text-gray-100 text-base leading-none truncate max-w-[150px]">{currentAthlete.name}</h1>
+                          <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-widest">{currentAthlete.position}</p>
                       </div>
                   </div>
               )}
           </div>
           <div className="flex items-center gap-2">
-              <div className={`flex flex-col items-center px-4 py-1 rounded-xl border-2 transition-all ${isRunning ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+              <div className={`flex flex-col items-center px-4 py-1 rounded-xl border-2 transition-all ${isRunning ? 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' : 'bg-gray-100 dark:bg-darkInput text-gray-400 dark:text-gray-600 border-gray-200 dark:border-darkBorder'}`}>
                   <span className="text-[8px] font-black uppercase tracking-widest mb-0.5">{isHalftime ? 'Intervalo' : `${gamePeriod}º Tempo`}</span>
                   <span className="font-mono text-xl font-black leading-none">{formatTime(timer)}</span>
               </div>
-              <button onClick={handleMainButton} className={`flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm font-black shadow-md active:scale-95 uppercase ${btnState.color}`}>
+              <button onClick={handleMainButton} className={`flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm font-black shadow-md active:scale-95 uppercase ${btnState.color} transition-all`}>
                   {btnState.icon} <span className="hidden sm:inline">{btnState.text}</span>
               </button>
           </div>
@@ -279,8 +280,8 @@ const RealTimeEvaluation: React.FC = () => {
                   <div className="absolute right-4 top-1/2 w-16 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2 pointer-events-none"></div>
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/50 pointer-events-none"></div>
                   <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/50 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-                  <div className="absolute bottom-4 left-10 text-white/60 font-black text-xl md:text-3xl uppercase">{fieldFlipped ? 'ATAQUE' : 'DEFESA'}</div>
-                  <div className="absolute bottom-4 right-10 text-white/60 font-black text-xl md:text-3xl uppercase">{fieldFlipped ? 'DEFESA' : 'ATAQUE'}</div>
+                  <div className="absolute bottom-4 left-10 text-white/60 font-black text-xl md:text-3xl uppercase tracking-tighter">{fieldFlipped ? 'ATAQUE' : 'DEFESA'}</div>
+                  <div className="absolute bottom-4 right-10 text-white/60 font-black text-xl md:text-3xl uppercase tracking-tighter">{fieldFlipped ? 'DEFESA' : 'ATAQUE'}</div>
                   {capturedLocation && <div className="absolute w-8 h-8 bg-yellow-400 border-4 border-white rounded-full shadow-2xl transform -translate-x-1/2 -translate-y-1/2 z-20 animate-ping-once" style={{ left: `${capturedLocation.x}%`, top: `${capturedLocation.y}%` }} />}
                   {currentEvents.map(evt => <div key={evt.id} className={`absolute w-2 h-2 rounded-full transform -translate-x-1/2 -translate-y-1/2 opacity-60 ${evt.result === 'POSITIVA' ? 'bg-green-300' : evt.result === 'NEGATIVA' ? 'bg-red-400' : 'bg-white'}`} style={{ left: `${evt.location.x}%`, top: `${evt.location.y}%` }} />)}
               </div>
@@ -297,7 +298,7 @@ const RealTimeEvaluation: React.FC = () => {
                   {step === 0 && (
                       <div className="grid grid-cols-4 gap-2">
                           {(['OFENSIVA', 'DEFENSIVA', 'TRANSICAO_OF', 'TRANSICAO_DEF'] as GamePhase[]).map(phase => (
-                              <button key={phase} onClick={() => setActivePhase(phase)} className={`py-4 rounded-xl text-[9px] md:text-[10px] font-black uppercase transition-all shadow-sm border-2 flex flex-col items-center justify-center gap-1 leading-tight ${activePhase === phase ? 'bg-gray-900 text-white border-gray-700 scale-105 shadow-xl' : 'bg-white text-gray-400 border-gray-100'}`}>
+                              <button key={phase} onClick={() => setActivePhase(phase)} className={`py-4 rounded-xl text-[9px] md:text-[10px] font-black uppercase transition-all shadow-sm border-2 flex flex-col items-center justify-center gap-1 leading-tight ${activePhase === phase ? 'bg-gray-900 dark:bg-indigo-600 text-white border-gray-700 dark:border-indigo-400 scale-105 shadow-xl' : 'bg-white dark:bg-darkCard text-gray-400 dark:text-gray-500 border-gray-100 dark:border-darkBorder'}`}>
                                   {PHASE_ICONS[phase]} <span>{phase.replace('_', ' ')}</span>
                               </button>
                           ))}
@@ -305,18 +306,18 @@ const RealTimeEvaluation: React.FC = () => {
                   )}
 
                   {step > 0 && (
-                      <div className="bg-white rounded-2xl shadow-xl border-2 border-blue-100 overflow-hidden animate-slide-up">
-                          <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center">
-                              <h3 className="font-black uppercase tracking-tighter text-sm">
+                      <div className="bg-white dark:bg-darkCard rounded-2xl shadow-xl border-2 border-blue-100 dark:border-darkBorder overflow-hidden animate-slide-up transition-colors">
+                          <div className="bg-blue-600 dark:bg-blue-700 text-white px-4 py-3 flex justify-between items-center">
+                              <h3 className="font-black uppercase tracking-widest text-xs">
                                   {step === 1 ? `1. AÇÃO - ${activePhase.replace('_', ' ')}` : '2. RESULTADO'}
                               </h3>
-                              <span className="font-mono bg-black/20 px-2 py-0.5 rounded font-bold text-xs">{capturedTime}</span>
+                              <span className="font-mono bg-black/20 px-2 py-0.5 rounded font-bold text-[10px]">{capturedTime}</span>
                           </div>
                           <div className="p-4 space-y-4">
                               {step === 1 && (
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                       {PHASE_ACTIONS[activePhase].map(action => (
-                                          <button key={action} onClick={() => handleActionClick(action)} className="py-5 px-2 rounded-xl font-bold text-sm bg-gray-50 text-gray-800 border-2 border-gray-100 hover:border-blue-400 active:scale-95 transition-all">
+                                          <button key={action} onClick={() => handleActionClick(action)} className="py-5 px-2 rounded-xl font-black text-xs bg-gray-50 dark:bg-darkInput text-gray-800 dark:text-gray-200 border-2 border-gray-100 dark:border-darkBorder hover:border-blue-400 dark:hover:border-blue-500 active:scale-95 transition-all uppercase tracking-widest">
                                               {action}
                                           </button>
                                       ))}
@@ -324,75 +325,75 @@ const RealTimeEvaluation: React.FC = () => {
                               )}
                               {step === 2 && (
                                   <div className="grid grid-cols-3 gap-3">
-                                      <button onClick={() => handleResultClick('POSITIVA')} className="bg-green-600 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-green-800">POSITIVA</button>
-                                      <button onClick={() => handleResultClick('NEUTRA')} className="bg-gray-500 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-gray-700">NEUTRA</button>
-                                      <button onClick={() => handleResultClick('NEGATIVA')} className="bg-red-600 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-red-800">NEGATIVA</button>
+                                      <button onClick={() => handleResultClick('POSITIVA')} className="bg-green-600 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-green-800 uppercase tracking-widest">POSITIVA</button>
+                                      <button onClick={() => handleResultClick('NEUTRA')} className="bg-gray-500 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-gray-700 uppercase tracking-widest">NEUTRA</button>
+                                      <button onClick={() => handleResultClick('NEGATIVA')} className="bg-red-600 text-white py-10 rounded-2xl font-black text-xl shadow-lg active:scale-95 border-b-4 border-red-800 uppercase tracking-widest">NEGATIVA</button>
                                   </div>
                               )}
-                              <button onClick={() => {setStep(0); setCapturedLocation(null);}} className="w-full py-3 text-gray-400 font-bold text-xs uppercase bg-gray-50 rounded-xl hover:text-red-500 transition-colors">Cancelar Registro</button>
+                              <button onClick={() => {setStep(0); setCapturedLocation(null);}} className="w-full py-3 text-gray-400 dark:text-gray-500 font-black text-[10px] uppercase bg-gray-50 dark:bg-darkInput rounded-xl hover:text-red-500 transition-colors tracking-widest">Cancelar Registro</button>
                           </div>
                       </div>
                   )}
 
                   {step === 0 && (
                       <div className="grid grid-cols-3 gap-3">
-                          <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100 text-center"><span className="text-3xl font-black text-green-700">{currentEvents.filter(e => e.result === 'POSITIVA').length}</span><p className="text-[10px] font-black text-green-600 uppercase">Positivas</p></div>
-                          <div className="bg-gray-100 p-4 rounded-2xl border-2 border-gray-200 text-center"><span className="text-3xl font-black text-gray-700">{currentEvents.filter(e => e.result === 'NEUTRA').length}</span><p className="text-[10px] font-black text-gray-500 uppercase">Neutras</p></div>
-                          <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-100 text-center"><span className="text-3xl font-black text-red-700">{currentEvents.filter(e => e.result === 'NEGATIVA').length}</span><p className="text-[10px] font-black text-red-600 uppercase">Negativas</p></div>
+                          <div className="bg-green-50 dark:bg-emerald-900/10 p-4 rounded-2xl border-2 border-green-100 dark:border-emerald-800/30 text-center"><span className="text-3xl font-black text-green-700 dark:text-emerald-400">{currentEvents.filter(e => e.result === 'POSITIVA').length}</span><p className="text-[10px] font-black text-green-600 dark:text-emerald-500 uppercase tracking-widest">Positivas</p></div>
+                          <div className="bg-gray-100 dark:bg-darkInput p-4 rounded-2xl border-2 border-gray-200 dark:border-darkBorder text-center"><span className="text-3xl font-black text-gray-700 dark:text-gray-300">{currentEvents.filter(e => e.result === 'NEUTRA').length}</span><p className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Neutras</p></div>
+                          <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-2xl border-2 border-red-100 dark:border-red-800/30 text-center"><span className="text-3xl font-black text-red-700 dark:text-red-400">{currentEvents.filter(e => e.result === 'NEGATIVA').length}</span><p className="text-[10px] font-black text-red-600 dark:text-red-500 uppercase tracking-widest">Negativas</p></div>
                       </div>
                   )}
               </div>
           ) : (
-            <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200">
-                <Activity size={48} className="mx-auto text-blue-200 mb-4" />
-                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Pronto para a Coleta</h2>
-                <p className="text-gray-400 text-sm mt-2 max-w-xs mx-auto font-medium">Toque em "Iniciar" para monitorar o desempenho tático por eventos e pesos de impacto.</p>
+            <div className="bg-white dark:bg-darkCard rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 dark:border-darkBorder transition-colors">
+                <Activity size={48} className="mx-auto text-blue-200 dark:text-gray-700 mb-4" />
+                <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Pronto para a Coleta</h2>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-2 max-w-xs mx-auto font-medium">Toque em "Iniciar" para monitorar o desempenho tático por eventos e pesos de impacto.</p>
             </div>
           )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-2xl z-40 flex flex-col md:flex-row gap-4 md:items-center md:px-8">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-darkCard border-t border-gray-200 dark:border-darkBorder p-4 shadow-2xl z-40 flex flex-col md:flex-row gap-4 md:items-center md:px-8 transition-colors">
           <div className="flex items-center gap-4 w-full md:w-auto">
-              <button onClick={() => setShowCancelModal(true)} className="text-red-500 font-bold text-sm flex items-center gap-2 px-3 py-2 hover:bg-red-50 rounded-lg whitespace-nowrap"><XCircle size={20} /> Cancelar</button>
-              <button onClick={() => setShowAddAthleteModal(true)} className="bg-blue-100 text-blue-700 p-3 rounded-full border border-blue-200"><UserPlus size={20} /></button>
+              <button onClick={() => setShowCancelModal(true)} className="text-red-500 dark:text-red-400 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg whitespace-nowrap"><XCircle size={18} /> Cancelar</button>
+              <button onClick={() => setShowAddAthleteModal(true)} className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 p-3 rounded-full border border-blue-200 dark:border-blue-800 transition-colors"><UserPlus size={20} /></button>
           </div>
           <div className="flex-1 overflow-x-auto flex gap-3 pb-1 hide-scrollbar">
               {activeAthletes.map(ath => (
-                  <button key={ath.id} onClick={() => setSelectedAthleteId(ath.id)} className={`flex items-center gap-2 p-2 rounded-lg border transition-all min-w-[140px] ${selectedAthleteId === ath.id ? 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-300' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>
-                      {ath.photoUrl ? <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] ${selectedAthleteId === ath.id ? 'bg-white/20' : 'bg-blue-100 text-blue-600'}`}>{ath.name.charAt(0)}</div>}
-                      <div className="flex flex-col items-start min-w-0"><span className="text-xs font-bold truncate w-full">{ath.name.split(' ')[0]}</span><span className={`text-[10px] ${selectedAthleteId === ath.id ? 'text-blue-100' : 'text-gray-400'}`}>{sessionLogs[ath.id]?.length || 0} ações</span></div>
+                  <button key={ath.id} onClick={() => setSelectedAthleteId(ath.id)} className={`flex items-center gap-2 p-2 rounded-lg border transition-all min-w-[140px] ${selectedAthleteId === ath.id ? 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-300' : 'bg-white dark:bg-darkInput text-gray-700 dark:text-gray-300 border-gray-200 dark:border-darkBorder hover:bg-gray-50 dark:hover:bg-indigo-900/20'}`}>
+                      {ath.photoUrl ? <img src={ath.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] ${selectedAthleteId === ath.id ? 'bg-white/20' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border dark:border-darkBorder'}`}>{ath.name.charAt(0)}</div>}
+                      <div className="flex flex-col items-start min-w-0"><span className="text-xs font-black truncate w-full uppercase tracking-tighter">{ath.name.split(' ')[0]}</span><span className={`text-[10px] font-bold ${selectedAthleteId === ath.id ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>{sessionLogs[ath.id]?.length || 0} ações</span></div>
                   </button>
               ))}
           </div>
-          <button onClick={() => setShowFinishModal(true)} disabled={!currentEvents.length} className="bg-gray-900 text-white font-black py-4 px-8 rounded-2xl shadow-xl flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 uppercase tracking-tighter w-full md:w-auto justify-center">
+          <button onClick={() => setShowFinishModal(true)} disabled={!currentEvents.length} className="bg-gray-900 dark:bg-emerald-600 text-white font-black py-4 px-8 rounded-2xl shadow-xl flex items-center gap-2 hover:bg-black dark:hover:bg-emerald-700 transition-all disabled:opacity-50 uppercase tracking-widest text-xs w-full md:w-auto justify-center border-b-4 border-black dark:border-emerald-800">
               <StopCircle size={20} /> Salvar Atuação
           </button>
       </div>
 
       {/* Modais */}
       {showFinishModal && currentAthlete && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-             <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl text-center">
-                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-md"><CheckCircle className="text-green-600" size={40} /></div>
-                 <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Finalizar Análise?</h3>
-                 <p className="text-gray-500 mb-8 text-sm">Registrar <strong>{currentEvents.length} ações</strong> para <strong>{currentAthlete.name}</strong>. O score será calculado automaticamente com base nos pesos táticos.</p>
+         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white dark:bg-darkCard border dark:border-darkBorder rounded-3xl w-full max-w-sm p-8 shadow-2xl text-center">
+                 <div className="w-20 h-20 bg-green-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white dark:border-darkBorder shadow-md"><CheckCircle className="text-green-600 dark:text-emerald-400" size={40} /></div>
+                 <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Finalizar Análise?</h3>
+                 <p className="text-gray-500 dark:text-gray-400 mb-8 text-sm">Registrar <strong>{currentEvents.length} ações</strong> para <strong>{currentAthlete.name}</strong>. O score será calculado automaticamente com base nos pesos táticos.</p>
                  <div className="flex flex-col gap-3">
-                     <button onClick={handleFinishSession} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-sm">Confirmar e Gerar Notas</button>
-                     <button onClick={() => setShowFinishModal(false)} className="w-full bg-gray-100 text-gray-500 font-bold py-3 rounded-2xl text-sm">Voltar</button>
+                     <button onClick={handleFinishSession} className="w-full bg-blue-600 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-xs border-b-4 border-blue-800 dark:border-indigo-800">Confirmar e Gerar Notas</button>
+                     <button onClick={() => setShowFinishModal(false)} className="w-full bg-gray-100 dark:bg-darkInput text-gray-500 dark:text-gray-400 font-black py-3 rounded-2xl text-xs uppercase tracking-widest">Voltar</button>
                  </div>
              </div>
          </div>
       )}
 
       {showCancelModal && (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-             <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl text-center">
-                 <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-md"><AlertTriangle className="text-red-600" size={40} /></div>
-                 <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">Descartar Dados?</h3>
-                 <p className="text-gray-500 mb-8 text-sm">Todos os eventos de hoje serão perdidos permanentemente.</p>
+         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white dark:bg-darkCard border dark:border-darkBorder rounded-3xl w-full max-w-sm p-8 shadow-2xl text-center">
+                 <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white dark:border-darkBorder shadow-md"><AlertTriangle className="text-red-600 dark:text-red-400" size={40} /></div>
+                 <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Descartar Dados?</h3>
+                 <p className="text-gray-500 dark:text-gray-400 mb-8 text-sm">Todos os eventos de hoje serão perdidos permanentemente.</p>
                  <div className="flex flex-col gap-3">
-                     <button onClick={() => navigate(`/athletes/${id}`)} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-sm">Sim, Descartar</button>
-                     <button onClick={() => setShowCancelModal(false)} className="w-full bg-gray-100 text-gray-500 font-bold py-3 rounded-2xl text-sm">Voltar ao Jogo</button>
+                     <button onClick={() => navigate(`/athletes/${id}`)} className="w-full bg-red-600 dark:bg-red-700 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-xs border-b-4 border-red-900">Sim, Descartar</button>
+                     <button onClick={() => setShowCancelModal(false)} className="w-full bg-gray-100 dark:bg-darkInput text-gray-500 dark:text-gray-400 font-black py-3 rounded-2xl text-xs uppercase tracking-widest">Voltar ao Jogo</button>
                  </div>
              </div>
          </div>
@@ -400,10 +401,10 @@ const RealTimeEvaluation: React.FC = () => {
 
       {feedback && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
-             <div className="bg-white rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
-                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>{feedback.type === 'success' ? <CheckCircle className="text-green-600" size={24} /> : <AlertCircle className="text-red-600" size={24} />}</div>
-                 <h3 className="text-lg font-black text-gray-800 mb-1 uppercase tracking-tighter">{feedback.title}</h3>
-                 <p className="text-gray-500 text-center text-xs font-medium">{feedback.message}</p>
+             <div className="bg-white dark:bg-darkCard border dark:border-darkBorder rounded-2xl p-6 shadow-2xl flex flex-col items-center max-w-sm w-full">
+                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${feedback.type === 'success' ? 'bg-green-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>{feedback.type === 'success' ? <CheckCircle className="text-green-600 dark:text-emerald-400" size={24} /> : <AlertCircle className="text-red-600 dark:text-red-400" size={24} />}</div>
+                 <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 mb-1 uppercase tracking-tighter">{feedback.title}</h3>
+                 <p className="text-gray-500 dark:text-gray-400 text-center text-xs font-medium">{feedback.message}</p>
              </div>
          </div>
       )}

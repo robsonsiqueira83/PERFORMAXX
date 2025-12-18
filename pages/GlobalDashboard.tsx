@@ -233,29 +233,29 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
       u.id.includes(search)
   ));
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-900 text-white"><Loader2 className="animate-spin mr-2"/> Carregando Global...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-darkBase text-white"><Loader2 className="animate-spin mr-2"/> Carregando Global...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans pb-20">
-        <div className="bg-gray-800 border-b border-gray-700 p-6 flex flex-col md:flex-row justify-between items-center shadow-lg gap-4">
+    <div className="min-h-screen bg-darkBase text-gray-100 font-sans pb-20 transition-colors">
+        <div className="bg-darkCard border-b border-darkBorder p-6 flex flex-col md:flex-row justify-between items-center shadow-lg gap-4 transition-colors">
             <div className="flex items-center gap-3">
                  <Globe className="text-purple-500" size={32} />
                  <div>
-                     <h1 className="text-2xl font-bold tracking-tight text-white">Painel Global</h1>
-                     <p className="text-xs text-gray-400">Super Administração de Tenants</p>
+                     <h1 className="text-2xl font-black tracking-tight text-white uppercase tracking-tighter leading-none">Painel Global</h1>
+                     <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Super Administração de Tenants</p>
                  </div>
             </div>
             <div className="flex items-center gap-4">
                  {currentUser && (
                      <button 
                         onClick={() => onAccessMaster(currentUser.id)} 
-                        className="bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2 rounded-lg transition flex items-center gap-2 shadow-lg shadow-purple-900/20"
+                        className="bg-purple-600 hover:bg-purple-500 text-white font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-lg shadow-purple-900/20 border-b-4 border-purple-800"
                      >
-                        <LayoutDashboard size={18} />
+                        <LayoutDashboard size={16} />
                         Acessar Meu Painel
                      </button>
                  )}
-                 <button onClick={onLogout} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition">
+                 <button onClick={onLogout} className="bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-xl transition border-b-4 border-red-800">
                     Sair
                  </button>
             </div>
@@ -264,41 +264,41 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
         <div className="max-w-7xl mx-auto p-8 space-y-8">
             
             {currentUser && (
-                <div className="bg-gradient-to-r from-blue-900 to-gray-800 rounded-xl border border-blue-700 p-6 flex items-center justify-between shadow-xl">
-                    <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-r from-indigo-900 to-darkCard rounded-[32px] border border-darkBorder p-8 flex items-center justify-between shadow-xl">
+                    <div className="flex items-center gap-6">
                          {currentUser.avatarUrl ? (
-                            <img src={currentUser.avatarUrl} className="w-16 h-16 rounded-full border-2 border-white shadow-md object-cover" />
+                            <img src={currentUser.avatarUrl} className="w-20 h-20 rounded-full border-4 border-white/10 shadow-md object-cover" />
                         ) : (
-                            <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-2xl font-bold text-white border-2 border-white shadow-md">
+                            <div className="w-20 h-20 rounded-full bg-indigo-500 flex items-center justify-center text-3xl font-black text-white border-4 border-white/10 shadow-md uppercase">
                                 {currentUser.name.charAt(0)}
                             </div>
                         )}
                         <div>
-                            <h2 className="text-xl font-bold text-white">Olá, {currentUser.name}</h2>
-                            <p className="text-blue-200 text-sm">{currentUser.email}</p>
-                            <span className="text-xs bg-blue-800 text-blue-100 px-2 py-0.5 rounded border border-blue-600 mt-1 inline-block">
-                                ID: {currentUser.id}
+                            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Olá, {currentUser.name}</h2>
+                            <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest">{currentUser.email}</p>
+                            <span className="text-[9px] bg-indigo-800/50 text-indigo-100 px-3 py-1 rounded-full border border-indigo-600 mt-2 inline-block font-black uppercase tracking-widest">
+                                Global Session ID: {currentUser.id.substring(0,16)}...
                             </span>
                         </div>
                     </div>
                     <div className="hidden md:block text-right">
-                         <p className="text-sm text-gray-400 uppercase font-bold">Status</p>
-                         <div className="flex items-center gap-2 text-green-400 font-bold">
-                             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                         <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Status do Operador</p>
+                         <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase">
+                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
                              Super Admin Ativo
                          </div>
                     </div>
                 </div>
             )}
 
-            <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
-                <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
-                    <h2 className="text-lg font-bold text-purple-400 flex items-center gap-2">
+            <div className="bg-darkCard rounded-[32px] border border-darkBorder shadow-xl overflow-hidden">
+                <div className="p-8 border-b border-darkBorder flex justify-between items-center bg-darkInput/20">
+                    <h2 className="text-lg font-black text-purple-400 flex items-center gap-3 uppercase tracking-widest">
                         <ShieldCheck size={20} /> Administradores Globais
                     </h2>
                     <button 
                         onClick={openCreateModal}
-                        className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition"
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition shadow-lg border-b-4 border-purple-800"
                     >
                         <UserPlus size={16} /> Novo Admin
                     </button>
@@ -306,25 +306,28 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-gray-900/30 text-gray-500 text-xs uppercase">
+                        <thead className="bg-darkInput text-gray-500 text-[10px] font-black uppercase tracking-[0.2em]">
                             <tr>
-                                <th className="px-6 py-3">Nome</th>
-                                <th className="px-6 py-3">Email</th>
-                                <th className="px-6 py-3 text-right">Ações</th>
+                                <th className="px-8 py-4">Operador</th>
+                                <th className="px-8 py-4">Contato</th>
+                                <th className="px-8 py-4 text-right">Ações de Controle</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-700">
+                        <tbody className="divide-y divide-darkBorder">
                             {globalAdmins.map(u => (
-                                <tr key={u.id} className="hover:bg-gray-700/30">
-                                    <td className="px-6 py-3 font-medium text-white flex items-center gap-2">
-                                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-purple-900/50 text-purple-300 flex items-center justify-center text-xs font-bold">{u.name.charAt(0)}</div>}
-                                        {u.name} {u.id === currentUser?.id && <span className="text-xs text-gray-500">(Você)</span>}
+                                <tr key={u.id} className="hover:bg-darkInput/30 transition-colors">
+                                    <td className="px-8 py-5 font-black text-white flex items-center gap-4">
+                                        {u.avatarUrl ? <img src={u.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-darkBorder shadow-sm" /> : <div className="w-10 h-10 rounded-full bg-purple-900/50 text-purple-300 flex items-center justify-center text-xs font-black uppercase border border-purple-800/30">{u.name.charAt(0)}</div>}
+                                        <div className="flex flex-col">
+                                            <span className="text-sm uppercase tracking-tighter">{u.name}</span>
+                                            {u.id === currentUser?.id && <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Sessão Atual</span>}
+                                        </div>
                                     </td>
-                                    <td className="px-6 py-3 text-gray-400 text-sm">{u.email}</td>
-                                    <td className="px-6 py-3 text-right flex justify-end gap-2">
-                                        <button onClick={() => openEditModal(u)} className="text-blue-400 hover:text-blue-300 p-1 hover:bg-gray-700 rounded transition"><Edit size={16}/></button>
+                                    <td className="px-8 py-5 text-gray-400 text-xs font-bold font-mono tracking-tight">{u.email}</td>
+                                    <td className="px-8 py-5 text-right flex justify-end gap-3">
+                                        <button onClick={() => openEditModal(u)} className="bg-blue-600/10 text-blue-400 hover:bg-blue-600 hover:text-white p-2.5 rounded-xl transition-all border border-blue-900/30"><Edit size={16}/></button>
                                         {u.id !== currentUser?.id && (
-                                            <button onClick={() => requestDelete(u)} className="text-red-500 hover:text-red-400 p-1 hover:bg-gray-700 rounded transition"><Trash2 size={16} /></button>
+                                            <button onClick={() => requestDelete(u)} className="bg-red-900/10 text-red-500 hover:bg-red-600 hover:text-white p-2.5 rounded-xl transition-all border border-red-900/30"><Trash2 size={16} /></button>
                                         )}
                                     </td>
                                 </tr>
@@ -334,17 +337,17 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                 </div>
             </div>
 
-            <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
-                <div className="p-6 border-b border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4 bg-gray-800/50">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        Painéis Master Cadastrados
+            <div className="bg-darkCard rounded-[32px] border border-darkBorder shadow-xl overflow-hidden">
+                <div className="p-8 border-b border-darkBorder flex flex-col md:flex-row justify-between items-center gap-4 bg-darkInput/20">
+                    <h2 className="text-xl font-black text-white flex items-center gap-3 uppercase tracking-tighter">
+                        Painéis Master (Tenants)
                     </h2>
                     <div className="relative w-full md:w-96">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={18} />
+                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500" size={18} />
                         <input 
                           type="text" 
-                          placeholder="Buscar Tenant (Nome, ID, Email)..." 
-                          className="w-full bg-gray-900 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-gray-200 focus:outline-none focus:border-blue-500"
+                          placeholder="Buscar Nome, ID ou Email..." 
+                          className="w-full bg-darkInput border border-darkBorder rounded-2xl pl-12 pr-4 py-3 text-xs font-bold text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-inner"
                           value={search}
                           onChange={e => setSearch(e.target.value)}
                         />
@@ -353,53 +356,53 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-gray-900/50 text-gray-400 text-xs uppercase font-bold">
+                        <thead className="bg-darkInput text-gray-500 text-[10px] font-black uppercase tracking-[0.2em]">
                             <tr>
-                                <th className="px-6 py-4">Tenant / ID</th>
-                                <th className="px-6 py-4">Contato</th>
-                                <th className="px-6 py-4 text-right">Ações</th>
+                                <th className="px-8 py-4">Tenant Root</th>
+                                <th className="px-8 py-4">Metadados de Contato</th>
+                                <th className="px-8 py-4 text-right">Interface de Controle</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-700">
+                        <tbody className="divide-y divide-darkBorder">
                             {masterTenants.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-700/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
+                                <tr key={user.id} className="hover:bg-darkInput/50 transition-colors">
+                                    <td className="px-8 py-6">
+                                        <div className="flex items-center gap-4">
                                             {user.avatarUrl ? (
-                                                <img src={user.avatarUrl} className="w-10 h-10 rounded-full border border-gray-600" />
+                                                <img src={user.avatarUrl} className="w-12 h-12 rounded-2xl border border-darkBorder object-cover shadow-sm" />
                                             ) : (
-                                                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold text-gray-400">
+                                                <div className="w-12 h-12 rounded-2xl bg-darkInput flex items-center justify-center font-black text-gray-500 text-lg border border-darkBorder shadow-inner uppercase">
                                                     {user.name.charAt(0)}
                                                 </div>
                                             )}
                                             <div>
-                                                <p className="font-bold text-white">{user.name}</p>
-                                                <p className="text-xs text-gray-500 font-mono">ID: {user.id}</p>
+                                                <p className="font-black text-white text-base uppercase tracking-tighter">{user.name}</p>
+                                                <p className="text-[9px] text-gray-500 font-mono tracking-widest mt-1">UUID: {user.id}</p>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-gray-300">
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-2">
-                                                <Mail size={14} className="text-gray-500" /> {user.email}
+                                    <td className="px-8 py-6 text-gray-300">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-gray-400">
+                                                <Mail size={14} className="text-gray-600" /> {user.email}
                                             </div>
-                                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                <Calendar size={12} /> {formatDate(user.createdAt)}
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-gray-600 uppercase tracking-widest">
+                                                <Calendar size={12} /> Criado em {formatDate(user.createdAt)}
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                    <td className="px-8 py-6 text-right flex justify-end gap-3 items-center">
                                         <button 
                                             onClick={() => onAccessMaster(user.id)}
-                                            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow"
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg border-b-4 border-indigo-900"
                                         >
                                             Acessar <ExternalLink size={14} />
                                         </button>
                                         <button 
                                             onClick={() => requestDelete(user)}
-                                            className="bg-red-900/30 border border-red-900 hover:bg-red-900/50 text-red-400 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all"
+                                            className="bg-red-900/20 border border-red-900/50 hover:bg-red-700 hover:text-white text-red-500 p-2.5 rounded-xl transition-all shadow-sm"
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={16} />
                                         </button>
                                     </td>
                                 </tr>
@@ -407,57 +410,59 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
                         </tbody>
                     </table>
                     {masterTenants.length === 0 && (
-                        <div className="p-8 text-center text-gray-500">Nenhum tenant encontrado.</div>
+                        <div className="p-20 text-center text-gray-500 font-black uppercase tracking-widest italic text-xs">Nenhum tenant localizado para os critérios informados.</div>
                     )}
                 </div>
             </div>
         </div>
 
         {isModalOpen && (
-             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-700">
-                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                         {editData.id ? <Edit className="text-blue-400"/> : <UserPlus className="text-green-400"/>}
-                         {editData.id ? 'Editar Admin Global' : 'Novo Admin Global'}
+             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in transition-all">
+                <div className="bg-darkCard rounded-[32px] w-full max-w-lg p-8 shadow-2xl border border-darkBorder">
+                   <div className="flex justify-between items-center mb-8 border-b border-darkBorder pb-4">
+                      <h3 className="text-xl font-black text-white flex items-center gap-3 uppercase tracking-tighter">
+                         {editData.id ? <Edit className="text-blue-400"/> : <UserPlus className="text-purple-400"/>}
+                         {editData.id ? 'Editar Configuração Global' : 'Provisionar Novo Operador'}
                       </h3>
-                      <button onClick={() => setIsModalOpen(false)}><X className="text-gray-500 hover:text-white" /></button>
+                      <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-red-500/10 rounded-full transition-colors"><X className="text-gray-500 hover:text-red-500" /></button>
                    </div>
 
-                   <form onSubmit={handleSaveGlobal} className="space-y-4">
+                   <form onSubmit={handleSaveGlobal} className="space-y-6">
                       <div className="flex flex-col items-center mb-6">
-                         <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mb-2 overflow-hidden relative border-2 border-dashed border-gray-500">
+                         <div className="w-24 h-24 bg-darkInput rounded-full flex items-center justify-center mb-4 overflow-hidden relative border-4 border-dashed border-darkBorder shadow-inner transition-all">
                              {uploading ? (
-                                <Loader2 className="animate-spin text-blue-400" size={32} />
+                                <Loader2 className="animate-spin text-purple-400" size={32} />
                              ) : editData.avatarUrl ? (
                                  <img src={editData.avatarUrl} className="w-full h-full object-cover" />
                              ) : (
-                                 <UserIcon size={32} className="text-gray-400" />
+                                 <UserIcon size={32} className="text-gray-700" />
                              )}
                          </div>
-                         <label className={`cursor-pointer text-blue-400 text-sm font-bold flex items-center gap-1 hover:text-blue-300 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                             {uploading ? 'Enviando...' : <><Upload size={14} /> Alterar Foto</>}
+                         <label className={`cursor-pointer text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:text-purple-300 transition-colors bg-purple-900/10 px-4 py-2 rounded-full border border-purple-800/30 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                             {uploading ? 'Aguarde...' : <><Upload size={14} /> Alterar Avatar</>}
                              <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleAvatarUpload} />
                          </label>
                       </div>
 
-                      <div>
-                          <label className="block text-xs font-bold text-gray-500 mb-1">Nome Completo</label>
-                          <input required type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
-                      </div>
-                      <div>
-                          <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
-                          <input required type="email" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} />
-                      </div>
-                      <div>
-                          <label className="block text-xs font-bold text-gray-500 mb-1">Senha {editData.id && '(Opcional)'}</label>
-                          <input type="password" className="w-full bg-gray-900 border border-gray-600 rounded p-3 text-white focus:border-blue-500 outline-none" value={editData.password || ''} onChange={e => setEditData({...editData, password: e.target.value})} placeholder={editData.id ? 'Manter senha atual' : ''} />
+                      <div className="space-y-4">
+                          <div>
+                              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Nome Completo</label>
+                              <input required type="text" className="w-full bg-darkInput border border-darkBorder rounded-2xl p-4 text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 outline-none shadow-inner" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Email de Acesso</label>
+                              <input required type="email" className="w-full bg-darkInput border border-darkBorder rounded-2xl p-4 text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 outline-none shadow-inner" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Senha de Controle {editData.id && '(Opcional)'}</label>
+                              <input type="password" className="w-full bg-darkInput border border-darkBorder rounded-2xl p-4 text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 outline-none shadow-inner" value={editData.password || ''} onChange={e => setEditData({...editData, password: e.target.value})} placeholder={editData.id ? 'Manter chave atual' : 'Defina uma senha forte'} />
+                          </div>
                       </div>
                       
-                      {modalError && <p className="text-red-400 text-center text-sm font-bold bg-red-900/20 p-2 rounded">{modalError}</p>}
+                      {modalError && <p className="text-red-400 text-center text-[10px] font-black uppercase tracking-widest bg-red-900/20 p-3 rounded-xl border border-red-800/30">{modalError}</p>}
 
-                      <button type="submit" disabled={uploading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md transition flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
-                          <Save size={18}/> {uploading ? 'Aguarde...' : 'Salvar'}
+                      <button type="submit" disabled={uploading} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 mt-4 disabled:opacity-50 uppercase tracking-widest text-xs border-b-4 border-purple-900">
+                          <Save size={18}/> {uploading ? 'Sincronizando...' : 'Confirmar Registro'}
                       </button>
                    </form>
                 </div>
@@ -465,77 +470,77 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({ onAccessMaster, onLog
         )}
 
         {deleteConfirm.isOpen && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-center border border-red-900/50">
-                     <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-800">
-                         <AlertTriangle className="text-red-500" size={32} />
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in transition-all">
+                <div className="bg-darkCard rounded-[32px] w-full max-w-md p-8 shadow-2xl text-center border border-red-900/50">
+                     <div className="w-20 h-20 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-darkCard shadow-inner">
+                         <AlertTriangle className="text-red-500" size={40} />
                      </div>
-                     <h3 className="text-xl font-bold text-white mb-2">Excluir Painel Master?</h3>
-                     <p className="text-gray-400 mb-4">
-                        Você está prestes a excluir o usuário <strong>{deleteConfirm.userName}</strong>.
+                     <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Excluir Tenant Root?</h3>
+                     <p className="text-gray-400 mb-8 text-sm font-medium">
+                        Você está prestes a revogar o acesso e apagar os registros do usuário <strong>{deleteConfirm.userName}</strong>.
                      </p>
 
                      {userTeamsCount > 0 && (
-                         <div className="text-left bg-gray-900/50 p-4 rounded-lg border border-gray-700 mb-6">
-                             <div className="flex items-center gap-2 text-yellow-500 font-bold mb-2">
-                                 <ShieldCheck size={16} />
-                                 <span>Dados Vinculados Encontrados</span>
+                         <div className="text-left bg-darkInput/50 p-6 rounded-2xl border border-darkBorder mb-8 transition-colors">
+                             <div className="flex items-center gap-2 text-yellow-500 font-black text-[10px] uppercase tracking-widest mb-3">
+                                 <ShieldCheck size={14} />
+                                 <span>Sub-datasets Vinculados Detectados</span>
                              </div>
-                             <p className="text-sm text-gray-400 mb-3">
-                                 Este usuário possui <strong>{userTeamsCount} times</strong> com atletas e dados vinculados.
+                             <p className="text-xs text-gray-400 mb-4 font-medium leading-relaxed">
+                                 Este tenant possui <strong>{userTeamsCount} unidades esportivas</strong> registradas sob sua custódia técnica.
                              </p>
                              
-                             <label className="flex items-center gap-3 cursor-pointer bg-gray-800 p-3 rounded border border-gray-600 hover:border-gray-500 transition">
+                             <label className="flex items-center gap-4 cursor-pointer bg-darkInput p-4 rounded-xl border border-darkBorder hover:border-purple-800 transition-all group">
                                  <input 
                                     type="checkbox" 
-                                    className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 bg-gray-700 border-gray-500"
+                                    className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 bg-darkCard border-darkBorder cursor-pointer"
                                     checked={wantToMigrate}
                                     onChange={(e) => setWantToMigrate(e.target.checked)}
                                  />
-                                 <span className="text-sm font-medium text-white">Migrar atletas para outro Time?</span>
+                                 <span className="text-[10px] font-black text-white uppercase tracking-widest group-hover:text-purple-400 transition-colors">Migrar sub-datasets para outro Tenant?</span>
                              </label>
 
                              {wantToMigrate && (
-                                 <div className="mt-3 animate-fade-in">
-                                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">ID do Time de Destino</label>
+                                 <div className="mt-4 animate-slide-up">
+                                     <label className="block text-[8px] font-black text-gray-500 mb-1.5 uppercase tracking-[0.2em] ml-1">UUID do Time Destino (Receptor)</label>
                                      <input 
                                         type="text" 
-                                        className="w-full bg-gray-700 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm font-mono"
-                                        placeholder="Cole o ID do time aqui..."
+                                        className="w-full bg-darkCard border border-purple-500/30 rounded-xl p-3 text-white focus:border-purple-500 outline-none text-xs font-mono tracking-widest shadow-inner"
+                                        placeholder="Cole o identificador único..."
                                         value={targetTeamIdInput}
                                         onChange={(e) => setTargetTeamIdInput(e.target.value)}
                                      />
-                                     <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                                     <p className="text-[8px] text-gray-500 mt-2 flex items-center gap-1 font-bold uppercase tracking-widest">
                                          <Shirt size={10} />
-                                         Atletas, categorias e treinos serão movidos para este time.
+                                         Atletas, avaliações e treinos serão reatribuídos ao receptor.
                                      </p>
                                  </div>
                              )}
 
                              {!wantToMigrate && (
-                                 <p className="text-xs text-red-400 mt-3 flex items-center gap-1 font-bold">
+                                 <p className="text-[9px] text-red-400 mt-4 flex items-center gap-2 font-black uppercase tracking-widest bg-red-900/10 p-2 rounded-lg border border-red-900/20">
                                      <Trash2 size={12} />
-                                     Atenção: Se não migrar, todos os dados serão apagados permanentemente.
+                                     CRÍTICO: Dados não migrados serão excluídos permanentemente.
                                  </p>
                              )}
                          </div>
                      )}
 
-                     <div className="flex gap-3">
+                     <div className="flex gap-4">
                          <button 
                             onClick={() => setDeleteConfirm({isOpen: false, userId: null, userName: ''})} 
-                            className="flex-1 bg-gray-700 text-white font-bold py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                            className="flex-1 bg-darkInput text-gray-500 font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm"
                             disabled={isProcessingDelete}
                          >
                              Cancelar
                          </button>
                          <button 
                             onClick={handleMigrationAndCleanup} 
-                            className={`flex-1 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 ${wantToMigrate ? 'bg-purple-600 hover:bg-purple-700' : 'bg-red-600 hover:bg-red-700'} disabled:opacity-50`}
+                            className={`flex-1 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl uppercase tracking-widest text-[10px] border-b-4 ${wantToMigrate ? 'bg-purple-600 hover:bg-purple-700 border-purple-900' : 'bg-red-600 hover:bg-red-700 border-red-900'} disabled:opacity-50`}
                             disabled={isProcessingDelete}
                          >
                              {isProcessingDelete ? <Loader2 className="animate-spin" size={18} /> : (wantToMigrate ? <ArrowRightLeft size={18}/> : <Trash2 size={18}/>)}
-                             {wantToMigrate ? 'Migrar & Excluir' : 'Excluir Tudo'}
+                             {wantToMigrate ? 'Migrar & Root Delete' : 'Hard Delete Root'}
                          </button>
                      </div>
                 </div>
