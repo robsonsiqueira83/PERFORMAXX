@@ -8,7 +8,7 @@ import {
 import { processImageUpload } from '../services/imageService';
 import { Team, Category, UserRole, User, normalizeCategoryName } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon, UserPlus, Search, AlertTriangle } from 'lucide-react';
+import { Trash2, Edit, Plus, Settings, Loader2, Copy, X, CheckCircle, AlertCircle, Shirt, ExternalLink, Globe, Target, Upload, Users, Briefcase, UserCog, UserMinus, LogOut, User as UserIcon, Link as LinkIcon, UserPlus, Search, AlertTriangle, Inbox } from 'lucide-react';
 
 interface AdminProps {
   userRole: UserRole;
@@ -27,6 +27,7 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
   const [uploading, setUploading] = useState(false);
   const [ownedTeams, setOwnedTeams] = useState<Team[]>([]);
   const [invitedTeams, setInvitedTeams] = useState<Team[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -51,13 +52,18 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         const loggedUser = u.find(user => user.id === localUser?.id) || localUser;
         setCurrentUser(loggedUser);
         if (loggedUser) localStorage.setItem('performax_current_user', JSON.stringify(loggedUser));
+        
         const ctxId = localStorage.getItem('performax_context_id');
+        
         if (ctxId) {
             setOwnedTeams(allTeams.filter(t => t.ownerId === ctxId));
             if (loggedUser) {
                 const teamIds = loggedUser.teamIds || [];
                 const activeTeamIds = teamIds.filter(id => !id.startsWith('pending:'));
+                const pendingTeamIds = teamIds.filter(id => id.startsWith('pending:')).map(id => id.replace('pending:', ''));
+                
                 setInvitedTeams(allTeams.filter(t => activeTeamIds.includes(t.id) && t.ownerId !== ctxId));
+                setPendingInvites(allTeams.filter(t => pendingTeamIds.includes(t.id)));
             }
         }
         const c = await getCategories();
@@ -98,6 +104,37 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       finally { setLoading(false); }
   };
 
+  const handleAcceptInvite = async (team: Team) => {
+      if (!currentUser) return;
+      setLoading(true);
+      try {
+          const newTeamIds = (currentUser.teamIds || []).map(id => id === `pending:${team.id}` ? team.id : id);
+          const updatedUser = { ...currentUser, teamIds: newTeamIds };
+          await saveUser(updatedUser);
+          localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
+          setModalType('alert_success');
+          setModalMessage(`Você entrou na equipe ${team.name}!`);
+          refreshData();
+          window.location.reload(); // Recarregar para atualizar contexto
+      } catch (err: any) { setModalType('alert_error'); setModalMessage(err.message); }
+      finally { setLoading(false); }
+  };
+
+  const handleDeclineInvite = async (team: Team) => {
+      if (!currentUser) return;
+      setLoading(true);
+      try {
+          const newTeamIds = (currentUser.teamIds || []).filter(id => id !== `pending:${team.id}`);
+          const updatedUser = { ...currentUser, teamIds: newTeamIds };
+          await saveUser(updatedUser);
+          localStorage.setItem('performax_current_user', JSON.stringify(updatedUser));
+          setModalType('alert_success');
+          setModalMessage(`Convite de ${team.name} recusado.`);
+          refreshData();
+      } catch (err: any) { setModalType('alert_error'); setModalMessage(err.message); }
+      finally { setLoading(false); }
+  };
+
   const handleSaveProfile = async () => {
       if (!profileData.name || !currentUser) return;
       setLoading(true);
@@ -112,7 +149,6 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
       finally { setLoading(false); }
   };
 
-  // Fixed error in handleSaveCategory: Changed team_id to teamId to match Category interface
   const handleSaveCategory = async () => {
     if (!formData.name || !currentTeamId) return;
     setLoading(true);
@@ -284,6 +320,31 @@ const Admin: React.FC<AdminProps> = ({ userRole, currentTeamId }) => {
         <div className="p-8">
             {activeTab === 'teams' && (
                 <div className="space-y-12">
+                    
+                    {/* CONVITES PENDENTES */}
+                    {pendingInvites.length > 0 && (
+                        <div className="space-y-4 mb-8 bg-amber-50 dark:bg-amber-900/10 p-6 rounded-3xl border border-amber-100 dark:border-amber-900/30">
+                            <h3 className="text-sm font-black text-amber-800 dark:text-amber-400 uppercase tracking-widest flex items-center gap-2"><Inbox size={16} /> Convites Pendentes</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {pendingInvites.map(team => (
+                                    <div key={team.id} className="p-4 bg-white dark:bg-darkCard rounded-2xl border border-amber-100 dark:border-amber-900/30 shadow-sm flex justify-between items-center">
+                                        <div className="flex items-center gap-3">
+                                            {team.logoUrl ? <img src={team.logoUrl} className="w-10 h-10 rounded-xl object-contain border" /> : <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-xl flex items-center justify-center text-amber-600 dark:text-amber-400 font-black">{team.name.charAt(0)}</div>}
+                                            <div>
+                                                <span className="font-black text-gray-800 dark:text-gray-100 uppercase text-xs">{team.name}</span>
+                                                <p className="text-[9px] text-gray-400 dark:text-gray-500 uppercase tracking-widest">Solicitação de Acesso</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleAcceptInvite(team)} className="bg-emerald-600 text-white p-2 rounded-xl hover:bg-emerald-700 transition-colors shadow-md"><CheckCircle size={16}/></button>
+                                            <button onClick={() => handleDeclineInvite(team)} className="bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-100 dark:border-red-900/30"><X size={16}/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2"><Shirt size={16} className="text-indigo-500"/> Minhas Equipes</h3>
