@@ -6,12 +6,11 @@ import {
   getCategories, 
   saveAthlete, 
   getTeams,
-  getEvaluationSessions,
-  getTrainingEntries
+  getEvaluationSessions
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession, TrainingEntry } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow } from 'lucide-react';
+import { Athlete, Position, Category, User, canEditData, Team, EvaluationSession } from '../types';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, CheckCircle, AlertCircle, Target, XCircle, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -84,7 +83,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
           const avgPhys = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreFisico, 0) / myEvals.length : 0;
           
-          // CÁLCULO SMC (SCORE MÉDIO DE CAPACIDADE)
           const mt_norm = (avgTech / 5.0) * 10;
           const cf_norm = avgPhys / 10;
           const smc = (mt_norm * 0.55) + (cf_norm * 0.45);
@@ -100,9 +98,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       
       return list.sort((a, b) => {
           if (sortOrder === 'score') {
-              return b.smc - a.smc; // Decrescente por score
+              return b.smc - a.smc;
           }
-          return a.name.localeCompare(b.name); // Alfabética
+          return a.name.localeCompare(b.name);
       });
   }, [athletesWithSMC, search, filterCat, filterPos, sortOrder]);
 
@@ -179,16 +177,32 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
     try {
         const finalRg = formData.rg || `ID-${uuidv4().substring(0,8).toUpperCase()}`;
         const newAthlete: Athlete = {
-          id: formData.id || uuidv4(), teamId, rg: finalRg, name: formData.name, categoryId: formData.categoryId,
-          position: formData.position as Position, photoUrl: previewUrl || formData.photoUrl, 
+          id: formData.id || uuidv4(), 
+          teamId, 
+          rg: finalRg, 
+          name: formData.name!, 
+          categoryId: formData.categoryId!,
+          position: formData.position as Position, 
+          photoUrl: previewUrl || formData.photoUrl, 
           birthDate: formData.birthDate || new Date().toISOString().split('T')[0],
-          responsibleName: formData.responsibleName || '', responsibleEmail: formData.responsibleEmail || '', responsiblePhone: formData.responsiblePhone || '',
-          pendingTransferTeamId: null
+          responsibleName: formData.responsibleName || '', 
+          responsibleEmail: formData.responsibleEmail || '', 
+          responsiblePhone: formData.responsiblePhone || '',
+          pendingTransferTeamId: formData.pendingTransferTeamId || null
         };
-        await saveAthlete(newAthlete); setShowModal(false);
+        await saveAthlete(newAthlete); 
+        setShowModal(false);
         setFormData({ name: '', rg: '', position: Position.MEIO_CAMPO, categoryId: '', responsibleName: '', responsibleEmail: '', responsiblePhone: '', birthDate: '' });
         setPreviewUrl(''); setRefreshKey(prev => prev + 1); setFeedback({ type: 'success', message: 'Dados salvos com sucesso!' });
     } catch (err: any) { setFeedback({ type: 'error', message: 'Erro ao salvar.' }); } finally { setLoading(false); }
+  };
+
+  const handleEditClick = (e: React.MouseEvent, athlete: Athlete) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setFormData(athlete);
+      setPreviewUrl(athlete.photoUrl || '');
+      setShowModal(true);
   };
 
   return (
@@ -203,7 +217,6 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              <input type="text" placeholder="Buscar..." className="pl-9 pr-4 py-2 border border-gray-200 dark:border-darkBorder rounded-xl focus:ring-2 focus:ring-blue-500 w-full bg-white dark:bg-darkInput dark:text-gray-200 text-xs font-bold" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           
-          {/* FILTRO DE ORDENAÇÃO */}
           <div className="relative">
              <select 
                value={sortOrder} 
@@ -253,9 +266,9 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    </div>
                )}
 
-               <div className="absolute top-4 right-4 flex gap-2">
-                   {!isWaitingForRelease && (
-                       <button onClick={() => { setFormData(athlete); setPreviewUrl(athlete.photoUrl || ''); setShowModal(true); }} className="p-2 bg-gray-50 dark:bg-darkInput text-gray-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit size={14}/></button>
+               <div className="absolute top-4 right-4 flex gap-2 z-20">
+                   {!isWaitingForRelease && currentUser && canEditData(currentUser.role) && (
+                       <button onClick={(e) => handleEditClick(e, athlete)} className="p-2 bg-white dark:bg-darkInput text-gray-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-colors shadow-sm border border-gray-100 dark:border-darkBorder"><Edit size={14}/></button>
                    )}
                </div>
 
@@ -327,7 +340,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Posição</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value as Position})}>{Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
-                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Categoria</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Categoria</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.categoryId || ''} onChange={e => setFormData({...formData, categoryId: e.target.value})}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                         </div>
                     </div>
                     <div className="space-y-6">
