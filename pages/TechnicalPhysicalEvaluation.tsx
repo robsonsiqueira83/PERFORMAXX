@@ -254,21 +254,14 @@ const TechnicalPhysicalEvaluation: React.FC = () => {
                                                     ))}
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="Valor bruto (ex: 2.5s)" 
-                                                    value={physInputs[cap]?.val || ''}
-                                                    onChange={e => handlePhysInput(cap, e.target.value)}
-                                                    className="flex-1 bg-white dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-100 rounded-lg p-3 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none"
-                                                />
-                                                <div className="flex gap-1">
+                                            <div className="flex w-full">
+                                                <div className="flex gap-1 w-full">
                                                     {[1,2,3,4,5].map(s => (
                                                         <button 
                                                             key={s} 
-                                                            onClick={() => handlePhysInput(cap, physInputs[cap]?.val || '', s)}
-                                                            className={`w-7 h-10 rounded-lg text-[10px] font-black transition-all
-                                                                ${physInputs[cap]?.score === s ? 'bg-orange-600 dark:bg-orange-700 text-white shadow-md' : 'bg-white dark:bg-darkCard text-gray-300 dark:text-gray-600 border border-gray-200 dark:border-darkBorder'}`}
+                                                            onClick={() => handlePhysInput(cap, '', s)}
+                                                            className={`flex-1 h-10 rounded-lg text-[10px] font-black transition-all
+                                                                ${physInputs[cap]?.score === s ? 'bg-orange-600 dark:bg-orange-700 text-white shadow-md' : 'bg-white dark:bg-darkCard text-gray-300 dark:text-gray-600 border border-gray-200 dark:border-darkBorder hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}
                                                         >
                                                             {s}
                                                         </button>
