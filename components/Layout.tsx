@@ -149,7 +149,14 @@ const Layout: React.FC<LayoutProps> = ({
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-blue-800"><button onClick={onLogout} className="flex items-center justify-center w-full px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-900/20 rounded-xl transition-all"><LogOut className="h-4 w-4 mr-2" /> Sair</button></div>
+        <div className="p-4 border-t border-blue-800 space-y-2">
+            {user.role === UserRole.GLOBAL && viewingAsMasterId !== user.id && (
+                <button onClick={onReturnToGlobal} className="flex items-center justify-center w-full px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all border-b-4 border-purple-800 shadow-md">
+                    <Globe className="h-4 w-4 mr-2" /> Painel Global
+                </button>
+            )}
+            <button onClick={onLogout} className="flex items-center justify-center w-full px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-900/20 rounded-xl transition-all"><LogOut className="h-4 w-4 mr-2" /> Sair</button>
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
