@@ -620,7 +620,7 @@ const AthleteProfile: React.FC = () => {
       {activeTab === 'snapshots' && (
           <div className="space-y-12 animate-fade-in">
               {/* BLOCOS ANALÍTICOS AGREGADOS (Snapshots) */}
-              <div className="grid grid-cols-1 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg"><Target size={20}/></div>
@@ -632,6 +632,26 @@ const AthleteProfile: React.FC = () => {
                               <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
                               <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
                               <Radar name="Histórico" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.6} />
+                          </RadarChart>
+                      </ResponsiveContainer>
+                  </div>
+
+                  {/* REINSERIDO: RADAR PERFIL FÍSICO */}
+                  <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
+                      <div className="flex items-center gap-3 mb-8">
+                          <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Activity size={20}/></div>
+                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Perfil de Capacidades Físicas (Média)</h3>
+                      </div>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarAggregatedPhys}>
+                              <PolarGrid stroke="#334155" />
+                              <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
+                              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                              <Radar name="Histórico" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.6} />
+                              <Tooltip 
+                                cursor={{stroke: '#2563eb', strokeWidth: 1}}
+                                contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                              />
                           </RadarChart>
                       </ResponsiveContainer>
                   </div>
