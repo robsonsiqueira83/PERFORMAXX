@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target, Info } from 'lucide-react';
+import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target, Info, Timer } from 'lucide-react';
 import { 
   getAthletes, getCategories, getTrainingEntries, getTrainingSessions, getEvaluationSessions
 } from '../services/storageService';
@@ -83,11 +83,34 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
   const teamAverages = useMemo(() => {
       const list = selectedCategory === 'all' ? athletesWithMeta : athletesWithMeta.filter(a=>a.categoryId===selectedCategory);
-      if (list.length === 0) return { tech: 0, score: 0 };
+      if (list.length === 0) return { tech: 0, score: 0, tactical: 0 };
+      
       const sumTech = list.reduce((a,b)=>a+b.avgTech, 0);
       const sumScore = list.reduce((a,b)=>a+b.globalScore, 0);
-      return { tech: sumTech / list.length, score: sumScore / list.length };
-  }, [athletesWithMeta, selectedCategory]);
+      
+      // Cálculo do Impacto Tático Médio (Scout RealTime)
+      let totalTactical = 0;
+      let tacticalCount = 0;
+      list.forEach(ath => {
+          const athEntries = entries.filter(e => e.athleteId === ath.id);
+          athEntries.forEach(entry => {
+              try {
+                  const notes = JSON.parse(entry.notes || '{}');
+                  if (notes.avgScore !== undefined) {
+                      totalTactical += notes.avgScore;
+                      tacticalCount++;
+                  }
+              } catch(e) {}
+          });
+      });
+      const avgTactical = tacticalCount > 0 ? totalTactical / tacticalCount : 0;
+
+      return { 
+          tech: sumTech / list.length, 
+          score: sumScore / list.length,
+          tactical: avgTactical
+      };
+  }, [athletesWithMeta, selectedCategory, entries]);
 
   const bestXI = useMemo(() => {
     const selectedIds = new Set<string>();
@@ -128,7 +151,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           {currentUser && canEditData(currentUser.role) && <Link to="/training" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"><ClipboardList size={16}/> Nova Avaliação</Link>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
               <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Score Médio de Capacidade</span></div>
@@ -136,6 +159,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
               <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Domínio de Fundamentos</span></div>
+          </div>
+          <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
+              <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Timer size={100} className="text-blue-600 dark:text-blue-400"/></div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-blue-500"/> Impacto Tático Médio</span><p className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">{teamAverages.tactical.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Eficiência em Partidas</span></div>
           </div>
       </div>
 

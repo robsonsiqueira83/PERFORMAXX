@@ -11,7 +11,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession, TrainingEntry } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck, HelpCircle } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck, HelpCircle, Save } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -272,7 +272,116 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
            </div>
          )})}
       </div>
-      {/* Modais de exclusão/transferência mantidos ... */}
+
+      {/* MODAL CADASTRAR/EDITAR ATLETA */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+           <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
+              <div className="flex justify-between items-center mb-10 border-b border-gray-100 dark:border-darkBorder pb-5">
+                <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3 dark:text-gray-100">
+                    <div className={`p-2 rounded-xl text-white ${formData.id ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
+                        {formData.id ? <Edit size={24}/> : <Plus size={24}/>}
+                    </div>
+                    {formData.id ? 'Editar Cadastro do Atleta' : 'Novo Atleta'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors text-gray-300 hover:text-red-500"><X size={28}/></button>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-12">
+                 <div className="flex flex-col items-center">
+                    <div className="w-32 h-32 bg-gray-50 dark:bg-darkInput rounded-full flex items-center justify-center mb-4 overflow-hidden border-4 border-dashed border-gray-200 dark:border-darkBorder shadow-inner relative">
+                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (previewUrl || formData.photoUrl ? <img src={previewUrl || formData.photoUrl} className="w-full h-full object-cover" /> : <Users size={48} className="text-gray-200 dark:text-gray-700" />)}
+                    </div>
+                    <label className={`cursor-pointer text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 px-5 py-2.5 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all shadow-sm ${uploading ? 'opacity-50' : ''}`}>
+                       {uploading ? 'Processando...' : <><Upload size={14} /> Carregar Foto</>}
+                       <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageChange} />
+                    </label>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-gray-800 dark:text-gray-100">
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-2 pb-1 border-b-2 border-indigo-50 dark:border-darkBorder"><HelpCircle size={14} className="text-indigo-400"/><h4 className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Identificação</h4></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome Completo</label><input required type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nascimento</label><input type="date" required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG / Identificador</label><input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.rg} onChange={e => setFormData({...formData, rg: e.target.value})} required /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Posição</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value as Position})}>{Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Categoria</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        </div>
+                    </div>
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-2 pb-1 border-b-2 border-emerald-50 dark:border-darkBorder"><Target size={14} className="text-emerald-400"/><h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Responsáveis</h4></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome do Responsável</label><input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">E-mail para Contato</label><input type="email" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.responsibleEmail} onChange={e => setFormData({...formData, responsibleEmail: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Telefone WhatsApp</label><input type="tel" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={formData.responsiblePhone} onChange={e => setFormData({...formData, responsiblePhone: e.target.value})} /></div>
+                    </div>
+                 </div>
+                 <div className="flex justify-end pt-6">
+                    <button type="submit" disabled={uploading || loading} className="w-full md:w-auto bg-indigo-600 text-white font-black py-4 px-12 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border-b-4 border-indigo-900">
+                        {loading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {loading ? 'Gravando...' : 'Salvar Atleta'}
+                    </button>
+                 </div>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL SOLICITAR TRANSFERENCIA (DE FORA PARA O MEU CLUBE) */}
+      {showTransferModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400 shadow-inner"><UserCheck size={36} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Solicitar Atleta</h2>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-6 font-bold uppercase tracking-widest leading-relaxed">Insira o RG do atleta para solicitar a transferência dele para sua escola.</p>
+                  <form onSubmit={handleTransferRequest} className="space-y-4">
+                      <input autoFocus type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-5 text-center font-mono font-black text-xl uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" placeholder="RG DO ATLETA" value={transferRg} onChange={e => setTransferRg(e.target.value)} required />
+                      <button type="submit" disabled={transferLoading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95">
+                         {transferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Enviar Solicitação'}
+                      </button>
+                  </form>
+                  <button onClick={() => setShowTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL TRANSFERIR ATLETA (DO MEU CLUBE PARA OUTRO) */}
+      {showSendTransferModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-md p-10 shadow-2xl text-center animate-slide-up">
+                  <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-600 dark:text-amber-400 shadow-inner"><Send size={36} /></div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">Enviar Atleta</h2>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-6 font-bold uppercase tracking-widest leading-relaxed">Transfira um atleta da sua escola para outro clube informando o RG e o ID do Clube receptor.</p>
+                  <form onSubmit={handleSendTransfer} className="space-y-4 text-left">
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG do seu Atleta</label>
+                        <input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-4 font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500" placeholder="RG" value={transferOutRg} onChange={e => setTransferOutRg(e.target.value)} required />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">ID do Clube Destino</label>
+                        <input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder dark:text-gray-200 rounded-2xl p-4 font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500" placeholder="ID DO CLUBE" value={transferOutTeamId} onChange={e => setTransferOutTeamId(e.target.value)} required />
+                      </div>
+                      <button type="submit" disabled={sendTransferLoading} className="w-full bg-amber-600 text-white font-black py-4 rounded-2xl hover:bg-amber-700 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[11px] active:scale-95 mt-4">
+                         {sendTransferLoading ? <Loader2 className="animate-spin" size={18}/> : 'Realizar Transferência'}
+                      </button>
+                  </form>
+                  <button onClick={() => setShowSendTransferModal(false)} className="mt-8 text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-600 uppercase tracking-widest">Cancelar</button>
+              </div>
+          </div>
+      )}
+
+      {/* FEEDBACK POPUP */}
+      {feedback && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+             <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-indigo-50">
+                 <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner ${feedback.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {feedback.type === 'success' ? <CheckCircle size={40} /> : <AlertCircle size={40} />}
+                 </div>
+                 <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">{feedback.type === 'success' ? 'Sucesso!' : 'Atenção'}</h3>
+                 <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed mb-8">{feedback.message}</p>
+                 <button onClick={() => setFeedback(null)} className={`text-white font-black py-4 px-12 rounded-2xl transition-all w-full shadow-lg uppercase tracking-widest text-[11px] active:scale-95 ${feedback.type === 'success' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-red-600 hover:bg-red-700'}`}>Entendido</button>
+             </div>
+         </div>
+      )}
     </div>
   );
 };
