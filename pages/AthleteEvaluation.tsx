@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -53,34 +54,41 @@ const AthleteEvaluation: React.FC = () => {
   useEffect(() => {
      const load = async () => {
          setLoading(true);
-         const [allAthletes, allEntries, allSessions] = await Promise.all([
-             getAthletes(),
-             getTrainingEntries(),
-             getTrainingSessions(),
-         ]);
-         
-         const foundAthlete = allAthletes.find(a => a.id === id);
-         setAthlete(foundAthlete || null);
+         try {
+             const [allAthletes, allEntries, allSessions] = await Promise.all([
+                 getAthletes(),
+                 getTrainingEntries(),
+                 getTrainingSessions(),
+             ]);
+             
+             const foundAthlete = allAthletes.find(a => a.id === id);
+             setAthlete(foundAthlete || null);
 
-         if (entryId) {
-             const foundEntry = allEntries.find(e => e.id === entryId);
-             if (foundEntry) {
-                 setEntry(foundEntry);
-                 const session = allSessions.find(s => s.id === foundEntry.sessionId);
-                 if (session) setTrainingDate(session.date);
-                 
-                 // Extrair eventos do JSON nas notas (padrão RealTimeEvaluation)
-                 try {
-                    const parsed = JSON.parse(foundEntry.notes || '{}');
-                    if (parsed.events) {
-                        setEvents(parsed.events);
-                    }
-                 } catch (e) {
-                     setEvents([]);
+             if (entryId) {
+                 const foundEntry = allEntries.find(e => e.id === entryId);
+                 if (foundEntry) {
+                     setEntry(foundEntry);
+                     const session = allSessions.find(s => s.id === foundEntry.sessionId);
+                     if (session) setTrainingDate(session.date);
+                     
+                     // Extrair eventos do JSON nas notas
+                     try {
+                        // Ensure it's a string before parsing or assume it's object
+                        const noteStr = typeof foundEntry.notes === 'string' ? foundEntry.notes : JSON.stringify(foundEntry.notes || {});
+                        const parsed = JSON.parse(noteStr);
+                        if (parsed.events) {
+                            setEvents(parsed.events);
+                        }
+                     } catch (e) {
+                         setEvents([]);
+                     }
                  }
              }
+         } catch (err) {
+             console.error("Erro ao carregar avaliação:", err);
+         } finally {
+             setLoading(false);
          }
-         setLoading(false);
      };
      load();
   }, [id, entryId]);
@@ -108,19 +116,16 @@ const AthleteEvaluation: React.FC = () => {
       };
   }, [events]);
 
-  // --- MOTOR DE DATASET (REATIVO - CAMADAS 2 E 3) ---
   const filteredDataset = useMemo(() => {
       let ds = events;
       if (filterPhase !== 'all') ds = ds.filter(e => e.phase === filterPhase);
       if (filterResult !== 'all') ds = ds.filter(e => e.result === filterResult);
       if (selectedTimePoint !== null) {
-          // Filtro por bloco de 5 minutos se clicado na timeline
           ds = ds.filter(e => e.seconds >= selectedTimePoint && e.seconds < selectedTimePoint + 300);
       }
       return ds;
   }, [events, filterPhase, filterResult, selectedTimePoint]);
 
-  // Ranking de Impacto Reativo (Lateral Camada 2)
   const impactRanking = useMemo(() => {
       const grouped = filteredDataset.reduce((acc: any, curr) => {
           if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
@@ -136,13 +141,10 @@ const AthleteEvaluation: React.FC = () => {
       };
   }, [filteredDataset]);
 
-  // Gráfico Dominante (Centro Camada 2)
   const dominantChartData = useMemo(() => {
       if (filterPhase === 'all') {
-          // Visão Geral: Barras por Fase
           return globalStats?.radarData.map(d => ({ name: d.phase, score: d.A }));
       } else {
-          // Visão Detalhada: Ações da Fase Selecionada
           const actions = filteredDataset.reduce((acc: any, curr) => {
               if (!acc[curr.action]) acc[curr.action] = { name: curr.action, score: 0, count: 0 };
               acc[curr.action].score += curr.eventScore;
@@ -153,7 +155,6 @@ const AthleteEvaluation: React.FC = () => {
       }
   }, [filterPhase, filteredDataset, globalStats]);
 
-  // Timeline (Base Camada 3)
   const timelineData = useMemo(() => {
       const blocks: any[] = [];
       const maxSeconds = events.length > 0 ? Math.max(...events.map(e => e.seconds)) : 0;
@@ -165,6 +166,15 @@ const AthleteEvaluation: React.FC = () => {
       return blocks;
   }, [events]);
 
+  const getNotesContent = () => {
+      if (!entry?.notes) return 'Nenhuma observação registrada.';
+      // Safe conversion for rendering
+      if (typeof entry.notes !== 'string') return JSON.stringify(entry.notes);
+      return entry.notes;
+  };
+
+  const notesStr = getNotesContent();
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!athlete) return <div className="p-8 text-center">Atleta não encontrado.</div>;
 
@@ -174,7 +184,6 @@ const AthleteEvaluation: React.FC = () => {
     <div className="min-h-screen bg-gray-50 pb-20">
         <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
             
-            {/* Bloco de Dados do Atleta (Mantido conforme solicitado) */}
             <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                  <div className="flex items-center gap-4">
                      <button onClick={() => navigate(`/athletes/${athlete.id}`)} className="text-gray-400 hover:text-blue-600 transition-colors">
@@ -188,11 +197,7 @@ const AthleteEvaluation: React.FC = () => {
                          </div>
                      </div>
                  </div>
-                 <div className="flex items-center gap-2">
-                    <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-blue-200">
-                        <Save size={16} /> Salvar Alterações
-                    </button>
-                 </div>
+                 {/* Remove Save button from view mode to prevent confusion unless editing is implemented */}
             </div>
 
             {/* CAMADA 1 — PERFIL TÁTICO (FIXO) */}
@@ -230,7 +235,6 @@ const AthleteEvaluation: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Filtros Ativos (Invisíveis/Motor) */}
                 <div className="bg-blue-900 text-white p-6 rounded-2xl shadow-xl flex flex-col justify-between">
                     <h3 className="text-xs font-black text-blue-300 uppercase tracking-widest mb-4 flex items-center gap-2"><Filter size={14}/> Filtros de Contexto</h3>
                     <div className="space-y-3">
@@ -261,10 +265,6 @@ const AthleteEvaluation: React.FC = () => {
                         >
                             Limpar todos os filtros
                         </button>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-blue-800 flex items-center gap-2">
-                        <Info size={12} className="text-blue-400" />
-                        <span className="text-[9px] text-blue-400 font-medium uppercase">Datasets com menos de 5 eventos são ocultados.</span>
                     </div>
                 </div>
             </div>
@@ -302,7 +302,6 @@ const AthleteEvaluation: React.FC = () => {
                         <div className="h-[250px] flex flex-col items-center justify-center text-gray-400 gap-2">
                             <AlertCircle size={32} className="opacity-20" />
                             <p className="text-sm font-bold uppercase tracking-widest opacity-50">Volume Insuficiente para Análise</p>
-                            <p className="text-[10px] text-center max-w-xs">Filtros muito restritos impedem uma leitura estatística confiável. Tente ampliar o contexto.</p>
                         </div>
                     )}
                 </div>
@@ -385,10 +384,11 @@ const AthleteEvaluation: React.FC = () => {
                                 <Tooltip 
                                     cursor={{stroke: '#2563eb', strokeWidth: 2}}
                                     content={({ active, payload }) => {
-                                        if (active && payload && payload.length) {
+                                        if (active && payload && payload.length > 0) {
+                                            const val = Number(payload[0].value);
                                             return (
                                                 <div className="bg-gray-900 text-white p-2 rounded-lg text-[10px] font-bold shadow-xl border border-gray-700">
-                                                    <p>{payload[0].payload.time}: Impacto {payload[0].value?.toFixed(2)}</p>
+                                                    <p>{payload[0].payload.time}: Impacto {!isNaN(val) ? val.toFixed(2) : '0.00'}</p>
                                                     <p className="text-blue-400 mt-1">Clique para filtrar este período</p>
                                                 </div>
                                             );
@@ -421,13 +421,13 @@ const AthleteEvaluation: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                 <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><FileText size={14}/> Observações e Notas Técnicas</h3>
                 <div className="prose prose-sm max-w-none text-gray-600 italic">
-                    {entry?.notes?.startsWith('[Log') ? (
+                    {notesStr.startsWith('[Log') ? (
                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-3">
                             <Info className="text-blue-500 shrink-0" size={20} />
                             <p className="text-blue-700 text-sm font-medium">Os dados desta sessão foram capturados através da ferramenta de <span className="font-bold underline">Análise em Tempo Real</span>. Os scores e mapas de calor foram gerados automaticamente pelo algoritmo de impacto.</p>
                         </div>
                     ) : (
-                        <p>{entry?.notes || 'Nenhuma observação registrada para esta sessão.'}</p>
+                        <div dangerouslySetInnerHTML={{ __html: notesStr }} />
                     )}
                 </div>
             </div>

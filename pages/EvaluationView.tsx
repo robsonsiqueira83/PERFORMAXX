@@ -114,14 +114,20 @@ const EvaluationView: React.FC = () => {
     }, [techDetails]);
 
     const radarPhysData = useMemo(() => {
-        const groups = ['Força', 'Potência', 'Velocidade', 'Resistência', 'Mobilidade / Estabilidade'];
+        const groups = [
+            { name: 'Força', tests: ['Geral', 'Específica da posição'] },
+            { name: 'Potência', tests: ['Aceleração', 'Mudança de direção'] },
+            { name: 'Velocidade', tests: ['Arranque', 'Velocidade máxima'] },
+            { name: 'Resistência', tests: ['Capacidade aeróbia', 'Repetição de esforços'] },
+            { name: 'Mobilidade / Estabilidade', tests: ['Quadril', 'Tornozelo', 'Core'] }
+        ];
         return groups.map(g => {
-            const items = physDetails.filter(p => p.capacidade.includes(g));
-            const score = items.length > 0 ? items.reduce((a,b)=>a+b.scoreNormalizado, 0) / items.length : 0;
-            const res: any = { subject: g, A: score, fullMark: 100 };
+            const items = physDetails.filter(p => g.tests.includes(p.capacidade));
+            const score = items.length > 0 ? items.reduce((a,b)=>a + (Number(b.scoreNormalizado) || 0), 0) / items.length : 0;
+            const res: any = { subject: g.name, A: score, fullMark: 100 };
             if (comparisonSessionId) {
-                const compItems = compPhysDetails.filter(p => p.capacidade.includes(g));
-                res.B = compItems.length > 0 ? compItems.reduce((a,b)=>a+b.scoreNormalizado, 0) / compItems.length : 0;
+                const compItems = compPhysDetails.filter(p => g.tests.includes(p.capacidade));
+                res.B = compItems.length > 0 ? compItems.reduce((a,b)=>a + (Number(b.scoreNormalizado) || 0), 0) / compItems.length : 0;
             }
             return res;
         });
