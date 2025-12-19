@@ -185,8 +185,9 @@ export const getTrainingEntries = async (): Promise<TrainingEntry[]> => {
       technical: e.technical,
       physical: e.physical,
       tactical: e.tactical,
-      heatmap_points: e.heatmap_points,
-      notes: e.notes
+      heatmapPoints: e.heatmap_points || [], 
+      // CRITICAL FIX: Ensure notes is a string. If it's a JSON object/array, stringify it.
+      notes: typeof e.notes === 'object' && e.notes !== null ? JSON.stringify(e.notes) : (e.notes || '')
   }));
 };
 
@@ -215,7 +216,10 @@ export const getEvaluationSessions = async (athleteId?: string): Promise<Evaluat
   if (error) return [];
   return data.map((s: any) => ({
     id: s.id, athleteId: s.athlete_id, date: s.date, type: s.type, evaluatorId: s.evaluator_id,
-    scoreTecnico: Number(s.score_tecnico), scoreFisico: Number(s.score_fisico), notes: s.notes, createdAt: s.created_at
+    scoreTecnico: Number(s.score_tecnico), scoreFisico: Number(s.score_fisico), 
+    // CRITICAL FIX: Ensure notes is a string here too
+    notes: typeof s.notes === 'object' && s.notes !== null ? JSON.stringify(s.notes) : (s.notes || ''), 
+    createdAt: s.created_at
   }));
 };
 
@@ -228,7 +232,12 @@ export const getTechnicalEvaluations = async (sessionId: string): Promise<Techni
 export const getPhysicalEvaluations = async (sessionId: string): Promise<PhysicalEvaluation[]> => {
     const { data, error } = await supabase.from('physical_evaluations').select('*').eq('session_id', sessionId);
     if (error) return [];
-    return data.map((p: any) => ({ sessionId: p.session_id, capacidade: p.capacidade, valorBruto: p.valor_bruto, scoreNormalizado: p.score_normalizado }));
+    return data.map((p: any) => ({ 
+        sessionId: p.session_id, 
+        capacidade: (p.capacidade || '').trim(), // Trim to ensure matching
+        valorBruto: p.valor_bruto, 
+        scoreNormalizado: Number(p.score_normalizado) 
+    }));
 };
 
 export const saveEvaluationSession = async (session: EvaluationSession, technicals: TechnicalEvaluation[], physicals: PhysicalEvaluation[]) => {
