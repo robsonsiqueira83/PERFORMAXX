@@ -18,11 +18,11 @@ const TECH_CONFIG = [
 ];
 
 const PHYS_CONFIG = [
-    { label: 'Força', key: 'forca' },
-    { label: 'Agilidade', key: 'agilidade' },
-    { label: 'Velocidade', key: 'velocidade' },
-    { label: 'Resistência', key: 'resistencia' },
-    { label: 'Coordenação', key: 'coordenacao' }
+    { cat: 'Força', caps: ['Geral', 'Específica da posição'] },
+    { cat: 'Potência', caps: ['Aceleração', 'Mudança de direção'] },
+    { cat: 'Velocidade', caps: ['Arranque', 'Velocidade máxima'] },
+    { cat: 'Resistência', caps: ['Capacidade aeróbia', 'Repetição de esforços'] },
+    { cat: 'Mobilidade / Estabilidade', caps: ['Quadril', 'Tornozelo', 'Core'] }
 ];
 
 interface TrainingProps {
@@ -106,6 +106,13 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
 
     const finalAvgTech = avgTechScore || 5;
 
+    // Helper para calcular média de array de chaves
+    const getPhysAvg = (keys: string[]) => {
+        const validScores = keys.map(k => physScores[k]).filter(v => v !== undefined);
+        if (validScores.length === 0) return 5; // Default
+        return validScores.reduce((a, b) => a + b, 0) / validScores.length;
+    };
+
     const entry: TrainingEntry = {
       id: uuidv4(), sessionId: sessionIdToUse, athleteId: selectedAthlete.id,
       technical: {
@@ -119,14 +126,15 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
         desarme: techScores['1x1 Defensivo|Desarme'] || finalAvgTech,
         interceptacao: techScores['1x1 Defensivo|Postura corporal'] || finalAvgTech
       },
+      // Mapeamento das novas categorias detalhadas para o schema antigo do banco
       physical: { 
-        velocidade: physScores['velocidade'] || 5, 
-        agilidade: physScores['agilidade'] || 5, 
-        resistencia: physScores['resistencia'] || 5, 
-        forca: physScores['forca'] || 5, 
-        coordenacao: physScores['coordenacao'] || 5, 
-        mobilidade: 5, 
-        estabilidade: 5 
+        velocidade: getPhysAvg(['Arranque', 'Velocidade máxima']), 
+        agilidade: getPhysAvg(['Aceleração', 'Mudança de direção']), // Potência -> Agilidade
+        resistencia: getPhysAvg(['Capacidade aeróbia', 'Repetição de esforços']), 
+        forca: getPhysAvg(['Geral', 'Específica da posição']), 
+        coordenacao: getPhysAvg(['Aceleração', 'Mudança de direção', 'Core']), 
+        mobilidade: getPhysAvg(['Quadril', 'Tornozelo']), 
+        estabilidade: getPhysAvg(['Core']) 
       },
       tactical: {
         def_posicionamento: finalAvgTech, def_pressao: finalAvgTech, def_cobertura: finalAvgTech, def_fechamento: finalAvgTech, def_temporizacao: finalAvgTech, def_desarme_tatico: finalAvgTech, def_reacao: finalAvgTech,
@@ -195,7 +203,8 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       </div>
                       {notification && <div className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest animate-pulse shadow-sm border border-emerald-200 dark:border-emerald-800">{notification}</div>}
                   </div>
-                  {/* ... Restante do form mantido igual ... */}
+                  
+                  {/* Fundamentos Técnicos */}
                   <div className="mb-10">
                       <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-blue-600 pl-3">
                           <Target size={18} className="text-blue-600"/> Fundamentos Técnicos (1-5)
@@ -226,20 +235,39 @@ const Training: React.FC<TrainingProps> = ({ teamId }) => {
                       </div>
                   </div>
 
+                  {/* Condição Física & Laboratorial (NOVO FORMATO DETALHADO) */}
                   <div className="mb-10">
                       <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-4 border-emerald-500 pl-3">
-                          <Activity size={18} className="text-emerald-500"/> Condição Física (1-5)
+                          <Activity size={18} className="text-emerald-500"/> Condição Física & Laboratorial (1-5)
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {PHYS_CONFIG.map((group, idx) => (
-                              <div key={idx} className="bg-gray-50/50 dark:bg-darkInput/50 p-5 rounded-2xl border border-gray-100 dark:border-darkBorder hover:border-emerald-100 dark:hover:border-emerald-900 transition-colors">
-                                  <div className="flex justify-between items-center mb-4">
-                                      <span className="text-[11px] font-black text-emerald-900 dark:text-emerald-400 uppercase tracking-widest">{group.label}</span>
-                                      <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-white dark:bg-darkInput px-1.5 rounded border border-gray-100 dark:border-darkBorder shadow-sm">{physScores[group.key] || '-'}</span>
-                                  </div>
-                                  <div className="grid grid-cols-5 gap-1">
-                                      {[1, 2, 3, 4, 5].map(v => (
-                                          <button key={v} onClick={() => handlePhysScoreClick(group.key, v)} className={`h-8 rounded-lg text-[10px] font-black transition-all border ${physScores[group.key] === v ? 'bg-emerald-500 text-white border-emerald-600 shadow-md scale-95' : 'bg-white dark:bg-darkInput text-gray-300 dark:text-gray-600 border-gray-100 dark:border-darkBorder hover:border-emerald-200'}`}>{v}</button>
+                              <div key={idx} className="bg-white dark:bg-darkCard p-6 rounded-2xl border border-gray-200 dark:border-darkBorder shadow-sm transition-colors">
+                                  <h4 className="text-[11px] font-black text-emerald-900 dark:text-emerald-400 uppercase tracking-widest mb-5 flex items-center gap-2">
+                                      <div className="w-1.5 h-3 bg-emerald-600 dark:bg-emerald-500 rounded-full"></div> {group.cat}
+                                  </h4>
+                                  <div className="space-y-5">
+                                      {group.caps.map(cap => (
+                                          <div key={cap} className="space-y-3 p-4 bg-gray-50/50 dark:bg-darkInput/50 rounded-xl border border-gray-100 dark:border-darkBorder">
+                                              <div className="flex justify-between items-center">
+                                                  <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{cap}</span>
+                                                  <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-white dark:bg-darkInput px-1.5 rounded border border-gray-100 dark:border-darkBorder shadow-sm">{physScores[cap] || '-'}</span>
+                                              </div>
+                                              <div className="flex w-full">
+                                                  <div className="flex gap-1 w-full">
+                                                      {[1,2,3,4,5].map(s => (
+                                                          <button 
+                                                              key={s} 
+                                                              onClick={() => handlePhysScoreClick(cap, s)}
+                                                              className={`flex-1 h-10 rounded-lg text-[10px] font-black transition-all
+                                                                  ${physScores[cap] === s ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' : 'bg-white dark:bg-darkCard text-gray-300 dark:text-gray-600 border border-gray-200 dark:border-darkBorder hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
+                                                          >
+                                                              {s}
+                                                          </button>
+                                                      ))}
+                                                  </div>
+                                              </div>
+                                          </div>
                                       ))}
                                   </div>
                               </div>

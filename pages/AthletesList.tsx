@@ -11,7 +11,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, getCalculatedCategory, User, canEditData, Team, EvaluationSession, TrainingEntry } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck, HelpCircle, Save } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, ArrowRightLeft, CheckCircle, AlertCircle, Target, XCircle, Info, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -27,6 +27,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('all');
   const [filterPos, setFilterPos] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'alpha' | 'score'>('alpha');
   
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -96,8 +97,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       let list = athletesWithSMC.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
       if (filterCat !== 'all') list = list.filter(a => a.categoryId === filterCat);
       if (filterPos !== 'all') list = list.filter(a => a.position === filterPos);
-      return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [athletesWithSMC, search, filterCat, filterPos]);
+      
+      return list.sort((a, b) => {
+          if (sortOrder === 'score') {
+              return b.smc - a.smc; // Decrescente por score
+          }
+          return a.name.localeCompare(b.name); // Alfabética
+      });
+  }, [athletesWithSMC, search, filterCat, filterPos, sortOrder]);
 
   const getSMCReading = (val: number) => {
       if (val <= 3.0) return "Capacidade insuficiente";
@@ -195,6 +202,20 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
              <input type="text" placeholder="Buscar..." className="pl-9 pr-4 py-2 border border-gray-200 dark:border-darkBorder rounded-xl focus:ring-2 focus:ring-blue-500 w-full bg-white dark:bg-darkInput dark:text-gray-200 text-xs font-bold" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          
+          {/* FILTRO DE ORDENAÇÃO */}
+          <div className="relative">
+             <select 
+               value={sortOrder} 
+               onChange={e => setSortOrder(e.target.value as 'alpha' | 'score')} 
+               className="pl-8 pr-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+             >
+                 <option value="alpha">Ordem Alfabética</option>
+                 <option value="score">Ranking SMC</option>
+             </select>
+             <ArrowDownWideNarrow className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+          </div>
+
           <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500">
               <option value="all">Todas Categorias</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
