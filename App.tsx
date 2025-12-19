@@ -117,8 +117,8 @@ const App: React.FC = () => {
                <Routes>
                   <Route path="/" element={<Dashboard teamId={selectedTeamId} />} />
                   <Route path="/athletes" element={<AthletesList teamId={selectedTeamId} />} />
+                  <Route path="/athletes/:id/evaluation/:entryId" element={<AthleteEvaluation />} />
                   <Route path="/athletes/:id" element={<AthleteProfile />} />
-                  <Route path="/athletes/:id/evaluation" element={<AthleteEvaluation />} />
                   <Route path="/training" element={<Training teamId={selectedTeamId} />} />
                   <Route path="/admin" element={<Admin userRole={user.role} currentTeamId={selectedTeamId} />} />
                   {(user.role === UserRole.MASTER || user.role === UserRole.GLOBAL) && <Route path="/users" element={<UserManagement />} />}
