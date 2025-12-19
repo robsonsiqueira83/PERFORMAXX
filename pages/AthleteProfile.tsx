@@ -336,7 +336,38 @@ const AthleteProfile: React.FC = () => {
     finally { setLoading(false); setSelectedEntryId(null); }
   };
 
-  // ... (Restante da lógica de datas e renderCalendar mantida) ...
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setUploading(true);
+          try {
+              const url = await processImageUpload(file);
+              setEditFormData(prev => ({ ...prev, photoUrl: url }));
+          } catch (err) { 
+              setModalType('error'); 
+              setModalMessage("Erro no upload."); 
+          } 
+          finally { setUploading(false); }
+      }
+  };
+
+  const handleSaveProfile = async () => {
+      if (!editFormData.name || !athlete) return;
+      setLoading(true);
+      try {
+          const updatedAthlete = { ...athlete, ...editFormData };
+          await saveAthlete(updatedAthlete);
+          setAthlete(updatedAthlete);
+          setModalType('success'); 
+          setModalMessage('Perfil atualizado!');
+          setRefreshKey(prev => prev + 1);
+      } catch (err: any) { 
+          setModalType('error'); 
+          setModalMessage(err.message); 
+      }
+      finally { setLoading(false); setModalType('none'); }
+  };
+
   const activityDates = useMemo(() => {
     const map = new Map<string, 'realtime' | 'snapshot' | 'both'>();
     sessions.filter(s => entries.some(e => e.sessionId === s.id)).forEach(s => map.set(s.date, 'realtime'));
@@ -416,8 +447,8 @@ const AthleteProfile: React.FC = () => {
                        <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-[10px] px-2 py-1 rounded font-black uppercase tracking-widest">{categories.find(c=>c.id===athlete.categoryId)?.name || '--'}</span>
                     </div>
                     <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
-                        <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
                         <button onClick={() => navigate(`/athletes/${id}/tech-phys-eval`)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><ClipboardCheck size={16} /> Iniciar Avaliação</button>
+                        <button onClick={() => navigate(`/athletes/${id}/realtime`)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all shadow-md active:scale-95 uppercase tracking-widest"><Timer size={16} /> Analisar Jogo</button>
                     </div>
                   </div>
               </div>
@@ -473,9 +504,9 @@ const AthleteProfile: React.FC = () => {
           </button>
       </div>
 
+      {/* TABS DE CONTEÚDO (Realtime e Snapshots) - Mantidos sem alteração exceto renderização */}
       {activeTab === 'realtime' && (
           <div className="space-y-8 animate-fade-in">
-              {/* ... (Conteúdo do RealTime mantido conforme original) ... */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col md:flex-row items-center gap-10">
                       <div className="w-full md:w-1/2 h-[280px]">
@@ -519,11 +550,8 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
               </div>
-              {/* ... Demais blocos RealTime (BarChart, Heatmap, Timeline) omitidos por brevidade, mantendo os originais ... */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  {/* ... Bar Chart ... */}
                   <div className="lg:col-span-3 bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm relative min-h-[400px]">
-                      {/* ... chart content ... */}
                       <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={dominantChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
@@ -538,7 +566,6 @@ const AthleteProfile: React.FC = () => {
                           </BarChart>
                       </ResponsiveContainer>
                   </div>
-                  {/* ... Ranking List ... */}
                   <div className="bg-white dark:bg-darkCard rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden flex flex-col">
                       <div className="p-5 border-b border-gray-50 dark:border-darkBorder bg-gray-50/50 dark:bg-darkInput/30">
                           <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14}/> Top Impacto</h3>
@@ -570,11 +597,9 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* ... Heatmap ... */}
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col">
                       <HeatmapField perspective points={heatmapPoints} readOnly className="max-w-md w-full" label="Mapa de Ocupação e Ação" />
                   </div>
-                  {/* ... Timeline ... */}
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col h-full">
                       <div className="flex-1 min-h-[250px]">
                           <ResponsiveContainer width="100%" height="100%">
@@ -588,7 +613,6 @@ const AthleteProfile: React.FC = () => {
                       </div>
                   </div>
               </div>
-              {/* ... History ... */}
               <div className="bg-white dark:bg-darkCard rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden transition-colors">
                   <div className="divide-y divide-gray-50 dark:divide-darkBorder">
                       {realtimeHistory.length > 0 ? realtimeHistory.map(entry => (
@@ -619,7 +643,6 @@ const AthleteProfile: React.FC = () => {
 
       {activeTab === 'snapshots' && (
           <div className="space-y-12 animate-fade-in">
-              {/* BLOCOS ANALÍTICOS AGREGADOS (Snapshots) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
                       <div className="flex items-center gap-3 mb-8">
@@ -636,7 +659,6 @@ const AthleteProfile: React.FC = () => {
                       </ResponsiveContainer>
                   </div>
 
-                  {/* REINSERIDO: RADAR PERFIL FÍSICO */}
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Activity size={20}/></div>
@@ -677,7 +699,6 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
 
-              {/* HISTÓRICO DE AVALIAÇÕES (Snapshots) */}
               <div className="bg-white dark:bg-darkCard rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm overflow-hidden transition-colors">
                   <div className="p-8 border-b border-gray-100 dark:border-darkBorder flex justify-between items-center bg-gray-50/50 dark:bg-darkInput">
                       <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações Registradas</h3>
@@ -707,6 +728,57 @@ const AthleteProfile: React.FC = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO DO ATLETA (RESTAURADO) */}
+      {modalType === 'edit' && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+           <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-4xl p-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
+              <div className="flex justify-between items-center mb-10 border-b border-gray-100 dark:border-darkBorder pb-5">
+                <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3 dark:text-gray-100">
+                    <div className="p-2 rounded-xl text-white bg-indigo-600"><Edit size={24}/></div>
+                    Editar Cadastro do Atleta
+                </h3>
+                <button onClick={() => setModalType('none')} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors text-gray-300 hover:text-red-500"><X size={28}/></button>
+              </div>
+              <div className="space-y-12">
+                 <div className="flex flex-col items-center">
+                    <div className="w-32 h-32 bg-gray-50 dark:bg-darkInput rounded-full flex items-center justify-center mb-4 overflow-hidden border-4 border-dashed border-gray-200 dark:border-darkBorder shadow-inner relative">
+                       {uploading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : (editFormData.photoUrl ? <img src={editFormData.photoUrl} className="w-full h-full object-cover" /> : <Users size={48} className="text-gray-200 dark:text-gray-700" />)}
+                    </div>
+                    <label className={`cursor-pointer text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 px-5 py-2.5 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all shadow-sm ${uploading ? 'opacity-50' : ''}`}>
+                       {uploading ? 'Processando...' : <><Upload size={14} /> Alterar Foto</>}
+                       <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />
+                    </label>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-gray-800 dark:text-gray-100">
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-2 pb-1 border-b-2 border-indigo-50 dark:border-darkBorder"><HelpCircle size={14} className="text-indigo-400"/><h4 className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Identificação</h4></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome Completo</label><input required type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nascimento</label><input type="date" required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.birthDate || ''} onChange={e => setEditFormData({...editFormData, birthDate: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">RG / Identificador</label><input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.rg || ''} onChange={e => setEditFormData({...editFormData, rg: e.target.value})} required /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Posição</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.position} onChange={e => setEditFormData({...editFormData, position: e.target.value as Position})}>{Object.values(Position).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Categoria</label><select required className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.categoryId || ''} onChange={e => setEditFormData({...editFormData, categoryId: e.target.value})}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        </div>
+                    </div>
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-2 pb-1 border-b-2 border-emerald-50 dark:border-darkBorder"><Target size={14} className="text-emerald-400"/><h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Responsáveis</h4></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nome do Responsável</label><input type="text" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" value={editFormData.responsibleName || ''} onChange={e => setEditFormData({...editFormData, responsibleName: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">E-mail para Contato</label><input type="email" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.responsibleEmail || ''} onChange={e => setEditFormData({...editFormData, responsibleEmail: e.target.value})} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Telefone WhatsApp</label><input type="tel" className="w-full bg-gray-50 dark:bg-darkInput border border-gray-100 dark:border-darkBorder rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={editFormData.responsiblePhone || ''} onChange={e => setEditFormData({...editFormData, responsiblePhone: e.target.value})} /></div>
+                    </div>
+                 </div>
+                 <div className="flex justify-end pt-6">
+                    <button onClick={handleSaveProfile} disabled={uploading || loading} className="w-full md:w-auto bg-indigo-600 text-white font-black py-4 px-12 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border-b-4 border-indigo-900">
+                        {loading ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {loading ? 'Gravando...' : 'Salvar Alterações'}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
       )}
 
       {/* MODAIS - Mantidos conforme original */}
