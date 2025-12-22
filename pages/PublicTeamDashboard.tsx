@@ -292,7 +292,7 @@ const PublicTeamDashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* CAMPO - SELEÇÃO IDEAL */}
-            <div className="lg:col-span-2 bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden h-full">
+            <div className="lg:col-span-2 bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden h-full flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Ideal (4-3-3)</h3>
                     <div className="relative">
@@ -308,11 +308,20 @@ const PublicTeamDashboard: React.FC = () => {
                         <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                     </div>
                 </div>
-                <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
+                <div className="relative w-full aspect-[16/11] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
                     <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
                     <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
                     <div className="absolute top-1/2 left-1/2 w-32 h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                    
+                    {/* Áreas Esquerda */}
+                    <div className="absolute top-1/2 left-4 w-32 h-64 border-2 border-white/40 border-l-0 transform -translate-y-1/2 pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-4 w-12 h-32 border-2 border-white/40 border-l-0 transform -translate-y-1/2 pointer-events-none"></div>
+
+                    {/* Áreas Direita */}
+                    <div className="absolute top-1/2 right-4 w-32 h-64 border-2 border-white/40 border-r-0 transform -translate-y-1/2 pointer-events-none"></div>
+                    <div className="absolute top-1/2 right-4 w-12 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2 pointer-events-none"></div>
+
                     {bestXI.map((pos, idx) => (
                         <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
                             {pos.player ? (
@@ -339,7 +348,7 @@ const PublicTeamDashboard: React.FC = () => {
             </div>
 
             {/* LISTA DE ATLETAS (NOVO BLOCO) */}
-            <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder flex flex-col h-[500px] lg:h-auto">
+            <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder flex flex-col h-[600px]">
                 <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Users size={18} className="text-indigo-500"/> Elenco
                 </h3>
