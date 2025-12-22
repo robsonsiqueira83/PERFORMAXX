@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { getTeams, getAthletes, getCategories, getTrainingSessions, getTrainingEntries, getEvaluationSessions } from '../services/storageService';
 import { Team, Athlete, Category, TrainingSession, TrainingEntry, Position, getCalculatedCategory, EvaluationSession } from '../types';
 import PublicHeader from '../components/PublicHeader';
-import { Loader2, Filter, Shirt, Trophy, Users, Target, Activity, Zap, TrendingUp, ChevronDown, BarChart3, Scale, Layers, Info, Timer } from 'lucide-react';
+import { Loader2, Filter, Shirt, Trophy, Users, Target, Activity, Zap, TrendingUp, ChevronDown, BarChart3, Scale, Layers, Info, Timer, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell, ReferenceLine } from 'recharts';
 
 const PublicTeamDashboard: React.FC = () => {
@@ -128,6 +128,14 @@ const PublicTeamDashboard: React.FC = () => {
       return { avgSMC, distribution, balanceData, sectorData, consistency, validCount: validAthletes.length };
   }, [athletesWithMeta, selectedCategory]);
 
+  const getSMCReading = (val: number) => {
+      if (val <= 3.0) return "Capacidade insuficiente";
+      if (val <= 5.0) return "Em desenvolvimento";
+      if (val <= 6.5) return "Funcional para composição";
+      if (val <= 8.0) return "Boa prontidão competitiva";
+      return "Alta prontidão para jogos";
+  };
+
   const teamAverages = useMemo(() => {
       const list = selectedCategory === 'all' ? athletesWithMeta : athletesWithMeta.filter(a=>a.categoryId===selectedCategory);
       if (list.length === 0) return { tech: 0, score: 0, tactical: 0 };
@@ -175,14 +183,6 @@ const PublicTeamDashboard: React.FC = () => {
     ];
   }, [athletesWithMeta, selectedCategory, bestXICriteria]);
 
-  const getSMCReading = (val: number) => {
-      if (val <= 3.0) return "Capacidade insuficiente";
-      if (val <= 5.0) return "Em desenvolvimento";
-      if (val <= 6.5) return "Funcional para composição";
-      if (val <= 8.0) return "Boa prontidão competitiva";
-      return "Alta prontidão para jogos";
-  };
-
   const getCriterionLabel = (c: string) => {
       if (c === 'tech') return 'Média Técnica';
       if (c === 'tactical') return 'Impacto Tático';
@@ -194,6 +194,10 @@ const PublicTeamDashboard: React.FC = () => {
       if (bestXICriteria === 'tactical') return p.avgTactical.toFixed(2);
       return p.globalScore.toFixed(2);
   };
+
+  const filteredAthletesList = useMemo(() => {
+      return selectedCategory === 'all' ? athletesWithMeta : athletesWithMeta.filter(a => a.categoryId === selectedCategory);
+  }, [athletesWithMeta, selectedCategory]);
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-darkBase text-blue-600"><Loader2 className="animate-spin" size={40} /></div>;
   if (!team) return <div className="p-10 text-center text-gray-500 font-black uppercase tracking-widest dark:bg-darkBase">Equipe não localizada</div>;
@@ -284,51 +288,87 @@ const PublicTeamDashboard: React.FC = () => {
             </div>
         </div>
 
-        {/* CAMPO - SELEÇÃO IDEAL */}
-        <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Ideal (4-3-3)</h3>
-                <div className="relative">
-                    <select 
-                        value={bestXICriteria} 
-                        onChange={e => setBestXICriteria(e.target.value as any)} 
-                        className="pl-3 pr-8 py-1.5 bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder rounded-xl text-[10px] font-black uppercase text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
-                    >
-                        <option value="smc">Por SMC (Geral)</option>
-                        <option value="tech">Por Média Técnica</option>
-                        <option value="tactical">Por Impacto Tático</option>
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+        {/* AREA PRINCIPAL: CAMPO + LISTA DE ATLETAS */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* CAMPO - SELEÇÃO IDEAL */}
+            <div className="lg:col-span-2 bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder overflow-hidden h-full">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2"><Shirt size={18} className="text-green-600 dark:text-green-400"/> Seleção Ideal (4-3-3)</h3>
+                    <div className="relative">
+                        <select 
+                            value={bestXICriteria} 
+                            onChange={e => setBestXICriteria(e.target.value as any)} 
+                            className="pl-3 pr-8 py-1.5 bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder rounded-xl text-[10px] font-black uppercase text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
+                        >
+                            <option value="smc">Por SMC (Geral)</option>
+                            <option value="tech">Por Média Técnica</option>
+                            <option value="tactical">Por Impacto Tático</option>
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                    </div>
+                </div>
+                <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
+                    <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
+                    <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-1/2 w-32 h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                    {bestXI.map((pos, idx) => (
+                        <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
+                            {pos.player ? (
+                                <Link to={`/p/athlete/${pos.player.id}`} className="flex flex-col items-center group">
+                                    <div className="relative">
+                                        {pos.player.photoUrl ? <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white group-hover:scale-110 transition-transform" /> : <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">{pos.player.name.charAt(0)}</div>}
+                                        <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">
+                                            {getPlayerScoreForDisplay(pos.player)}
+                                        </div>
+                                    </div>
+                                    <div className="mt-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] font-black uppercase tracking-tighter">{pos.player.name.split(' ')[0]}</div>
+                                </Link>
+                            ) : (
+                                <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center text-white/40 text-[10px] font-black">{pos.role}</div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-4 flex justify-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                        <Info size={12}/> Critério Ativo: <span className="text-indigo-600 dark:text-indigo-400 ml-1">{getCriterionLabel(bestXICriteria)}</span>
+                    </span>
                 </div>
             </div>
-            <div className="relative w-full aspect-[16/9] bg-green-600 rounded-2xl overflow-hidden border-4 border-green-800 shadow-inner">
-                <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '10% 100%'}}></div>
-                <div className="absolute inset-4 border-2 border-white/40 rounded-sm pointer-events-none"></div>
-                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
-                <div className="absolute top-1/2 left-1/2 w-32 h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-                {bestXI.map((pos, idx) => (
-                    <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
-                        {pos.player ? (
-                            <Link to={`/p/athlete/${pos.player.id}`} className="flex flex-col items-center group">
-                                <div className="relative">
-                                    {pos.player.photoUrl ? <img src={pos.player.photoUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-lg object-cover bg-white group-hover:scale-110 transition-transform" /> : <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-500">{pos.player.name.charAt(0)}</div>}
-                                    <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">
-                                        {getPlayerScoreForDisplay(pos.player)}
-                                    </div>
-                                </div>
-                                <div className="mt-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[9px] font-black uppercase tracking-tighter">{pos.player.name.split(' ')[0]}</div>
-                            </Link>
-                        ) : (
-                            <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center text-white/40 text-[10px] font-black">{pos.role}</div>
-                        )}
-                    </div>
-                ))}
+
+            {/* LISTA DE ATLETAS (NOVO BLOCO) */}
+            <div className="bg-white dark:bg-darkCard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-darkBorder flex flex-col h-[500px] lg:h-auto">
+                <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Users size={18} className="text-indigo-500"/> Elenco
+                </h3>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                    {filteredAthletesList.length > 0 ? filteredAthletesList.map(athlete => (
+                        <Link to={`/p/athlete/${athlete.id}`} key={athlete.id} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-darkInput/50 transition-all border border-transparent hover:border-gray-100 dark:hover:border-darkBorder group">
+                            {athlete.photoUrl ? (
+                                <img src={athlete.photoUrl} className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-darkBorder shadow-sm" />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-darkInput flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-darkBorder">{athlete.name.charAt(0)}</div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{athlete.name}</h4>
+                                <p className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{athlete.position}</p>
+                            </div>
+                            <div className="text-right">
+                                <span className="block text-xs font-black text-indigo-600 dark:text-indigo-400">{athlete.globalScore.toFixed(2)}</span>
+                                <span className="text-[8px] font-bold text-gray-300 dark:text-gray-600 uppercase">SMC</span>
+                            </div>
+                            <ChevronRight size={14} className="text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </Link>
+                    )) : (
+                        <div className="flex items-center justify-center h-full text-[10px] text-gray-400 dark:text-gray-600 font-bold uppercase tracking-widest text-center italic">
+                            Nenhum atleta nesta categoria
+                        </div>
+                    )}
+                </div>
             </div>
-            <div className="mt-4 flex justify-center">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                    <Info size={12}/> Critério Ativo: <span className="text-indigo-600 dark:text-indigo-400 ml-1">{getCriterionLabel(bestXICriteria)}</span>
-                </span>
-            </div>
+
         </div>
 
         {/* KPIs FINAIS */}
