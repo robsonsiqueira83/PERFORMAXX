@@ -99,10 +99,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
 
       // Card 2: Distribuição
       const distribution = [
-          { name: 'Em desenv.', range: '< 5.0', count: validAthletes.filter(a => a.globalScore < 5).length, color: '#94a3b8' },
-          { name: 'Funcional', range: '5.0 - 6.5', count: validAthletes.filter(a => a.globalScore >= 5 && a.globalScore < 6.5).length, color: '#64748b' },
-          { name: 'Boa', range: '6.5 - 8.0', count: validAthletes.filter(a => a.globalScore >= 6.5 && a.globalScore < 8).length, color: '#475569' },
-          { name: 'Alta', range: '> 8.0', count: validAthletes.filter(a => a.globalScore >= 8).length, color: '#1e293b' }
+          { name: 'Em desenv.', range: '< 5.00', count: validAthletes.filter(a => a.globalScore < 5).length, color: '#94a3b8' },
+          { name: 'Funcional', range: '5.00 - 6.50', count: validAthletes.filter(a => a.globalScore >= 5 && a.globalScore < 6.5).length, color: '#64748b' },
+          { name: 'Boa', range: '6.50 - 8.00', count: validAthletes.filter(a => a.globalScore >= 6.5 && a.globalScore < 8).length, color: '#475569' },
+          { name: 'Alta', range: '> 8.00', count: validAthletes.filter(a => a.globalScore >= 8).length, color: '#1e293b' }
       ];
 
       // Card 3: Equilíbrio Técnico vs Físico (Médias Normalizadas 0-10)
@@ -227,9 +227,9 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
   };
 
   const getPlayerScoreForDisplay = (p: any) => {
-      if (bestXICriteria === 'tech') return p.avgTech.toFixed(1);
+      if (bestXICriteria === 'tech') return p.avgTech.toFixed(2);
       if (bestXICriteria === 'tactical') return p.avgTactical.toFixed(2);
-      return p.globalScore.toFixed(1);
+      return p.globalScore.toFixed(2);
   };
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -261,14 +261,14 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                       <Activity size={14} className="text-indigo-500" />
                   </div>
                   <div className="flex flex-col items-center justify-center flex-1">
-                      <span className="text-5xl font-black text-gray-800 dark:text-gray-100 tracking-tighter">{teamOverviewStats.avgSMC.toFixed(1)}</span>
+                      <span className="text-5xl font-black text-gray-800 dark:text-gray-100 tracking-tighter">{teamOverviewStats.avgSMC.toFixed(2)}</span>
                       <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">{getSMCReading(teamOverviewStats.avgSMC)}</span>
                   </div>
                   <div className="w-full h-2 bg-gray-100 dark:bg-darkInput rounded-full mt-2 relative overflow-hidden">
                       <div className="absolute top-0 bottom-0 left-0 bg-indigo-600 transition-all duration-1000" style={{ width: `${teamOverviewStats.avgSMC * 10}%` }}></div>
                   </div>
                   <div className="flex justify-between text-[8px] font-black text-gray-300 dark:text-gray-600 mt-1 uppercase">
-                      <span>0</span><span>10</span>
+                      <span>0.00</span><span>10.00</span>
                   </div>
               </div>
 
@@ -303,7 +303,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                       <BarChart data={teamOverviewStats.balanceData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }} barSize={15}>
                           <XAxis type="number" domain={[0, 10]} hide />
                           <YAxis dataKey="name" type="category" tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 800 }} axisLine={false} tickLine={false} width={50} />
-                          <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px' }} />
+                          <Tooltip 
+                            cursor={{fill: 'transparent'}} 
+                            contentStyle={{ borderRadius: '8px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px' }} 
+                            formatter={(value: number) => Number(value).toFixed(2)}
+                          />
                           <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                               {teamOverviewStats.balanceData.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -326,7 +330,11 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
                           <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 800 }} axisLine={false} tickLine={false} />
                           <YAxis domain={[0, 10]} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                          <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px' }} />
+                          <Tooltip 
+                            cursor={{fill: 'transparent'}} 
+                            contentStyle={{ borderRadius: '8px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px' }} 
+                            formatter={(value: number) => Number(value).toFixed(2)}
+                          />
                           <Bar dataKey="score" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
                           <ReferenceLine y={6} stroke="#cbd5e1" strokeDasharray="3 3" />
                       </BarChart>
@@ -365,15 +373,15 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                       <div className="flex justify-between text-[10px] font-black uppercase text-gray-500 dark:text-gray-400">
                           <div className="text-center">
                               <span className="block text-[8px] text-gray-300 dark:text-gray-600">Mín</span>
-                              {teamOverviewStats.consistency.min.toFixed(1)}
+                              {teamOverviewStats.consistency.min.toFixed(2)}
                           </div>
                           <div className="text-center">
                               <span className="block text-[8px] text-gray-300 dark:text-gray-600">Média</span>
-                              <span className="text-indigo-600 dark:text-indigo-400">{teamOverviewStats.consistency.avg.toFixed(1)}</span>
+                              <span className="text-indigo-600 dark:text-indigo-400">{teamOverviewStats.consistency.avg.toFixed(2)}</span>
                           </div>
                           <div className="text-center">
                               <span className="block text-[8px] text-gray-300 dark:text-gray-600">Máx</span>
-                              {teamOverviewStats.consistency.max.toFixed(1)}
+                              {teamOverviewStats.consistency.max.toFixed(2)}
                           </div>
                       </div>
                   </div>
@@ -394,7 +402,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                               <Tooltip 
                                   cursor={{stroke: '#94a3b8', strokeWidth: 1}}
                                   contentStyle={{ borderRadius: '8px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px' }}
-                                  formatter={(value: number) => [value.toFixed(2), 'SMC Coletivo']}
+                                  formatter={(value: number) => [Number(value).toFixed(2), 'SMC Coletivo']}
                                   labelFormatter={(label) => new Date(label).toLocaleDateString()}
                               />
                               <Line type="monotone" dataKey="smc" stroke="#10b981" strokeWidth={2} dot={{ r: 2, fill: '#10b981' }} activeDot={{ r: 4 }} />
@@ -458,10 +466,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
               <div>
                   <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time</span>
-                  <p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p>
+                  <p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(2)}</p>
                   <div className="flex flex-col mt-1">
                       <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Score Médio de Capacidade</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 0 a 10 (Ponderado Téc/Fís)</span>
+                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 0.00 a 10.00</span>
                   </div>
               </div>
           </div>
@@ -469,10 +477,10 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
               <div>
                   <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span>
-                  <p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p>
+                  <p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(2)}</p>
                   <div className="flex flex-col mt-1">
                       <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Domínio de Fundamentos</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 1 a 5 (Avaliações Controladas)</span>
+                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 1.00 a 5.00</span>
                   </div>
               </div>
           </div>
@@ -483,7 +491,7 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
                   <p className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">{teamAverages.tactical.toFixed(2)}</p>
                   <div className="flex flex-col mt-1">
                       <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Eficiência em Partidas</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: Índice de Impacto (Scout RealTime)</span>
+                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: Índice de Impacto</span>
                   </div>
               </div>
           </div>

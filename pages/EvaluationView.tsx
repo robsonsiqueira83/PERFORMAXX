@@ -210,7 +210,7 @@ const EvaluationView: React.FC = () => {
                     </div>
                     <div className="bg-white dark:bg-darkCard p-8 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col items-center text-center">
                         <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6">Nota Técnica Média</span>
-                        <div className="text-7xl font-black text-blue-600 dark:text-blue-400 tracking-tighter mb-3 leading-none">{session.scoreTecnico.toFixed(1)}</div>
+                        <div className="text-7xl font-black text-blue-600 dark:text-blue-400 tracking-tighter mb-3 leading-none">{session.scoreTecnico.toFixed(2)}</div>
                         <span className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${techSem.border} ${techSem.bg} ${techSem.color}`}>{techSem.label}</span>
                         <div className="w-full h-1.5 bg-gray-100 dark:bg-darkInput rounded-full mt-8 overflow-hidden">
                             <div className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-1000" style={{ width: `${(session.scoreTecnico / 5) * 100}%` }}></div>
@@ -243,7 +243,10 @@ const EvaluationView: React.FC = () => {
                                     <Radar name="Sessão Atual" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.6} />
                                     {comparisonSessionId && <Radar name="Referência" dataKey="B" stroke="#94a3b8" fill="#cbd5e1" fillOpacity={0.4} />}
                                     <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '20px' }} />
-                                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                        formatter={(value: number) => Number(value).toFixed(2)}
+                                    />
                                 </RadarChart>
                             </ResponsiveContainer>
                         </div>
@@ -254,7 +257,7 @@ const EvaluationView: React.FC = () => {
                                     <div key={idx} className="space-y-2">
                                         <div className="flex justify-between text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-tighter">
                                             <span>{t.fund}: <span className="text-gray-900 dark:text-gray-100 font-black">{t.name}</span></span>
-                                            <span className="text-blue-600 dark:text-blue-400 font-mono">Nota {t.score.toFixed(1)}</span>
+                                            <span className="text-blue-600 dark:text-blue-400 font-mono">Nota {t.score.toFixed(2)}</span>
                                         </div>
                                         <div className="w-full h-3 bg-gray-100 dark:bg-darkInput rounded-full overflow-hidden flex">
                                             <div className={`h-full transition-all duration-1000 ${t.score >= 4 ? 'bg-green-500 dark:bg-green-400' : t.score >= 2.5 ? 'bg-blue-500 dark:bg-blue-400' : 'bg-red-500 dark:bg-red-400'}`} style={{ width: `${(t.score / 5) * 100}%` }}></div>
@@ -283,6 +286,10 @@ const EvaluationView: React.FC = () => {
                                     <Radar name="Sessão Atual" dataKey="A" stroke="#16a34a" fill="#22c55e" fillOpacity={0.6} />
                                     {comparisonSessionId && <Radar name="Referência" dataKey="B" stroke="#94a3b8" fill="#cbd5e1" fillOpacity={0.4} />}
                                     <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '20px' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                        formatter={(value: number) => Number(value).toFixed(2)}
+                                    />
                                 </RadarChart>
                             </ResponsiveContainer>
                         </div>
@@ -321,7 +328,10 @@ const EvaluationView: React.FC = () => {
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 900}} />
                                     <YAxis domain={[0, 5]} hide />
-                                    <Tooltip contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                        formatter={(value: number) => Number(value).toFixed(2)}
+                                    />
                                     <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '30px' }} />
                                     <Line name="Evolução Técnica" type="monotone" dataKey="tech" stroke="#2563eb" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#2563eb' }} activeDot={{ r: 10, strokeWidth: 0 }} />
                                     <Line name="Evolução Física" type="monotone" dataKey="phys" stroke="#16a34a" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#16a34a' }} activeDot={{ r: 10, strokeWidth: 0 }} />

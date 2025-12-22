@@ -482,7 +482,7 @@ const AthleteProfile: React.FC = () => {
                           </div>
                       </div>
                   </div>
-                  <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{smcCalculated.value.toFixed(1)}</span>
+                  <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{smcCalculated.value.toFixed(2)}</span>
                   <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-4 leading-tight uppercase tracking-widest">{getSMCReading(smcCalculated.value)}</p>
                   
                   {(!smcCalculated.isTechValid || !smcCalculated.isPhysValid) && (
@@ -501,7 +501,7 @@ const AthleteProfile: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center">
                           <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Média Técnica</span>
-                          <span className="text-[9px] font-mono font-black text-emerald-500">{avgStructuredTech.toFixed(1)}</span>
+                          <span className="text-[9px] font-mono font-black text-emerald-500">{avgStructuredTech.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center">
                           <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Condição Física</span>
@@ -535,6 +535,11 @@ const AthleteProfile: React.FC = () => {
                                 <PolarAngleAxis dataKey="phase" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
                                 <PolarRadiusAxis angle={30} domain={[-1.5, 1.5]} tick={false} axisLine={false} />
                                 <Radar name="Atleta" dataKey="A" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.5} />
+                                <Tooltip 
+                                    cursor={{stroke: '#4f46e5', strokeWidth: 1}}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }}
+                                    formatter={(value: number) => Number(value).toFixed(2)}
+                                />
                             </RadarChart>
                         </ResponsiveContainer>
                       </div>
@@ -575,7 +580,11 @@ const AthleteProfile: React.FC = () => {
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 900}} />
                               <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
-                              <Tooltip cursor={{fill: '#1c2d3c'}} contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                              <Tooltip 
+                                cursor={{fill: '#1c2d3c'}} 
+                                contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                formatter={(value: number) => Number(value).toFixed(2)}
+                              />
                               <Bar dataKey="score" radius={[8, 8, 0, 0]} barSize={45}>
                                   {dominantChartData.map((entry, index) => (
                                       <Cell key={`cell-${index}`} fill={filterAction !== 'all' ? (entry.name === 'POSITIVA' ? '#10b981' : entry.name === 'NEGATIVA' ? '#ef4444' : '#9ca3af') : (entry.score >= 0.3 ? '#4f46e5' : entry.score <= -0.3 ? '#ef4444' : '#64748b')} />
@@ -595,7 +604,7 @@ const AthleteProfile: React.FC = () => {
                                   {impactRanking.best.map((a, i) => (
                                       <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30">
                                           <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-200 uppercase truncate pr-2">{a.name}</span>
-                                          <span className="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400">+{a.avg.toFixed(1)}</span>
+                                          <span className="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400">+{a.avg.toFixed(2)}</span>
                                       </div>
                                   ))}
                               </div>
@@ -606,7 +615,7 @@ const AthleteProfile: React.FC = () => {
                                   {impactRanking.worst.map((a, i) => (
                                       <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
                                           <span className="text-[10px] font-black text-red-800 dark:text-red-200 uppercase truncate pr-2">{a.name}</span>
-                                          <span className="text-[10px] font-mono font-black text-red-600 dark:text-red-400">{a.avg.toFixed(1)}</span>
+                                          <span className="text-[10px] font-mono font-black text-red-600 dark:text-red-400">{a.avg.toFixed(2)}</span>
                                       </div>
                                   ))}
                               </div>
@@ -625,6 +634,20 @@ const AthleteProfile: React.FC = () => {
                                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                                   <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 900}} />
                                   <YAxis domain={[-1.5, 1.5]} hide />
+                                  <Tooltip 
+                                    cursor={{stroke: '#4f46e5', strokeWidth: 2}}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length > 0) {
+                                            const val = Number(payload[0].value);
+                                            return (
+                                                <div className="bg-gray-900 text-white p-2 rounded-lg text-[10px] font-bold shadow-xl border border-gray-700">
+                                                    <p>{payload[0].payload.time}: Impacto {!isNaN(val) ? val.toFixed(2) : '0.00'}</p>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                  />
                                   <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={5} dot={{ r: 6, fill: '#4f46e5', strokeWidth: 3, stroke: '#fff' }} activeDot={{ r: 10, strokeWidth: 0 }} />
                               </LineChart>
                           </ResponsiveContainer>
@@ -673,6 +696,11 @@ const AthleteProfile: React.FC = () => {
                               <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} />
                               <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
                               <Radar name="Histórico" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.6} />
+                              <Tooltip 
+                                cursor={{stroke: '#10b981', strokeWidth: 1}}
+                                contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                formatter={(value: number) => Number(value).toFixed(2)}
+                              />
                           </RadarChart>
                       </ResponsiveContainer>
                   </div>
@@ -691,6 +719,7 @@ const AthleteProfile: React.FC = () => {
                               <Tooltip 
                                 cursor={{stroke: '#2563eb', strokeWidth: 1}}
                                 contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                formatter={(value: number) => Number(value).toFixed(2)}
                               />
                           </RadarChart>
                       </ResponsiveContainer>
@@ -708,7 +737,10 @@ const AthleteProfile: React.FC = () => {
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                               <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 900}} />
                               <YAxis domain={[0, 5]} hide />
-                              <Tooltip contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} />
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '24px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }} 
+                                formatter={(value: number) => Number(value).toFixed(2)}
+                              />
                               <Legend wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '30px' }} />
                               <Line name="Técnica" type="monotone" dataKey="tech" stroke="#10b981" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#10b981' }} activeDot={{ r: 10, strokeWidth: 0 }} />
                               <Line name="Física (Normalizada 1-5)" type="monotone" dataKey="phys" stroke="#2563eb" strokeWidth={5} dot={{ r: 8, strokeWidth: 3, fill: '#fff', stroke: '#2563eb' }} activeDot={{ r: 10, strokeWidth: 0 }} />
@@ -730,7 +762,7 @@ const AthleteProfile: React.FC = () => {
                                       <p className="text-base font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">{ev.type}</p>
                                       <div className="flex items-center gap-4 mt-1.5 text-[9px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">
                                           <div className="flex items-center gap-1.5"><CalendarIcon size={12}/> {formatDateSafe(ev.date)}</div>
-                                          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><TrendingUp size={12}/> TÉC: {ev.scoreTecnico.toFixed(1)}</div>
+                                          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><TrendingUp size={12}/> TÉC: {ev.scoreTecnico.toFixed(2)}</div>
                                           <div className="flex items-center gap-1.5 text-blue-500 dark:text-blue-400"><Activity size={12}/> FÍS: {ev.scoreFisico.toFixed(0)}%</div>
                                       </div>
                                   </div>
@@ -835,7 +867,7 @@ const AthleteProfile: React.FC = () => {
       {(modalType === 'success' || modalType === 'error') && (
          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] p-10 shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-indigo-50">
-                 <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner bg-emerald-100 text-emerald-600">
+                 <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner bg-emerald-100 text-emerald-600`}>
                     <CheckCircle size={40} />
                  </div>
                  <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2 uppercase tracking-tighter">

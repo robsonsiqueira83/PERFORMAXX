@@ -310,6 +310,7 @@ const AthleteEvaluation: React.FC = () => {
                                     <Tooltip 
                                         cursor={{fill: '#1c2d3c'}}
                                         contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#1c2d3c', color: '#fff' }}
+                                        formatter={(value: number) => Number(value).toFixed(2)}
                                     />
                                     <Bar dataKey="score" radius={[6, 6, 0, 0]} barSize={40}>
                                         {dominantChartData?.map((entry, index) => (
@@ -338,7 +339,7 @@ const AthleteEvaluation: React.FC = () => {
                                 {impactRanking.best.map((a, i) => (
                                     <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-green-50 dark:bg-emerald-900/20 border border-green-100 dark:border-emerald-900/30">
                                         <span className="text-xs font-black text-green-800 dark:text-green-200 truncate pr-2">{a.name}</span>
-                                        <span className="text-xs font-mono font-black text-green-600 dark:text-green-400">+{a.avg.toFixed(1)}</span>
+                                        <span className="text-xs font-mono font-black text-green-600 dark:text-green-400">+{a.avg.toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -349,7 +350,7 @@ const AthleteEvaluation: React.FC = () => {
                                 {impactRanking.worst.map((a, i) => (
                                     <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30">
                                         <span className="text-xs font-black text-red-800 dark:text-red-200 truncate pr-2">{a.name}</span>
-                                        <span className="text-xs font-mono font-black text-red-600 dark:text-red-400">{a.avg.toFixed(1)}</span>
+                                        <span className="text-xs font-mono font-black text-red-600 dark:text-red-400">{a.avg.toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -393,7 +394,7 @@ const AthleteEvaluation: React.FC = () => {
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart 
                                 data={timelineData} 
-                                onClick={(data) => {
+                                onClick={(data: any) => {
                                     if (data && data.activePayload) {
                                         setSelectedTimePoint(data.activePayload[0].payload.raw);
                                     }
