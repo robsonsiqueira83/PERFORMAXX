@@ -314,13 +314,13 @@ const PublicTeamDashboard: React.FC = () => {
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40 transform -translate-y-1/2 pointer-events-none"></div>
                     <div className="absolute top-1/2 left-1/2 w-32 h-32 border-2 border-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
                     
-                    {/* Áreas Esquerda */}
-                    <div className="absolute top-1/2 left-4 w-32 h-64 border-2 border-white/40 border-l-0 transform -translate-y-1/2 pointer-events-none"></div>
-                    <div className="absolute top-1/2 left-4 w-12 h-32 border-2 border-white/40 border-l-0 transform -translate-y-1/2 pointer-events-none"></div>
+                    {/* Áreas Superior (Ataque) */}
+                    <div className="absolute top-4 left-1/2 w-1/2 h-1/6 border-2 border-white/40 border-t-0 transform -translate-x-1/2 pointer-events-none"></div>
+                    <div className="absolute top-4 left-1/2 w-1/4 h-1/12 border-2 border-white/40 border-t-0 transform -translate-x-1/2 pointer-events-none"></div>
 
-                    {/* Áreas Direita */}
-                    <div className="absolute top-1/2 right-4 w-32 h-64 border-2 border-white/40 border-r-0 transform -translate-y-1/2 pointer-events-none"></div>
-                    <div className="absolute top-1/2 right-4 w-12 h-32 border-2 border-white/40 border-r-0 transform -translate-y-1/2 pointer-events-none"></div>
+                    {/* Áreas Inferior (Defesa) */}
+                    <div className="absolute bottom-4 left-1/2 w-1/2 h-1/6 border-2 border-white/40 border-b-0 transform -translate-x-1/2 pointer-events-none"></div>
+                    <div className="absolute bottom-4 left-1/2 w-1/4 h-1/12 border-2 border-white/40 border-b-0 transform -translate-x-1/2 pointer-events-none"></div>
 
                     {bestXI.map((pos, idx) => (
                         <div key={idx} className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10" style={pos.style as React.CSSProperties}>
