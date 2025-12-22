@@ -220,14 +220,32 @@ const AthleteProfile: React.FC = () => {
       return "Alta prontidão para jogos";
   };
 
+  // --- FILTERED EVALUATIONS FOR RADARS AND LIST ---
+  const filteredEvalSessions = useMemo(() => {
+      if (!filterDate) return evalSessions;
+      return evalSessions.filter(s => s.date === filterDate);
+  }, [evalSessions, filterDate]);
+
+  const filteredTechEvals = useMemo(() => {
+      if (!filterDate) return allTechEvals;
+      const sessionIds = filteredEvalSessions.map(s => s.id);
+      return allTechEvals.filter(t => sessionIds.includes(t.sessionId));
+  }, [allTechEvals, filteredEvalSessions, filterDate]);
+
+  const filteredPhysEvals = useMemo(() => {
+      if (!filterDate) return allPhysEvals;
+      const sessionIds = filteredEvalSessions.map(s => s.id);
+      return allPhysEvals.filter(p => sessionIds.includes(p.sessionId));
+  }, [allPhysEvals, filteredEvalSessions, filterDate]);
+
   const radarAggregatedTech = useMemo(() => {
     const groups = ['Passe', 'Domínio e Controle', 'Condução', 'Finalização', '1x1 Ofensivo', '1x1 Defensivo'];
     return groups.map(g => {
-        const items = allTechEvals.filter(t => (t.fundamento || '').trim() === g);
+        const items = filteredTechEvals.filter(t => (t.fundamento || '').trim() === g);
         const score = items.length > 0 ? items.reduce((a, b) => a + (Number(b.nota) || 0), 0) / items.length : 0;
         return { subject: g, A: score, fullMark: 5 };
     });
-  }, [allTechEvals]);
+  }, [filteredTechEvals]);
 
   // --- REFEITO: LÓGICA DO RADAR FÍSICO ---
   const radarAggregatedPhys = useMemo(() => {
@@ -240,7 +258,7 @@ const AthleteProfile: React.FC = () => {
     ];
 
     return groups.map(g => {
-        const items = allPhysEvals.filter(p => {
+        const items = filteredPhysEvals.filter(p => {
             const cap = (p.capacidade || '').toLowerCase().trim();
             return g.match.some(m => m.toLowerCase() === cap);
         });
@@ -264,7 +282,7 @@ const AthleteProfile: React.FC = () => {
             fullMark: 100 
         };
     });
-  }, [allPhysEvals]);
+  }, [filteredPhysEvals]);
 
   const evolutionAggregatedData = useMemo(() => {
     return [...evalSessions].reverse().map(s => ({
@@ -647,7 +665,7 @@ const AthleteProfile: React.FC = () => {
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg"><Target size={20}/></div>
-                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Mapeamento Técnico de Fundamentos (Média)</h3>
+                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Mapeamento Técnico de Fundamentos {filterDate ? `(${new Date(filterDate).toLocaleDateString()})` : '(Média)'}</h3>
                       </div>
                       <ResponsiveContainer width="100%" height="100%">
                           <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarAggregatedTech}>
@@ -662,7 +680,7 @@ const AthleteProfile: React.FC = () => {
                   <div className="bg-white dark:bg-darkCard p-8 rounded-[40px] border border-gray-100 dark:border-darkBorder shadow-sm h-[480px] flex flex-col transition-colors">
                       <div className="flex items-center gap-3 mb-8">
                           <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Activity size={20}/></div>
-                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Perfil de Capacidades Físicas (Média)</h3>
+                          <h3 className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-widest">Perfil de Capacidades Físicas {filterDate ? `(${new Date(filterDate).toLocaleDateString()})` : '(Média)'}</h3>
                       </div>
                       <ResponsiveContainer width="100%" height="100%">
                           <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarAggregatedPhys}>
@@ -704,7 +722,7 @@ const AthleteProfile: React.FC = () => {
                       <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2"><ClipboardCheck size={18} className="text-emerald-500"/> Histórico de Avaliações Registradas</h3>
                   </div>
                   <div className="divide-y divide-gray-50 dark:divide-darkBorder">
-                      {evalSessions.length > 0 ? evalSessions.map(ev => (
+                      {filteredEvalSessions.length > 0 ? filteredEvalSessions.map(ev => (
                           <div key={ev.id} className="p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-indigo-900/10 transition-all border-l-4 border-transparent hover:border-emerald-600">
                               <div className="flex items-center gap-5">
                                   <div className="bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-2xl text-emerald-600 dark:text-emerald-400 shadow-sm"><Target size={24}/></div>
