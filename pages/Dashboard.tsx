@@ -2,10 +2,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  RadialBarChart, RadialBar, ComposedChart, ErrorBar, Scatter, ReferenceLine
 } from 'recharts';
-import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target, Info, Timer } from 'lucide-react';
+import { Users, ClipboardList, TrendingUp, Trophy, Activity, Shirt, Calendar, Loader2, Filter, ChevronDown, ChevronUp, Zap, Target, Info, Timer, BarChart3, Layers, Scale } from 'lucide-react';
 import { 
   getAthletes, getCategories, getTrainingEntries, getTrainingSessions, getEvaluationSessions
 } from '../services/storageService';
@@ -66,6 +67,105 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
         };
     }).sort((a, b) => b.globalScore - a.globalScore);
   }, [athletes, evalSessions]);
+
+  // --- LOGICA DO BLOCO VISÃO GERAL DA EQUIPE ---
+  const teamOverviewStats = useMemo(() => {
+      // Filtrar atletas válidos para análise estatística (que possuem dados)
+      const validAthletes = athletesWithMeta.filter(a => a.eventCount > 0 && (selectedCategory === 'all' || a.categoryId === selectedCategory));
+      
+      if (validAthletes.length === 0) return null;
+
+      // 1. Média Geral SMC
+      const avgSMC = validAthletes.reduce((acc, curr) => acc + curr.globalScore, 0) / validAthletes.length;
+      
+      let smcLabel = "Em Análise";
+      if (avgSMC >= 8.0) smcLabel = "Alta Prontidão Competitiva";
+      else if (avgSMC >= 6.5) smcLabel = "Boa Prontidão";
+      else if (avgSMC >= 5.0) smcLabel = "Funcional para Composição";
+      else smcLabel = "Em Desenvolvimento";
+
+      // 2. Distribuição
+      const distribution = [
+          { name: 'Desenv.', count: 0, fill: '#94a3b8' }, // < 5
+          { name: 'Funcional', count: 0, fill: '#64748b' }, // 5 - 6.5
+          { name: 'Pronto', count: 0, fill: '#475569' }, // 6.5 - 8
+          { name: 'Alta', count: 0, fill: '#1e293b' } // > 8
+      ];
+      validAthletes.forEach(a => {
+          if (a.globalScore < 5) distribution[0].count++;
+          else if (a.globalScore < 6.5) distribution[1].count++;
+          else if (a.globalScore < 8) distribution[2].count++;
+          else distribution[3].count++;
+      });
+
+      // 3. Equilíbrio Téc/Fís
+      const avgTechNorm = (validAthletes.reduce((a, b) => a + b.avgTech, 0) / validAthletes.length / 5) * 10;
+      const avgPhysNorm = (validAthletes.reduce((a, b) => a + b.avgPhys, 0) / validAthletes.length / 100) * 10;
+      const balanceData = [
+          { name: 'Técnica', value: avgTechNorm, fill: '#3b82f6' },
+          { name: 'Física', value: avgPhysNorm, fill: '#10b981' }
+      ];
+
+      // 4. Setores
+      const sectors = {
+          'Defesa': { sum: 0, count: 0 },
+          'Meio': { sum: 0, count: 0 },
+          'Ataque': { sum: 0, count: 0 }
+      };
+      validAthletes.forEach(a => {
+          if ([Position.GOLEIRO, Position.ZAGUEIRO, Position.LATERAL].includes(a.position)) { sectors['Defesa'].sum += a.globalScore; sectors['Defesa'].count++; }
+          else if ([Position.VOLANTE, Position.MEIO_CAMPO].includes(a.position)) { sectors['Meio'].sum += a.globalScore; sectors['Meio'].count++; }
+          else { sectors['Ataque'].sum += a.globalScore; sectors['Ataque'].count++; }
+      });
+      const sectorData = Object.keys(sectors).map(k => ({
+          name: k,
+          score: (sectors as any)[k].count > 0 ? (sectors as any)[k].sum / (sectors as any)[k].count : 0
+      }));
+
+      // 5. Consistência
+      const scores = validAthletes.map(a => a.globalScore).sort((a, b) => a - b);
+      const min = scores[0];
+      const max = scores[scores.length - 1];
+      const consistencyData = [
+          { name: 'Elenco', min, max, avg: avgSMC }
+      ];
+
+      // 6. Evolução (Histórico Agrupado)
+      // Agrupar todas as avaliações por data e calcular média SMC do dia
+      const groupedHistory: Record<string, {sum: number, count: number}> = {};
+      evalSessions.forEach(ev => {
+          // Filtrar se o atleta pertence à categoria selecionada
+          const ath = athletesWithMeta.find(a => a.id === ev.athleteId);
+          if (!ath || (selectedCategory !== 'all' && ath.categoryId !== selectedCategory)) return;
+
+          const date = ev.date.split('T')[0];
+          if (!groupedHistory[date]) groupedHistory[date] = { sum: 0, count: 0 };
+          
+          // Calcular SMC individual desta avaliação
+          const mt = (ev.scoreTecnico / 5) * 10;
+          const cf = ev.scoreFisico / 10;
+          const smc = (mt * 0.55) + (cf * 0.45);
+          
+          groupedHistory[date].sum += smc;
+          groupedHistory[date].count++;
+      });
+
+      const historyData = Object.keys(groupedHistory).sort().slice(-8).map(date => ({
+          date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          smc: groupedHistory[date].sum / groupedHistory[date].count
+      }));
+
+      return {
+          avgSMC,
+          smcLabel,
+          distribution,
+          balanceData,
+          sectorData,
+          consistencyData,
+          historyData,
+          totalAthletes: validAthletes.length
+      };
+  }, [athletesWithMeta, selectedCategory, evalSessions]);
 
   const getSMCReading = (val: number) => {
       if (val <= 3.0) return "Capacidade insuficiente";
@@ -151,39 +251,164 @@ const Dashboard: React.FC<DashboardProps> = ({ teamId }) => {
           {currentUser && canEditData(currentUser.role) && <Link to="/training" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"><ClipboardList size={16}/> Nova Avaliação</Link>}
       </div>
 
+      {/* --- BLOCO VISÃO GERAL DA EQUIPE (NOVO) --- */}
+      <div className="space-y-6">
+          <div className="flex items-center gap-3 border-b dark:border-darkBorder pb-2">
+              <div className="bg-gray-100 dark:bg-darkInput p-2 rounded-xl"><Layers size={20} className="text-gray-600 dark:text-gray-400"/></div>
+              <div>
+                  <h2 className="text-lg font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Visão Geral da Equipe</h2>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">Resumo coletivo de prontidão técnica e física</p>
+              </div>
+          </div>
+
+          {teamOverviewStats ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  
+                  {/* CARD 1: Prontidão Média (Gauge) */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex flex-col items-center justify-center min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 w-full text-left">Prontidão Média (SMC)</h4>
+                      <div className="relative h-[150px] w-full flex items-center justify-center">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <RadialBarChart 
+                                  cx="50%" cy="80%" 
+                                  innerRadius="70%" outerRadius="100%" 
+                                  startAngle={180} endAngle={0}
+                                  barSize={20} 
+                                  data={[{ name: 'SMC', value: teamOverviewStats.avgSMC, fill: '#4f46e5' }]}
+                              >
+                                  <PolarAngleAxis type="number" domain={[0, 10]} angleAxisId={0} tick={false} />
+                                  <RadialBar background dataKey="value" cornerRadius={10} />
+                              </RadialBarChart>
+                          </ResponsiveContainer>
+                          <div className="absolute top-[65%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                              <span className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamOverviewStats.avgSMC.toFixed(1)}</span>
+                          </div>
+                      </div>
+                      <p className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase tracking-tight mt-4 text-center bg-gray-50 dark:bg-darkInput px-4 py-1 rounded-full">{teamOverviewStats.smcLabel}</p>
+                  </div>
+
+                  {/* CARD 2: Distribuição do Elenco */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Distribuição do Elenco</h4>
+                      <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={teamOverviewStats.distribution} margin={{top: 10, right: 0, left: -25, bottom: 0}}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                                  <XAxis dataKey="name" tick={{fontSize: 9, fontWeight: 700, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                  <YAxis tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} allowDecimals={false} />
+                                  <Tooltip cursor={{fill: '#f1f5f9', opacity: 0.1}} contentStyle={{borderRadius: '12px', border: 'none', backgroundColor: '#1e293b', color: '#fff'}} />
+                                  <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={40}>
+                                      {teamOverviewStats.distribution.map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                                      ))}
+                                  </Bar>
+                              </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+
+                  {/* CARD 3: Equilíbrio Téc/Fís */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Scale size={14}/> Equilíbrio da Equipe</h4>
+                      <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={teamOverviewStats.balanceData} layout="vertical" margin={{top: 0, right: 30, left: 0, bottom: 0}}>
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" opacity={0.2} />
+                                  <XAxis type="number" domain={[0, 10]} hide />
+                                  <YAxis dataKey="name" type="category" tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} axisLine={false} tickLine={false} width={60} />
+                                  <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '12px', border: 'none', backgroundColor: '#1e293b', color: '#fff'}} />
+                                  <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={30}>
+                                       {teamOverviewStats.balanceData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                                  </Bar>
+                              </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+
+                  {/* CARD 4: Prontidão por Setor */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">SMC Médio por Setor</h4>
+                      <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={teamOverviewStats.sectorData} margin={{top: 10, right: 0, left: -25, bottom: 0}}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                                  <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                  <YAxis domain={[0, 10]} tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                  <Tooltip cursor={{fill: '#f1f5f9', opacity: 0.1}} contentStyle={{borderRadius: '12px', border: 'none', backgroundColor: '#1e293b', color: '#fff'}} />
+                                  <Bar dataKey="score" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
+                              </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+
+                  {/* CARD 5: Consistência do Elenco */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><BarChart3 size={14}/> Consistência (Min - Méd - Máx)</h4>
+                      <div className="h-[200px] flex items-center justify-center">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart data={teamOverviewStats.consistencyData} layout="vertical" margin={{top: 20, right: 20, bottom: 20, left: 20}}>
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" opacity={0.2} />
+                                  <XAxis type="number" domain={[0, 10]} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                                  <YAxis type="category" dataKey="name" hide />
+                                  <Tooltip contentStyle={{borderRadius: '12px', border: 'none', backgroundColor: '#1e293b', color: '#fff'}} />
+                                  
+                                  {/* Range Bar (Min to Max) using a thick bar for the range and transparent ends */}
+                                  <Bar dataKey="max" fill="#e2e8f0" barSize={20} radius={[4,4,4,4]} stackId="a" />
+                                  
+                                  {/* Average Point */}
+                                  <Scatter dataKey="avg" fill="#4f46e5" shape="circle" />
+                                  <ReferenceLine x={teamOverviewStats.consistencyData[0].min} stroke="#94a3b8" strokeDasharray="3 3" label={{ position: 'top', value: 'Min', fontSize: 9, fill: '#94a3b8' }} />
+                                  <ReferenceLine x={teamOverviewStats.consistencyData[0].max} stroke="#94a3b8" strokeDasharray="3 3" label={{ position: 'top', value: 'Max', fontSize: 9, fill: '#94a3b8' }} />
+                                  <ReferenceLine x={teamOverviewStats.avgSMC} stroke="#4f46e5" label={{ position: 'bottom', value: 'Média', fontSize: 9, fill: '#4f46e5', fontWeight: 800 }} />
+                              </ComposedChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+
+                  {/* CARD 6: Evolução da Prontidão */}
+                  <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm min-h-[280px]">
+                      <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><TrendingUp size={14}/> Evolução Coletiva (SMC)</h4>
+                      {teamOverviewStats.historyData.length > 1 ? (
+                          <div className="h-[200px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart data={teamOverviewStats.historyData} margin={{top: 10, right: 10, left: -25, bottom: 0}}>
+                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                                      <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 700, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                      <YAxis domain={[0, 10]} tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                      <Tooltip contentStyle={{borderRadius: '12px', border: 'none', backgroundColor: '#1e293b', color: '#fff'}} />
+                                      <Line type="monotone" dataKey="smc" stroke="#6366f1" strokeWidth={3} dot={{r: 4, strokeWidth: 0, fill: '#6366f1'}} activeDot={{r: 6}} />
+                                  </LineChart>
+                              </ResponsiveContainer>
+                          </div>
+                      ) : (
+                          <div className="h-[200px] flex flex-col items-center justify-center text-gray-400">
+                              <Info size={24} className="mb-2 opacity-50"/>
+                              <p className="text-xs font-bold uppercase tracking-widest opacity-50">Dados históricos insuficientes</p>
+                          </div>
+                      )}
+                  </div>
+
+              </div>
+          ) : (
+              <div className="p-12 text-center bg-white dark:bg-darkCard rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm">
+                  <Info className="mx-auto text-gray-300 dark:text-gray-600 mb-4" size={32} />
+                  <p className="text-gray-400 dark:text-gray-500 text-xs font-black uppercase tracking-widest">Sem dados suficientes para análise de elenco nesta categoria.</p>
+              </div>
+          )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Zap size={100} className="text-indigo-600 dark:text-indigo-400"/></div>
-              <div>
-                  <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time</span>
-                  <p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p>
-                  <div className="flex flex-col mt-1">
-                      <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Score Médio de Capacidade</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 0 a 10 (Ponderado Téc/Fís)</span>
-                  </div>
-              </div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-indigo-500"/> SMC Médio do Time (0-10)</span><p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{teamAverages.score.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Score Médio de Capacidade</span></div>
           </div>
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Target size={100} className="text-emerald-600 dark:text-emerald-400"/></div>
-              <div>
-                  <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span>
-                  <p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p>
-                  <div className="flex flex-col mt-1">
-                      <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Domínio de Fundamentos</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: 1 a 5 (Avaliações Controladas)</span>
-                  </div>
-              </div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><ClipboardList size={14} className="text-emerald-500"/> Média Técnica do Time</span><p className="text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{teamAverages.tech.toFixed(1)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Domínio de Fundamentos</span></div>
           </div>
           <div className="bg-white dark:bg-darkCard p-6 rounded-3xl border border-gray-100 dark:border-darkBorder shadow-sm flex items-center justify-between overflow-hidden relative group">
               <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><Timer size={100} className="text-blue-600 dark:text-blue-400"/></div>
-              <div>
-                  <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-blue-500"/> Impacto Tático Médio</span>
-                  <p className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">{teamAverages.tactical.toFixed(2)}</p>
-                  <div className="flex flex-col mt-1">
-                      <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Eficiência em Partidas</span>
-                      <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">Ref: Índice de Impacto (Scout RealTime)</span>
-                  </div>
-              </div>
+              <div><span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Activity size={14} className="text-blue-500"/> Impacto Tático Médio</span><p className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">{teamAverages.tactical.toFixed(2)}</p><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Eficiência em Partidas</span></div>
           </div>
       </div>
 
