@@ -6,10 +6,11 @@ import {
   getCategories, 
   saveAthlete, 
   getTeams,
-  getEvaluationSessions
+  getEvaluationSessions,
+  getTrainingEntries
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
-import { Athlete, Position, Category, User, canEditData, Team, EvaluationSession } from '../types';
+import { Athlete, Position, Category, User, canEditData, Team, EvaluationSession, TrainingEntry } from '../types';
 import { Plus, Search, Upload, X, Users, Loader2, Edit, CheckCircle, AlertCircle, Target, XCircle, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,10 +24,11 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [evalSessions, setEvalSessions] = useState<EvaluationSession[]>([]);
+  const [trainingEntries, setTrainingEntries] = useState<TrainingEntry[]>([]); // New state for tactical data
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('all');
   const [filterPos, setFilterPos] = useState('all');
-  const [sortOrder, setSortOrder] = useState<'alpha' | 'score'>('alpha');
+  const [sortOrder, setSortOrder] = useState<'alpha' | 'score' | 'tech' | 'phys' | 'tactical'>('alpha');
   
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -52,11 +54,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const loadData = async () => {
       setLoading(true);
       try {
-          const [a, c, evals, teams] = await Promise.all([
+          const [a, c, evals, teams, entries] = await Promise.all([
               getAthletes(),
               getCategories(),
               getEvaluationSessions(),
-              getTeams()
+              getTeams(),
+              getTrainingEntries()
           ]);
           setAllSystemAthletes(a);
           setAllTeams(teams);
@@ -64,6 +67,7 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           setAthletes(localAthletes);
           setCategories(c.filter(item => item.teamId === teamId));
           setEvalSessions(evals);
+          setTrainingEntries(entries);
       } catch (err) {
           console.error("Erro ao carregar dados:", err);
       } finally {
@@ -83,13 +87,28 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           const avgTech = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreTecnico, 0) / myEvals.length : 0;
           const avgPhys = myEvals.length > 0 ? myEvals.reduce((a, b) => a + b.scoreFisico, 0) / myEvals.length : 0;
           
+          // Cálculo Impacto Tático (Scout)
+          const myEntries = trainingEntries.filter(e => e.athleteId === athlete.id);
+          let totalTactical = 0;
+          let tacticalCount = 0;
+          myEntries.forEach(entry => {
+              try {
+                  const notes = JSON.parse(entry.notes || '{}');
+                  if (notes.avgScore !== undefined) {
+                      totalTactical += notes.avgScore;
+                      tacticalCount++;
+                  }
+              } catch(e) {}
+          });
+          const avgTactical = tacticalCount > 0 ? totalTactical / tacticalCount : 0;
+
           const mt_norm = (avgTech / 5.0) * 10;
           const cf_norm = avgPhys / 10;
           const smc = (mt_norm * 0.55) + (cf_norm * 0.45);
 
-          return { ...athlete, smc, isTechValid: myEvals.length >= 2 };
+          return { ...athlete, smc, avgTech, avgPhys, avgTactical, isTechValid: myEvals.length >= 2 };
       });
-  }, [athletes, evalSessions]);
+  }, [athletes, evalSessions, trainingEntries]);
 
   const filtered = useMemo(() => {
       let list = athletesWithSMC.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
@@ -97,9 +116,10 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       if (filterPos !== 'all') list = list.filter(a => a.position === filterPos);
       
       return list.sort((a, b) => {
-          if (sortOrder === 'score') {
-              return b.smc - a.smc;
-          }
+          if (sortOrder === 'score') return b.smc - a.smc;
+          if (sortOrder === 'tech') return b.avgTech - a.avgTech;
+          if (sortOrder === 'phys') return b.avgPhys - a.avgPhys;
+          if (sortOrder === 'tactical') return b.avgTactical - a.avgTactical;
           return a.name.localeCompare(b.name);
       });
   }, [athletesWithSMC, search, filterCat, filterPos, sortOrder]);
@@ -220,11 +240,14 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
           <div className="relative">
              <select 
                value={sortOrder} 
-               onChange={e => setSortOrder(e.target.value as 'alpha' | 'score')} 
+               onChange={e => setSortOrder(e.target.value as 'alpha' | 'score' | 'tech' | 'phys' | 'tactical')} 
                className="pl-8 pr-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
              >
                  <option value="alpha">Ordem Alfabética</option>
                  <option value="score">Ranking SMC</option>
+                 <option value="tactical">Impacto Tático</option>
+                 <option value="tech">Média Técnica</option>
+                 <option value="phys">Condição Física</option>
              </select>
              <ArrowDownWideNarrow className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
           </div>
@@ -282,10 +305,29 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
                    
                    {!isWaitingForRelease && (
                     <div className="mt-6 flex flex-col items-center p-4 bg-gray-50 dark:bg-darkInput rounded-2xl w-full border border-gray-100 dark:border-darkBorder group-hover:bg-indigo-50/50 dark:group-hover:bg-indigo-900/20 transition-all">
-                        <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Score SMC</span>
-                        <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{athlete.smc.toFixed(1)}</span>
-                        <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-2 leading-tight uppercase tracking-widest text-center">{getSMCReading(athlete.smc)}</p>
-                        {!athlete.isTechValid && (
+                        {sortOrder === 'tactical' ? (
+                            <>
+                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1 block">Impacto Tático</span>
+                                <span className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tighter leading-none">{(athlete as any).avgTactical.toFixed(2)}</span>
+                            </>
+                        ) : sortOrder === 'tech' ? (
+                            <>
+                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1 block">Média Técnica</span>
+                                <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter leading-none">{(athlete as any).avgTech.toFixed(1)}</span>
+                            </>
+                        ) : sortOrder === 'phys' ? (
+                            <>
+                                <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-1 block">Condição Física</span>
+                                <span className="text-3xl font-black text-orange-600 dark:text-orange-400 tracking-tighter leading-none">{(athlete as any).avgPhys.toFixed(0)}%</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Score SMC</span>
+                                <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter leading-none">{athlete.smc.toFixed(1)}</span>
+                                <p className="text-[8px] font-black text-gray-500 dark:text-gray-400 mt-2 leading-tight uppercase tracking-widest text-center">{getSMCReading(athlete.smc)}</p>
+                            </>
+                        )}
+                        {!athlete.isTechValid && sortOrder === 'score' && (
                             <span className="mt-2 text-[7px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Dados Insuficientes</span>
                         )}
                     </div>
