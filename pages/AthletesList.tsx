@@ -11,7 +11,7 @@ import {
 } from '../services/storageService';
 import { processImageUpload } from '../services/imageService';
 import { Athlete, Position, Category, User, canEditData, Team, EvaluationSession, TrainingEntry } from '../types';
-import { Plus, Search, Upload, X, Users, Loader2, Edit, CheckCircle, AlertCircle, Target, XCircle, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow } from 'lucide-react';
+import { Plus, Search, Upload, X, Users, Loader2, Edit, CheckCircle, AlertCircle, Target, XCircle, Send, UserCheck, HelpCircle, Save, ArrowDownWideNarrow, ArrowRightLeft, CheckSquare, Square } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AthletesListProps {
@@ -45,6 +45,12 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
   const [transferOutRg, setTransferOutRg] = useState('');
   const [transferOutTeamId, setTransferOutTeamId] = useState('');
   const [sendTransferLoading, setSendTransferLoading] = useState(false);
+
+  // Estados para Mudar Categoria em Massa
+  const [showBatchCategoryModal, setShowBatchCategoryModal] = useState(false);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [targetBatchCategory, setTargetBatchCategory] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<Partial<Athlete>>({
@@ -179,6 +185,41 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
       } catch (err) { setFeedback({ type: 'error', message: 'Erro ao recusar.' }); } finally { setLoading(false); }
   };
 
+  // --- BATCH CATEGORY CHANGE LOGIC ---
+  const toggleBatchSelection = (id: string) => {
+      setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAllBatch = () => {
+      if (selectedBatchIds.length === filtered.length) {
+          setSelectedBatchIds([]);
+      } else {
+          setSelectedBatchIds(filtered.map(a => a.id));
+      }
+  };
+
+  const handleBatchCategoryUpdate = async () => {
+      if (!targetBatchCategory || selectedBatchIds.length === 0) return;
+      setBatchLoading(true);
+      try {
+          await Promise.all(selectedBatchIds.map(async (athleteId) => {
+              const ath = athletes.find(a => a.id === athleteId);
+              if (ath) {
+                  await saveAthlete({ ...ath, categoryId: targetBatchCategory });
+              }
+          }));
+          setFeedback({ type: 'success', message: `${selectedBatchIds.length} atletas movidos com sucesso!` });
+          setShowBatchCategoryModal(false);
+          setSelectedBatchIds([]);
+          setTargetBatchCategory('');
+          setRefreshKey(prev => prev + 1);
+      } catch (err) {
+          setFeedback({ type: 'error', message: 'Erro ao mover atletas.' });
+      } finally {
+          setBatchLoading(false);
+      }
+  };
+
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -252,10 +293,23 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
              <ArrowDownWideNarrow className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
           </div>
 
-          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="all">Todas Categorias</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div className="flex gap-2">
+            <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todas Categorias</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            
+            {filterCat !== 'all' && currentUser && canEditData(currentUser.role) && (
+                <button 
+                    onClick={() => { setSelectedBatchIds([]); setTargetBatchCategory(''); setShowBatchCategoryModal(true); }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-md transition-all whitespace-nowrap"
+                    title="Mover atletas desta lista para outra categoria"
+                >
+                    <ArrowRightLeft size={16} /> Mudar Categoria
+                </button>
+            )}
+          </div>
+
           <select value={filterPos} onChange={e=>setFilterPos(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-darkBorder rounded-xl text-xs font-bold bg-white dark:bg-darkInput dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500">
               <option value="all">Todas Posições</option>
               {Object.values(Position).map(p => <option key={p} value={p}>{p}</option>)}
@@ -400,6 +454,67 @@ const AthletesList: React.FC<AthletesListProps> = ({ teamId }) => {
               </form>
            </div>
         </div>
+      )}
+
+      {/* MODAL MUDAR CATEGORIA EM MASSA */}
+      {showBatchCategoryModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-darkCard dark:border dark:border-darkBorder rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-slide-up flex flex-col h-[80vh]">
+                  <div className="flex justify-between items-center mb-6 border-b border-gray-100 dark:border-darkBorder pb-4">
+                      <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter flex items-center gap-3">
+                          <ArrowRightLeft className="text-indigo-600" size={24} /> Mover Atletas
+                      </h3>
+                      <button onClick={() => setShowBatchCategoryModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-darkInput rounded-full transition-colors text-gray-400"><X size={24}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <div className="flex justify-between items-center mb-4">
+                          <button onClick={toggleSelectAllBatch} className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 px-3 py-1.5 rounded-lg transition-colors">
+                              {selectedBatchIds.length === filtered.length ? <CheckSquare size={16}/> : <Square size={16}/>} Selecionar Todos
+                          </button>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{selectedBatchIds.length} selecionados</span>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 dark:border-darkBorder rounded-2xl p-2 space-y-2 mb-6">
+                          {filtered.map(athlete => (
+                              <div key={athlete.id} onClick={() => toggleBatchSelection(athlete.id)} className={`flex items-center p-3 rounded-xl cursor-pointer transition-all border ${selectedBatchIds.includes(athlete.id) ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800' : 'bg-white dark:bg-darkInput border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 border ${selectedBatchIds.includes(athlete.id) ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 dark:border-gray-600'}`}>
+                                      {selectedBatchIds.includes(athlete.id) && <CheckSquare size={12}/>}
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                      {athlete.photoUrl ? <img src={athlete.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] font-black text-gray-500">{athlete.name.charAt(0)}</div>}
+                                      <span className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase truncate max-w-[150px]">{athlete.name}</span>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+                      <div className="space-y-4">
+                          <div>
+                              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 ml-1">Nova Categoria de Destino</label>
+                              <select 
+                                  className="w-full bg-gray-50 dark:bg-darkInput border border-gray-200 dark:border-darkBorder rounded-2xl p-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 dark:text-gray-200"
+                                  value={targetBatchCategory}
+                                  onChange={e => setTargetBatchCategory(e.target.value)}
+                              >
+                                  <option value="">Selecione a categoria...</option>
+                                  {categories.filter(c => c.id !== filterCat).map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                              </select>
+                          </div>
+                          <button 
+                              onClick={handleBatchCategoryUpdate} 
+                              disabled={batchLoading || selectedBatchIds.length === 0 || !targetBatchCategory}
+                              className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                          >
+                              {batchLoading ? <Loader2 className="animate-spin" size={16}/> : <ArrowRightLeft size={16}/>} 
+                              Mover {selectedBatchIds.length} Atletas
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* MODAL SOLICITAR TRANSFERENCIA (DE FORA PARA O MEU CLUBE) */}
